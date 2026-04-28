@@ -167,6 +167,7 @@ public final class PlaybackViewModel {
     private let sponsorBlock: SponsorBlockService
     private let deArrow: DeArrowService
     private var settings: AppSettings
+    private var hasAuthToken: Bool = false
 
     public init(
         api: InnerTubeAPI = InnerTubeAPI(),
@@ -338,7 +339,20 @@ public final class PlaybackViewModel {
                 await api.fetchAuthenticatedTrackingURLs(videoId: video.id)
             }
 
-            let info = try await api.fetchPlayerInfo(videoId: video.id)
+            // Fetch player info using the iOS client (unauthenticated).
+            // If YouTube returns UNPLAYABLE/LOGIN_REQUIRED and the user is signed in,
+            // automatically retry with the authenticated TV client before showing an error.
+            let info: PlayerInfo
+            do {
+                info = try await api.fetchPlayerInfo(videoId: video.id)
+            } catch {
+                if case APIError.unavailable = error, hasAuthToken {
+                    playerLog.notice("⚠️ iOS client returned unavailable — retrying with authenticated TV client")
+                    info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
+                } else {
+                    throw error
+                }
+            }
             playerInfo = info
             availableFormats = Self.deduplicatedVideoFormats(info.formats)
             availableCaptions = info.captionTracks
@@ -573,6 +587,7 @@ public final class PlaybackViewModel {
 
     /// Forwards the current access token to the InnerTubeAPI actor (mirrors BrowseViewModel).
     public func updateAuthToken(_ token: String?) {
+        hasAuthToken = token != nil
         Task { await api.setAuthToken(token) }
     }
 
