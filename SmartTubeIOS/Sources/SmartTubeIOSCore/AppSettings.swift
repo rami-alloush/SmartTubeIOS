@@ -87,6 +87,11 @@ public struct AppSettings: Codable {
         sponsorBlockActions[category] ?? .nothing
     }
 
+    // MARK: Audio
+    /// BCP 47 language code of the user's preferred audio track (e.g. "es", "fr", "pt-BR").
+    /// `nil` means use the HLS default. Set implicitly when the user picks a track in the player.
+    public var preferredAudioLanguage: String?
+
     // MARK: DeArrow
     public var deArrowEnabled: Bool
 
@@ -179,6 +184,7 @@ public struct AppSettings: Codable {
         ]
         sponsorBlockMinSegmentDuration = 0
         sponsorBlockExcludedChannels   = [:]
+        preferredAudioLanguage = nil
         deArrowEnabled       = false
     }
 }

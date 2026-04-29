@@ -62,6 +62,11 @@ public final class PlaybackViewModel {
 
     public private(set) var availableCaptions: [CaptionTrack] = []
     public private(set) var selectedCaption: CaptionTrack? = nil
+
+    // MARK: - Audio tracks
+
+    public private(set) var availableAudioTracks: [AudioTrack] = []
+    public private(set) var selectedAudioTrack: AudioTrack? = nil
     /// The caption cue active at the current playhead position (nil when CC is off or no cue matches).
     public private(set) var currentCaptionCue: CaptionCue? = nil
 
@@ -141,6 +146,11 @@ public final class PlaybackViewModel {
     /// Preferred over the anonymous iOS-client tracking URLs so YouTube can attribute
     /// the view to the signed-in account and record it in official watch history.
     private var activeTrackingURLs: PlaybackTrackingURLs?
+
+    // AVMediaSelectionGroup for audio — not Sendable, kept nonisolated(unsafe) and only
+    // accessed from MainActor context (Task { [weak self] in ... } on the main actor).
+    @ObservationIgnored nonisolated(unsafe) private var audioSelectionGroup: AVMediaSelectionGroup? = nil
+    @ObservationIgnored private var audioOptionsByID: [String: AVMediaSelectionOption] = [:]
 
     // Caption cues loaded for the currently selected track
     private var captionCues: [CaptionCue] = []
@@ -247,6 +257,10 @@ public final class PlaybackViewModel {
         captionCues = []
         captionFetchTask?.cancel()
         captionFetchTask = nil
+        availableAudioTracks = []
+        selectedAudioTrack = nil
+        audioSelectionGroup = nil
+        audioOptionsByID = [:]
         endCards = []
 
         // Push the currently playing video onto the history stack before switching
@@ -461,6 +475,8 @@ public final class PlaybackViewModel {
                             self.savedPositionToRestore = nil
                             self.seek(to: pos)
                         }
+                        // Load alternate audio renditions (dubbed / translated tracks).
+                        self.loadAudioTracks(from: item)
                         // Ping YouTube's playback stats URL to record this view in watch history.
                         if self.settings.historyState == .enabled, let vid = self.currentVideo?.id {
                             let cpn = self.watchCPN
@@ -772,6 +788,68 @@ public final class PlaybackViewModel {
     private func updateCaptionCue(for time: TimeInterval) {
         guard !captionCues.isEmpty else { currentCaptionCue = nil; return }
         currentCaptionCue = captionCues.last(where: { $0.startTime <= time && $0.endTime > time })
+    }
+
+    // MARK: - Audio track selection
+
+    /// Switches to `track`, or resets to the HLS default when `nil`.
+    /// Persists the language code in `AppSettings` so subsequent videos auto-apply the preference.
+    public func selectAudioTrack(_ track: AudioTrack?) {
+        selectedAudioTrack = track
+        settings.preferredAudioLanguage = track?.languageCode  // nil clears the preference
+        guard let item = player.currentItem, let group = audioSelectionGroup else { return }
+        if let track, let option = audioOptionsByID[track.id] {
+            item.select(option, in: group)
+        } else {
+            item.selectMediaOptionAutomatically(in: group)
+        }
+        playerLog.notice("Audio → \(track?.name ?? "Auto (preference cleared)")")
+    }
+
+    /// Loads alternate audio renditions from the HLS manifest of `item` and auto-applies
+    /// the user's saved language preference. No-ops when the manifest has ≤ 1 rendition.
+    private func loadAudioTracks(from item: AVPlayerItem) {
+        Task { [weak self] in
+            guard let self else { return }
+            let asset = item.asset
+            guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
+                  group.options.count > 1 else { return }
+            let currentSelection = await item.currentMediaSelection
+            var tracks: [AudioTrack] = []
+            var optionMap: [String: AVMediaSelectionOption] = [:]
+            for option in group.options {
+                let locale = option.locale?.identifier
+                    ?? option.extendedLanguageTag
+                    ?? "unknown"
+                let displayName = option.locale.flatMap {
+                    Locale.current.localizedString(forLanguageCode: $0.identifier)
+                } ?? locale
+                let isDefault = currentSelection.selectedMediaOption(in: group) == option
+                let track = AudioTrack(id: locale, name: displayName,
+                                       languageCode: locale, isOriginal: isDefault)
+                tracks.append(track)
+                optionMap[locale] = option
+            }
+            self.audioSelectionGroup = group
+            self.audioOptionsByID = optionMap
+            self.availableAudioTracks = tracks
+
+            // Auto-apply the user's saved language preference (fuzzy-match on base language).
+            let preferred = self.settings.preferredAudioLanguage
+            let autoSelect: AudioTrack? = {
+                guard let lang = preferred else { return tracks.first(where: \.isOriginal) }
+                if let exact = tracks.first(where: { $0.languageCode == lang }) { return exact }
+                let base = lang.components(separatedBy: "-").first ?? lang
+                return tracks.first(where: { $0.languageCode.hasPrefix(base) })
+                    ?? tracks.first(where: \.isOriginal)
+            }()
+            self.selectedAudioTrack = autoSelect
+            if let autoSelect, let option = optionMap[autoSelect.id],
+               autoSelect.id != tracks.first(where: \.isOriginal)?.id {
+                item.select(option, in: group)
+            }
+            playerLog.notice("Audio tracks: \(tracks.map(\.name), privacy: .public) — auto-selected: \(autoSelect?.name ?? "default", privacy: .public)")
+        }
     }
 
     private static func deduplicatedVideoFormats(_ formats: [VideoFormat]) -> [VideoFormat] {
