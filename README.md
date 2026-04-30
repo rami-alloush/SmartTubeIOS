@@ -9,6 +9,20 @@ Inspired by the original [SmartTube Android app](https://github.com/yuliskov/Sma
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/home.png" width="160"/></td>
+    <td><img src="docs/screenshots/subscriptions.png" width="160"/></td>
+    <td><img src="docs/screenshots/player.png" width="160"/></td>
+    <td><img src="docs/screenshots/player-menu.png" width="160"/></td>
+    <td><img src="docs/screenshots/settings.png" width="160"/></td>
+  </tr>
+</table>
+
+---
+
 ## Features
 
 - Home, Subscriptions, History, Search, and Playlists feeds

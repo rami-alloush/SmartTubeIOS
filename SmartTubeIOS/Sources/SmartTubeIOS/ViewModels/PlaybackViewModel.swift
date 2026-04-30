@@ -848,7 +848,7 @@ public final class PlaybackViewModel {
                autoSelect.id != tracks.first(where: \.isOriginal)?.id {
                 item.select(option, in: group)
             }
-            playerLog.notice("Audio tracks: \(tracks.map(\.name), privacy: .public) — auto-selected: \(autoSelect?.name ?? "default", privacy: .public)")
+            playerLog.notice("Audio tracks: \(tracks.map(\.name).joined(separator: ", ")) — auto-selected: \(autoSelect?.name ?? "default")")
         }
     }
 

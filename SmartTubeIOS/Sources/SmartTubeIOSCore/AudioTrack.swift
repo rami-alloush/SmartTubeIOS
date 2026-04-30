@@ -14,4 +14,11 @@ public struct AudioTrack: Identifiable, Hashable, Sendable {
     public let languageCode: String
     /// `true` when this is the HLS `DEFAULT=YES` rendition (the original audio).
     public let isOriginal: Bool
+
+    public init(id: String, name: String, languageCode: String, isOriginal: Bool) {
+        self.id = id
+        self.name = name
+        self.languageCode = languageCode
+        self.isOriginal = isOriginal
+    }
 }
