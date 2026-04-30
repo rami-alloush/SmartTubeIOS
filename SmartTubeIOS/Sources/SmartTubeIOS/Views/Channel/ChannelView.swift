@@ -21,6 +21,7 @@ public struct ChannelView: View {
     @State private var channelDestination: ChannelDestination?
     @State private var filter: ChannelFilter = .all
     @Environment(SettingsStore.self) private var store
+    @Environment(\.innerTubeAPI) private var api
 
     public init(channelId: String) {
         self.channelId = channelId
@@ -39,7 +40,7 @@ public struct ChannelView: View {
         .onAppear { vm.load(channelId: channelId) }
         #if !os(macOS)
         .fullScreenCover(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in
@@ -51,7 +52,7 @@ public struct ChannelView: View {
         }
         #if !os(macOS)
         .fullScreenCover(item: $shortsPresentation) { target in
-            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex)
+            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex, api: api)
         }
         #endif
         .alert("Error", isPresented: .constant(vm.error != nil), presenting: vm.error) { _ in

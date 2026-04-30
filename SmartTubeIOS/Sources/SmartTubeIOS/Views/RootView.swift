@@ -1,4 +1,5 @@
 import SwiftUI
+import SmartTubeIOSCore
 
 // MARK: - RootView
 //
@@ -9,6 +10,7 @@ public struct RootView: View {
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var store
     @Environment(BrowseViewModel.self) private var browseVM
+    @Environment(\.innerTubeAPI) private var api
 
     public init() {}
 
@@ -31,7 +33,7 @@ public struct RootView: View {
         }
         #if !os(macOS)
         .fullScreenCover(item: $browseVM.deepLinkedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
                 .environment(store)
                 .environment(auth)
         }
@@ -61,9 +63,9 @@ enum AppSection: String, CaseIterable, Identifiable {
     }
 
     @MainActor @ViewBuilder
-    var destination: some View {
+    func destination(api: InnerTubeAPI) -> some View {
         switch self {
-        case .home:     HomeView()
+        case .home:     HomeView(api: api)
         case .search:   SearchView()
         case .library:  LibraryView()
         case .settings: SettingsView()
@@ -75,11 +77,12 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 struct MainTabView: View {
     @State private var searchVM = SearchViewModel()
+    @Environment(\.innerTubeAPI) private var api
 
     var body: some View {
         TabView {
             ForEach(AppSection.allCases) { section in
-                NavigationStack { section.destination }
+                NavigationStack { section.destination(api: api) }
                     .tabItem { Label(section.rawValue, systemImage: section.icon) }
                     .accessibilityIdentifier("tab.\(section.rawValue.lowercased())")
             }
@@ -95,11 +98,12 @@ struct MainTabView: View {
 #if os(tvOS)
 struct MainTVTabView: View {
     @State private var searchVM = SearchViewModel()
+    @Environment(\.innerTubeAPI) private var api
 
     var body: some View {
         TabView {
             ForEach(AppSection.allCases) { section in
-                NavigationStack { section.destination }
+                NavigationStack { section.destination(api: api) }
                     .tabItem {
                         Label(section.rawValue, systemImage: section.icon)
                     }
@@ -114,6 +118,7 @@ struct MainTVTabView: View {
 
 struct MainSidebarView: View {
     @Environment(AuthService.self) private var auth
+    @Environment(\.innerTubeAPI) private var api
     @State private var searchVM = SearchViewModel()
 
     @State private var selectedSection: AppSection? = .home
@@ -138,7 +143,7 @@ struct MainSidebarView: View {
                 .padding(.bottom, 8)
             }
         } detail: {
-            NavigationStack { (selectedSection ?? .home).destination }
+            NavigationStack { (selectedSection ?? .home).destination(api: api) }
         }
         .environment(searchVM)
     }

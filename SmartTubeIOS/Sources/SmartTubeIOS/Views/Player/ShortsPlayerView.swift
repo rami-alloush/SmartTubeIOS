@@ -19,7 +19,7 @@ import UIKit
 public struct ShortsPlayerView: View {
     public let startIndex: Int
     @State private var videos: [Video]
-    @State private var vm = PlaybackViewModel()
+    @State private var vm: PlaybackViewModel
     @State private var currentIndex: Int
     @Environment(\.dismiss) private var dismiss
     @Environment(SettingsStore.self) private var store
@@ -27,12 +27,14 @@ public struct ShortsPlayerView: View {
     @State private var isTransitioning = false
     @State private var isFetchingMore = false
     @State private var channelDestination: ChannelDestination?
-    private let api = InnerTubeAPI()
+    private let api: InnerTubeAPI
 
-    public init(videos: [Video], startIndex: Int = 0) {
+    public init(videos: [Video], startIndex: Int = 0, api: InnerTubeAPI) {
         self.startIndex = startIndex
+        self.api = api
         self._videos = State(initialValue: videos)
         self._currentIndex = State(initialValue: startIndex)
+        self._vm = State(initialValue: PlaybackViewModel(api: api))
     }
 
     private var currentVideo: Video { videos[currentIndex] }

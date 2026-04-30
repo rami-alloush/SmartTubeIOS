@@ -18,8 +18,8 @@ package enum InnerTubeClients {
     package enum iOS {
         package static let name      = "iOS"
         package static let nameID    = "5"
-        package static let version   = "20.11.6"
-        package static let userAgent = "com.google.ios.youtube/\(version) (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)"
+        package static let version   = "21.02.3"
+        package static let userAgent = "com.google.ios.youtube/\(version) (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)"
     }
 
     /// Android client — used exclusively for downloads.

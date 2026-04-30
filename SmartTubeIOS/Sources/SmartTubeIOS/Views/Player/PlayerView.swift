@@ -17,7 +17,7 @@ private let swipeLog = CrashlyticsLogger(category: "Player")
 
 public struct PlayerView: View {
     public let video: Video
-    @State private var vm = PlaybackViewModel()
+    @State private var vm: PlaybackViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @Environment(SettingsStore.self) private var store
@@ -31,12 +31,12 @@ public struct PlayerView: View {
     @State private var showCommentsSheet = false
     @State private var videoComments: [Comment] = []
     @State private var isLoadingComments = false
-    @State private var commentsAPI = InnerTubeAPI()
+    @State private var commentsAPI: InnerTubeAPI
     @State private var slideOffset: CGFloat = 0
     @State private var isTransitioning = false
     @State private var channelDestination: ChannelDestination?
     #if !os(tvOS)
-    @State private var downloadService = VideoDownloadService()
+    @State private var downloadService: VideoDownloadService
     @State private var downloadAlertItem: DownloadAlertItem?
     #endif
     #if os(iOS)
@@ -67,8 +67,13 @@ public struct PlayerView: View {
     @State private var highlightedControl: TVPlayerControl? = nil
     #endif
 
-    public init(video: Video) {
+    public init(video: Video, api: InnerTubeAPI) {
         self.video = video
+        _vm = State(initialValue: PlaybackViewModel(api: api))
+        _commentsAPI = State(initialValue: api)
+        #if !os(tvOS)
+        _downloadService = State(initialValue: VideoDownloadService(api: api))
+        #endif
     }
 
     public var body: some View {
@@ -380,7 +385,6 @@ public struct PlayerView: View {
             guard !isInBackground else { return }
             vm.suspend()
         }
-        .onChange(of: authService.accessToken) { _, newToken in vm.updateAuthToken(newToken) }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
@@ -841,7 +845,6 @@ public struct PlayerView: View {
                 // Download
                 Button {
                     showMoreMenu = false
-                    downloadService.updateAuthToken(authService.accessToken)
                     downloadService.download(video: currentVideo)
                 } label: {
                     Group {
@@ -1083,7 +1086,6 @@ public struct PlayerView: View {
         isLoadingComments = true
         Task {
             do {
-                await commentsAPI.setAuthToken(token)
                 let fetched = try await commentsAPI.fetchComments(videoId: videoId)
                 videoComments = fetched
             } catch {

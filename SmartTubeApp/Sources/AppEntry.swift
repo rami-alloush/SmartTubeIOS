@@ -1,14 +1,19 @@
 import SwiftUI
 import FirebaseCore
+import FirebaseAnalytics
 import SmartTubeIOS
 import SmartTubeIOSCore
 
 /// Unified entry point for iOS, iPadOS and macOS.
 @main
 struct AppEntry: App {
-    @State private var authService     = AuthService()
-    @State private var browseViewModel = BrowseViewModel()
-    @State private var settingsStore   = SettingsStore()
+    // Declared without default values so that init() can call FirebaseApp.configure()
+    // before any of these objects are instantiated. @State default values are evaluated
+    // before init() runs, which would trigger Firebase before it is configured.
+    @State private var api: InnerTubeAPI
+    @State private var authService: AuthService
+    @State private var browseViewModel: BrowseViewModel
+    @State private var settingsStore: SettingsStore
     @Environment(\.scenePhase) private var scenePhase
 
     private static let appGroup   = "group.com.void.smarttube"
@@ -16,6 +21,12 @@ struct AppEntry: App {
 
     init() {
         FirebaseApp.configure()
+        Analytics.setAnalyticsCollectionEnabled(true)
+        let api = InnerTubeAPI()
+        _api             = State(initialValue: api)
+        _authService     = State(initialValue: AuthService())
+        _browseViewModel = State(initialValue: BrowseViewModel(api: api))
+        _settingsStore   = State(initialValue: SettingsStore())
     }
 
     /// When launched with `--uitesting-shorts` the app skips the full navigation
@@ -46,8 +57,12 @@ struct AppEntry: App {
                 .environment(authService)
                 .environment(browseViewModel)
                 .environment(settingsStore)
+                .environment(\.innerTubeAPI, api)
                 .onChange(of: authService.accessToken, initial: true) { _, newToken in
-                    Task { await browseViewModel.updateAuthToken(newToken) }
+                    Task {
+                        await api.setAuthToken(newToken)
+                        await browseViewModel.updateAuthToken(newToken)
+                    }
                 }
                 .onChange(of: settingsStore.settings.enabledSections) { _, newSections in
                     browseViewModel.configureSections(newSections)
@@ -74,8 +89,12 @@ struct AppEntry: App {
                 .environment(authService)
                 .environment(browseViewModel)
                 .environment(settingsStore)
+                .environment(\.innerTubeAPI, api)
                 .onChange(of: authService.accessToken, initial: true) { _, newToken in
-                    Task { await browseViewModel.updateAuthToken(newToken) }
+                    Task {
+                        await api.setAuthToken(newToken)
+                        await browseViewModel.updateAuthToken(newToken)
+                    }
                 }
                 .onChange(of: settingsStore.settings.enabledSections) { _, newSections in
                     browseViewModel.configureSections(newSections)
@@ -87,15 +106,19 @@ struct AppEntry: App {
         #else
         WindowGroup {
             if isShortsUITesting {
-                ShortsPlayerView(videos: AppEntry.stubShorts, startIndex: 0)
+                ShortsPlayerView(videos: AppEntry.stubShorts, startIndex: 0, api: InnerTubeAPI())
                     .environment(settingsStore)
             } else {
                 RootView()
                     .environment(authService)
                     .environment(browseViewModel)
                     .environment(settingsStore)
+                    .environment(\.innerTubeAPI, api)
                     .onChange(of: authService.accessToken, initial: true) { _, newToken in
-                        Task { await browseViewModel.updateAuthToken(newToken) }
+                        Task {
+                            await api.setAuthToken(newToken)
+                            await browseViewModel.updateAuthToken(newToken)
+                        }
                     }
                     .onChange(of: settingsStore.settings.enabledSections) { _, newSections in
                         browseViewModel.configureSections(newSections)

@@ -8,6 +8,7 @@ import SmartTubeIOSCore
 
 public struct SearchView: View {
     @Environment(SearchViewModel.self) private var vm
+    @Environment(\.innerTubeAPI) private var api
     @State private var selectedVideo: Video?
     @State private var channelDestination: ChannelDestination?
     @State private var showFilterSheet = false
@@ -47,12 +48,12 @@ public struct SearchView: View {
         #if os(tvOS)
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #elseif os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in

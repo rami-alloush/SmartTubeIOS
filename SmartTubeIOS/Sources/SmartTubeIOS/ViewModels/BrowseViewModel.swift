@@ -112,21 +112,12 @@ public final class BrowseViewModel {
 
     // MARK: - Auth
 
-    /// Forward the current access token to the API layer.
-    /// Called whenever the user signs in, signs out, or the token is refreshed.
+    /// Triggers a content reload when auth state changes.
+    /// The shared InnerTubeAPI instance already carries the updated token.
     public func updateAuthToken(_ token: String?) async {
-        let msg = token != nil ? "token set (\(token!.prefix(8))…)" : "cleared"
-        browseLog.notice("updateAuthToken: \(msg)")
-
-        await api.setAuthToken(token)
         if token != nil {
             loadContent(refresh: true, source: "updateAuthToken")
         }
-    }
-
-    /// Update the API auth token without triggering a content reload.
-    public func setAuthToken(_ token: String?) async {
-        await api.setAuthToken(token)
     }
 
     // MARK: - Private fetching

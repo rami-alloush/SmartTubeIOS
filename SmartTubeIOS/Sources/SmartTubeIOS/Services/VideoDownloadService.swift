@@ -81,10 +81,6 @@ public final class VideoDownloadService {
 
     // MARK: - Public
 
-    public func updateAuthToken(_ token: String?) {
-        Task { await api.setAuthToken(token) }
-    }
-
     public func download(video: Video) {
         guard !state.isActive else { return }
         state = .fetching

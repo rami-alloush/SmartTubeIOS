@@ -52,9 +52,9 @@ public actor InnerTubeAPI {
             "clientName": InnerTubeClients.iOS.name,
             "clientVersion": InnerTubeClients.iOS.version,
             "deviceMake": "Apple",
-            "deviceModel": "iPhone10,4",
-            "osName": "iOS",
-            "osVersion": "16.7.7.20H330",
+            "deviceModel": "iPhone16,2",
+            "osName": "iPhone",
+            "osVersion": "18.3.2.22D82",
             "clientScreen": "WATCH",
         ]
     ]

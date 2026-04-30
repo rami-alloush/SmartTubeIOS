@@ -26,10 +26,6 @@ public final class PlaylistViewModel {
         self.api = api
     }
 
-    public func setAuthToken(_ token: String?) async {
-        await api.setAuthToken(token)
-    }
-
     public func load(playlistId: String, refresh: Bool = false) {
         // If the same playlist is already loaded and no refresh was requested,
         // do nothing — this preserves scroll position when navigating back.

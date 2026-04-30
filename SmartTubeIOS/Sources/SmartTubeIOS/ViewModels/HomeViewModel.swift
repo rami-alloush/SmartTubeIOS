@@ -86,7 +86,6 @@ public final class HomeViewModel {
     }
 
     public func updateAuthToken(_ token: String?) async {
-        await api.setAuthToken(token)
         if token != nil { load() }
     }
 

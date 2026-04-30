@@ -19,6 +19,7 @@ public struct VideoCardView: View {
     public var compact: Bool = false
 
     @Environment(AuthService.self) private var authService
+    @Environment(SettingsStore.self) private var store
     @State private var localProgress: Double?
     #if !os(tvOS)
     @State private var downloadService = VideoDownloadService()
@@ -48,6 +49,15 @@ public struct VideoCardView: View {
         .task {
             localProgress = await VideoStateStore.shared.state(for: video.id)?.watchedFraction
         }
+        .task(id: video.id) {
+            // Pre-fetch all playback data for this video in the background while
+            // the user is browsing. The cache skips the call if data is already fresh.
+            await VideoPreloadCache.shared.prefetch(
+                videoId: video.id,
+                sponsorCategories: store.settings.activeSponsorCategories,
+                isAuthenticated: authService.accessToken != nil
+            )
+        }
         .contextMenu {
             #if !os(tvOS)
             if let shareURL = URL(string: "https://www.youtube.com/watch?v=\(video.id)") {
@@ -69,7 +79,6 @@ public struct VideoCardView: View {
             }
             #if !os(tvOS)
             Button {
-                downloadService.updateAuthToken(authService.accessToken)
                 downloadService.download(video: video)
             } label: {
                 if downloadService.state.isActive {

@@ -12,13 +12,15 @@ public struct PlaylistView: View {
 
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var store
-    @State private var vm = PlaylistViewModel()
+    @Environment(\.innerTubeAPI) private var api
+    @State private var vm: PlaylistViewModel
     @State private var selectedVideo: Video?
     @State private var channelDestination: ChannelDestination?
 
-    public init(playlistId: String, playlistTitle: String) {
+    public init(playlistId: String, playlistTitle: String, api: InnerTubeAPI) {
         self.playlistId = playlistId
         self.playlistTitle = playlistTitle
+        _vm = State(initialValue: PlaylistViewModel(api: api))
     }
 
     public var body: some View {
@@ -34,14 +36,11 @@ public struct PlaylistView: View {
         }
         .navigationTitle(playlistTitle)
         .onAppear {
-            Task {
-                await vm.setAuthToken(auth.accessToken)
-                vm.load(playlistId: playlistId)
-            }
+            vm.load(playlistId: playlistId)
         }
         #if !os(macOS)
         .fullScreenCover(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in

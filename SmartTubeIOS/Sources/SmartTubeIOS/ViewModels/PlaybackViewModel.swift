@@ -136,16 +136,9 @@ public final class PlaybackViewModel {
     public static let sleepTimerOptions: [Int] = [15, 30, 45, 60]
     /// Position to seek to once the AVPlayerItem is ready.
     private var savedPositionToRestore: TimeInterval? = nil
-    /// Playhead position (seconds) when the current continuous play segment began.
-    /// Used to build the `st`/`et` watchtime report sent to YouTube's stats server.
-    private var watchSegmentStart: TimeInterval = 0
-    /// Client Playback Nonce for the current video — generated once per `load()`.
-    /// YouTube requires this random per-session ID to record a view in watch history.
-    private var watchCPN: String = ""
-    /// Account-bound tracking URLs fetched from the authenticated TV player request.
-    /// Preferred over the anonymous iOS-client tracking URLs so YouTube can attribute
-    /// the view to the signed-in account and record it in official watch history.
-    private var activeTrackingURLs: PlaybackTrackingURLs?
+    /// Manages watch-history state: position saving, playback-started ping,
+    /// and watchtime segment reporting. See WatchtimeTracker.
+    private var tracker: WatchtimeTracker
 
     // AVMediaSelectionGroup for audio — not Sendable, kept nonisolated(unsafe) and only
     // accessed from MainActor context (Task { [weak self] in ... } on the main actor).
@@ -186,6 +179,7 @@ public final class PlaybackViewModel {
         settings: AppSettings = AppSettings()
     ) {
         self.api = api
+        self.tracker = WatchtimeTracker(api: api)
         self.sponsorBlock = sponsorBlock
         self.deArrow = deArrow
         self.settings = settings
@@ -224,17 +218,15 @@ public final class PlaybackViewModel {
         // Report watchtime for the video being replaced before tearing it down.
         // This is the only opportunity when switching via load() directly (e.g. autoplay),
         // since stop()/suspend() are not called in that path.
-        if settings.historyState == .enabled, let prevId = playerInfo?.video.id, duration > 0 {
+        if settings.historyState == .enabled, duration > 0 {
             let pos = self.currentTime
-            let prevDur = self.duration
-            let segStart = self.watchSegmentStart
-            let trackingURLs = self.activeTrackingURLs
-            let cpn = self.watchCPN
-            Task {
-                await VideoStateStore.shared.save(videoId: prevId, position: pos, duration: prevDur)
-                await self.api.reportWatchtime(videoId: prevId, cpn: cpn, trackingURLs: trackingURLs, segmentStart: segStart, segmentEnd: pos)
-                playerLog.notice("load→watchtime reported for prev video \(prevId) st=\(Int(segStart))s et=\(Int(pos))s")
-            }
+            let dur = self.duration
+            let flush = tracker.transition(to: video.id, cpn: InnerTubeAPI.generateCPN(),
+                                           flushPosition: pos, flushDuration: dur)
+            Task { await flush() }
+        } else {
+            tracker.transition(to: video.id, cpn: InnerTubeAPI.generateCPN(),
+                               flushPosition: 0, flushDuration: 0)
         }
 
         // Stop and clear the current item immediately so the previous frame
@@ -270,9 +262,6 @@ public final class PlaybackViewModel {
         currentVideo = video
         hasPrevious = !history.isEmpty
         hasRetriedPlayback = false
-        watchSegmentStart = 0
-        watchCPN = InnerTubeAPI.generateCPN()
-        activeTrackingURLs = nil
         loadTask = Task { await loadAsync(video: video) }
     }
 
@@ -301,16 +290,12 @@ public final class PlaybackViewModel {
     /// Use `resume()` to restart playback, or `load(video:)` to switch videos.
     public func suspend() {
         playerLog.notice("[suspend] suspend() called — currentVideo=\(self.currentVideo?.id ?? "nil") currentTime=\(Int(self.currentTime))s")
-        if settings.historyState == .enabled, let videoId = playerInfo?.video.id, duration > 0 {
+        if settings.historyState == .enabled, duration > 0 {
             let pos = self.currentTime
             let dur = self.duration
-            let segStart = self.watchSegmentStart
-            let trackingURLs = self.activeTrackingURLs
-            let cpn = self.watchCPN
             Task {
-                await VideoStateStore.shared.save(videoId: videoId, position: pos, duration: dur)
-                playerLog.notice("Saved position \(Int(pos))s for \(videoId)")
-                await self.api.reportWatchtime(videoId: videoId, cpn: cpn, trackingURLs: trackingURLs, segmentStart: segStart, segmentEnd: pos)
+                await self.tracker.checkpoint(position: pos, duration: dur)
+                playerLog.notice("Saved position \(Int(pos))s for suspend")
             }
         }
         wasPlayingBeforeSuspend = isPlaying
@@ -344,28 +329,44 @@ public final class PlaybackViewModel {
         defer { isLoading = false }
         playerLog.notice("load video id=\(video.id) title=\(video.title)")
         do {
-            // Kick off an authenticated TV-client player request in parallel with the primary
-            // iOS player fetch.  The iOS client runs unauthenticated, so its playbackTracking
-            // URLs are not tied to any account.  The TV-client (with Bearer token) returns
-            // URLs that YouTube has pre-bound to the signed-in account server-side — those
-            // are the ones that actually record a view in the user's watch history.
-            let authTrackingTask = Task<PlaybackTrackingURLs?, Never> { [api = self.api] in
-                await api.fetchAuthenticatedTrackingURLs(videoId: video.id)
+            // --- Cache-first load ---
+            // Check VideoPreloadCache for all data types. Fresh hits skip the network
+            // call entirely; partial hits fill only the missing pieces in parallel.
+            let cached = await VideoPreloadCache.shared.consume(videoId: video.id)
+            playerLog.notice("cache: playerInfo=\(cached.playerInfo != nil) nextInfo=\(cached.nextInfo != nil) sponsor=\(cached.sponsorSegments != nil) endCards=\(cached.endCards != nil) tracking=\(cached.trackingURLs != nil)")
+
+            // --- Player info (stream URLs + metadata) ---
+            // Kick off an authenticated TV-client player request in parallel with the
+            // primary iOS player fetch when the cache doesn't already have tracking URLs.
+            let authTrackingTask: Task<PlaybackTrackingURLs?, Never>?
+            if cached.trackingURLs != nil {
+                // Tracking URLs came from the cache; no need for a parallel TV-client call.
+                authTrackingTask = nil
+            } else {
+                authTrackingTask = Task<PlaybackTrackingURLs?, Never> { [api = self.api] in
+                    await api.fetchAuthenticatedTrackingURLs(videoId: video.id)
+                }
             }
 
             // Fetch player info using the iOS client (unauthenticated).
             // If YouTube returns UNPLAYABLE/LOGIN_REQUIRED and the user is signed in,
             // automatically retry with the authenticated TV client before showing an error.
             let info: PlayerInfo
-            do {
-                info = try await api.fetchPlayerInfo(videoId: video.id)
-            } catch {
-                if case APIError.unavailable = error, hasAuthToken {
-                    playerLog.notice("⚠️ iOS client returned unavailable — retrying with authenticated TV client")
-                    info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
-                } else {
-                    throw error
+            if let cachedInfo = cached.playerInfo {
+                playerLog.notice("cache HIT: playerInfo (skipping network)")
+                info = cachedInfo
+            } else {
+                do {
+                    info = try await api.fetchPlayerInfo(videoId: video.id)
+                } catch {
+                    if case APIError.unavailable = error, hasAuthToken {
+                        playerLog.notice("⚠️ iOS client returned unavailable — retrying with authenticated TV client")
+                        info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
+                    } else {
+                        throw error
+                    }
                 }
+                await VideoPreloadCache.shared.store(playerInfo: info, for: video.id)
             }
             playerInfo = info
             availableFormats = Self.deduplicatedVideoFormats(info.formats)
@@ -380,15 +381,22 @@ public final class PlaybackViewModel {
             let prefURL = info.preferredStreamURL
             playerLog.notice("preferredStreamURL=\(prefURL?.absoluteString.prefix(120) ?? "nil")")
 
-            // SponsorBlock
+            // --- SponsorBlock ---
             let channelIsExcluded = video.channelId.map {
                 settings.sponsorBlockExcludedChannels.keys.contains($0)
             } ?? false
             if settings.sponsorBlockEnabled, !channelIsExcluded {
-                var segments = await sponsorBlock.fetchSegments(
-                    videoId: video.id,
-                    categories: settings.activeSponsorCategories
-                )
+                var segments: [SponsorSegment]
+                if let cachedSegments = cached.sponsorSegments {
+                    playerLog.notice("cache HIT: sponsorSegments (skipping network)")
+                    segments = cachedSegments
+                } else {
+                    segments = await sponsorBlock.fetchSegments(
+                        videoId: video.id,
+                        categories: settings.activeSponsorCategories
+                    )
+                    await VideoPreloadCache.shared.store(sponsorSegments: segments, for: video.id)
+                }
                 let minDur = settings.sponsorBlockMinSegmentDuration
                 if minDur > 0 {
                     segments = segments.filter { ($0.end - $0.start) >= minDur }
@@ -396,8 +404,16 @@ public final class PlaybackViewModel {
                 sponsorSegments = segments
             }
 
-            // Related videos + like status — use /next endpoint (mirrors SuggestionsController)
-            let nextInfo = try? await api.fetchNextInfo(videoId: video.id)
+            // --- Related videos + like status ---
+            let nextInfo: NextInfo?
+            if let cachedNext = cached.nextInfo {
+                playerLog.notice("cache HIT: nextInfo (skipping network)")
+                nextInfo = cachedNext
+            } else {
+                nextInfo = try? await api.fetchNextInfo(videoId: video.id)
+                if let nextInfo { await VideoPreloadCache.shared.store(nextInfo: nextInfo, for: video.id) }
+            }
+
             if let nextInfo, !nextInfo.relatedVideos.isEmpty {
                 relatedVideos = nextInfo.relatedVideos.filter { $0.id != video.id }
                 hasNext = !relatedVideos.isEmpty
@@ -416,20 +432,37 @@ public final class PlaybackViewModel {
             if let status = nextInfo?.likeStatus { likeStatus = status }
             if let ch = nextInfo?.chapters, !ch.isEmpty { chapters = ch }
 
-            // End cards — present in the PlayerInfo when the primary iOS client response
-            // includes the `endscreen` key. If absent (most iOS client responses omit it),
-            // fall back to a web-client /player call which always includes endscreen data.
-            if !info.endCards.isEmpty {
+            // --- End cards ---
+            if let cachedCards = cached.endCards {
+                playerLog.notice("cache HIT: endCards (skipping network)")
+                endCards = cachedCards
+            } else if !info.endCards.isEmpty {
                 endCards = info.endCards
                 playerLog.notice("endCards: \(info.endCards.count) from primary response")
+                await VideoPreloadCache.shared.store(endCards: info.endCards, for: video.id)
             } else {
                 do {
                     let webCards = try await api.fetchEndCards(videoId: video.id)
                     endCards = webCards
                     playerLog.notice("endCards: \(webCards.count) from web client fallback")
+                    await VideoPreloadCache.shared.store(endCards: webCards, for: video.id)
                 } catch {
                     playerLog.error("endCards fetch failed: \(error.localizedDescription)")
                     endCards = []
+                }
+            }
+
+            // --- Kick off neighbour pre-fetch now that relatedVideos is populated ---
+            let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
+            let isAuth = hasAuthToken
+            let sponsorCats = settings.activeSponsorCategories
+            Task(priority: .background) {
+                for videoId in neighbourIds {
+                    await VideoPreloadCache.shared.prefetch(
+                        videoId: videoId,
+                        sponsorCategories: sponsorCats,
+                        isAuthenticated: isAuth
+                    )
                 }
             }
 
@@ -440,11 +473,20 @@ public final class PlaybackViewModel {
                 playerLog.notice("Restoring position \(Int(pos))s for \(video.id)")
             }
 
-            // Resolve authenticated tracking URLs (running in parallel since loadAsync started).
+            // --- Tracking URLs ---
             // Prefer account-bound TV-client URLs over the anonymous iOS-client URLs.
-            activeTrackingURLs = await authTrackingTask.value ?? info.trackingURLs
-            playerLog.notice("activeTrackingURLs resolved: \(self.activeTrackingURLs != nil ? "account-bound" : "none")")
-
+            // Use the cached value if present; otherwise await the parallel task result.
+            let resolvedTrackingURLs: PlaybackTrackingURLs?
+            if let cachedTracking = cached.trackingURLs {
+                // cachedTracking is PlaybackTrackingURLs?? — unwrap outer optional
+                resolvedTrackingURLs = cachedTracking
+                playerLog.notice("cache HIT: trackingURLs")
+            } else {
+                resolvedTrackingURLs = await authTrackingTask?.value ?? info.trackingURLs
+                await VideoPreloadCache.shared.store(trackingURLs: resolvedTrackingURLs, for: video.id)
+            }
+            tracker.setTrackingURLs(resolvedTrackingURLs)
+            playerLog.notice("activeTrackingURLs resolved: \(resolvedTrackingURLs != nil ? "account-bound" : "none")")
             // Build player item — preferredStreamURL is guaranteed non-nil here because
             // parsePlayerInfo throws APIError.unavailable when streamingData is absent.
             guard let streamURL = info.preferredStreamURL else {
@@ -477,13 +519,6 @@ public final class PlaybackViewModel {
                         }
                         // Load alternate audio renditions (dubbed / translated tracks).
                         self.loadAudioTracks(from: item)
-                        // Ping YouTube's playback stats URL to record this view in watch history.
-                        if self.settings.historyState == .enabled, let vid = self.currentVideo?.id {
-                            let cpn = self.watchCPN
-                            let trackingURLs = self.activeTrackingURLs
-                            self.watchSegmentStart = self.currentTime
-                            Task { await self.api.reportPlaybackStarted(videoId: vid, cpn: cpn, trackingURLs: trackingURLs) }
-                        }
                     case .failed:
                         let err = item.error.map { "\($0)" } ?? "nil"
                         playerLog.error("❌ AVPlayerItem failed: \(err)")
@@ -601,10 +636,21 @@ public final class PlaybackViewModel {
 
     // MARK: - Auth
 
-    /// Forwards the current access token to the InnerTubeAPI actor (mirrors BrowseViewModel).
+    /// Updates the local auth flag used for LOGIN_REQUIRED retry logic.
+    /// The shared InnerTubeAPI instance already carries the updated token.
     public func updateAuthToken(_ token: String?) {
+        let wasAuthenticated = hasAuthToken
         hasAuthToken = token != nil
-        Task { await api.setAuthToken(token) }
+        // Keep the cache's InnerTubeAPI instance in sync so prefetch requests
+        // can make authenticated calls (e.g. fetchAuthenticatedTrackingURLs).
+        Task { await VideoPreloadCache.shared.setAuthToken(token) }
+        if wasAuthenticated, token == nil {
+            // Signed out: evict account-bound cache data
+            Task { await VideoPreloadCache.shared.evictAuthSensitiveData() }
+        } else if wasAuthenticated, token != nil {
+            // Token refreshed: tracking URLs bound to the old token are stale
+            Task { await VideoPreloadCache.shared.evictTrackingURLs() }
+        }
     }
 
     // MARK: - Stats for Nerds
@@ -1164,16 +1210,12 @@ public final class PlaybackViewModel {
     public func stop() {
         playerLog.notice("[stop] stop() called — currentVideo=\(self.currentVideo?.id ?? "nil") currentTime=\(Int(self.currentTime))s isLoading=\(self.isLoading)")
         // Save watch position before stopping (mirrors VideoStateController)
-        if settings.historyState == .enabled, let videoId = playerInfo?.video.id, duration > 0 {
+        if settings.historyState == .enabled, duration > 0 {
             let pos = self.currentTime
             let dur = self.duration
-            let segStart = self.watchSegmentStart
-            let trackingURLs = self.activeTrackingURLs
-            let cpn = self.watchCPN
             Task {
-                await VideoStateStore.shared.save(videoId: videoId, position: pos, duration: dur)
-                playerLog.notice("Saved position \(Int(pos))s for \(videoId)")
-                await self.api.reportWatchtime(videoId: videoId, cpn: cpn, trackingURLs: trackingURLs, segmentStart: segStart, segmentEnd: pos)
+                await self.tracker.checkpoint(position: pos, duration: dur)
+                playerLog.notice("Saved position \(Int(pos))s for stop")
             }
         }
         player.pause()

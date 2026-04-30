@@ -11,10 +11,11 @@ import SmartTubeIOSCore
 //                      dedicated BrowseViewModel instance.
 
 public struct HomeView: View {
-    @State private var homeVM    = HomeViewModel()
-    @State private var sectionVM = BrowseViewModel()
+    @State private var homeVM: HomeViewModel
+    @State private var sectionVM: BrowseViewModel
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var store
+    @Environment(\.innerTubeAPI) private var api
     @Environment(\.colorScheme) private var colorScheme
 
     // "Home" is always first; its type is .home.
@@ -37,7 +38,10 @@ public struct HomeView: View {
         return all
     }
 
-    public init() {}
+    public init(api: InnerTubeAPI) {
+        _homeVM = State(initialValue: HomeViewModel(api: api))
+        _sectionVM = State(initialValue: BrowseViewModel(api: api))
+    }
 
     // MARK: - Body
 
@@ -50,11 +54,11 @@ public struct HomeView: View {
             contentArea
                 #if os(iOS)
                 .fullScreenCover(item: $selectedVideo) { video in
-                    PlayerView(video: video)
+                    PlayerView(video: video, api: api)
                 }
                 #else
                 .navigationDestination(item: $selectedVideo) { video in
-                    PlayerView(video: video)
+                    PlayerView(video: video, api: api)
                 }
                 #endif
                 .navigationDestination(item: $channelDestination) { dest in
@@ -67,7 +71,7 @@ public struct HomeView: View {
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $shortsPresentation) { target in
-            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex)
+            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex, api: api)
         }
         #endif
         .sheet(isPresented: $showSignIn) { SignInView() }
@@ -82,11 +86,7 @@ public struct HomeView: View {
         }
         .task(id: auth.accessToken) {
             await homeVM.updateAuthToken(auth.accessToken)
-            if selectedSection.type == .home {
-                await sectionVM.setAuthToken(auth.accessToken)
-            } else {
-                await sectionVM.updateAuthToken(auth.accessToken)
-            }
+            await sectionVM.updateAuthToken(auth.accessToken)
         }
     }
 

@@ -10,6 +10,7 @@ import SmartTubeIOSCore
 public struct LibraryView: View {
     @Environment(AuthService.self) private var auth
     @Environment(BrowseViewModel.self) private var browseVM
+    @Environment(\.innerTubeAPI) private var api
     @State private var selectedSection: LibrarySection = .subscriptions
     @State private var selectedVideo: Video?
     @State private var selectedPlaylist: Video?
@@ -48,16 +49,16 @@ public struct LibraryView: View {
         #endif
         #if os(iOS)
         .fullScreenCover(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         #if os(tvOS)
         .navigationDestination(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         .navigationDestination(item: $selectedPlaylist) { stub in
-            PlaylistView(playlistId: stub.id, playlistTitle: stub.title)
+            PlaylistView(playlistId: stub.id, playlistTitle: stub.title, api: api)
         }
         .navigationDestination(item: $channelDestination) { dest in
             ChannelView(channelId: dest.channelId)

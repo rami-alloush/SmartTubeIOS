@@ -9,6 +9,7 @@ public struct BrowseView: View {
     @Environment(BrowseViewModel.self) private var vm
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.innerTubeAPI) private var api
     @State private var selectedVideo: Video?
     @State private var shortsPresentation: ShortsPresentation?
     @State private var channelDestination: ChannelDestination?
@@ -32,7 +33,7 @@ public struct BrowseView: View {
         .toolbar { sectionPicker }
         #if !os(macOS)
         .fullScreenCover(item: $selectedVideo) { video in
-            PlayerView(video: video)
+            PlayerView(video: video, api: api)
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in
@@ -53,7 +54,7 @@ public struct BrowseView: View {
         }
         #if !os(macOS)
         .fullScreenCover(item: $shortsPresentation) { target in
-            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex)
+            ShortsPlayerView(videos: target.videos, startIndex: target.startIndex, api: api)
         }
         #endif
         .sheet(isPresented: $showSignIn) { SignInView() }

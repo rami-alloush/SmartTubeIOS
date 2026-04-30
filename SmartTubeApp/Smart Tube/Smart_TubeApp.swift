@@ -1,4 +1,6 @@
 import SwiftUI
+import FirebaseCore
+import FirebaseAnalytics
 import SmartTubeIOS
 import SmartTubeIOSCore
 
@@ -7,9 +9,19 @@ import SmartTubeIOSCore
 /// the user reads a code on screen and activates on their phone at yt.be/activate.
 @main
 struct SmartTubeTVApp: App {
-    @State private var authService     = AuthService()
-    @State private var browseViewModel = BrowseViewModel()
-    @State private var settingsStore   = SettingsStore()
+    // Declared without default values so that init() can call FirebaseApp.configure()
+    // before any of these objects are instantiated.
+    @State private var authService: AuthService
+    @State private var browseViewModel: BrowseViewModel
+    @State private var settingsStore: SettingsStore
+
+    init() {
+        FirebaseApp.configure()
+        Analytics.setAnalyticsCollectionEnabled(true)
+        _authService     = State(initialValue: AuthService())
+        _browseViewModel = State(initialValue: BrowseViewModel())
+        _settingsStore   = State(initialValue: SettingsStore())
+    }
 
     var body: some Scene {
         WindowGroup {
