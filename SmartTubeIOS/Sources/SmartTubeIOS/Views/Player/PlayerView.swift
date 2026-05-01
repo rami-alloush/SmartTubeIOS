@@ -49,6 +49,10 @@ public struct PlayerView: View {
     /// `suspend()` when iOS fires it as a side-effect of backgrounding rather
     /// than actual navigation away from the player.
     @State private var isInBackground = false
+    /// True while this PlayerView instance is the top-most visible view.
+    /// Guards scenePhase handlers so only the visible instance calls handleForeground/handleBackground,
+    /// preventing ghost VMs from resuming audio when a new PlayerView is pushed on top.
+    @State private var isVisible = false
     #if os(tvOS)
     private enum TVPlayerControl: Equatable {
         case back, channel, more                             // top row
@@ -363,6 +367,7 @@ public struct PlayerView: View {
         }
         .onAppear {
             swipeLog.notice("[PlayerView] onAppear id=\(video.id)")
+            isVisible = true
             #if os(tvOS)
             playerFocused = true
             #endif
@@ -382,6 +387,7 @@ public struct PlayerView: View {
         }
         .onDisappear {
             swipeLog.notice("[PlayerView] onDisappear id=\(video.id) isInBackground=\(isInBackground)")
+            isVisible = false
             guard !isInBackground else { return }
             vm.suspend()
         }
@@ -389,9 +395,10 @@ public struct PlayerView: View {
             switch phase {
             case .background:
                 isInBackground = true
+                if isVisible { vm.handleBackground() }
             case .active:
                 isInBackground = false
-                vm.handleForeground()
+                if isVisible { vm.handleForeground() }
             default:
                 break
             }

@@ -114,6 +114,12 @@ public actor VideoPreloadCache {
         sponsorCategories: Set<SponsorSegment.Category>,
         authToken: String?
     ) {
+        // Playlist IDs are not video IDs — skip them to avoid wasted /player calls.
+        let isPlaylistId = videoId == "WL" || videoId == "LL" || videoId.hasPrefix("PL")
+        if isPlaylistId {
+            cacheLog.debug("[prefetch] SKIP \(videoId, privacy: .public) — playlist ID, not a video")
+            return
+        }
         // Skip if still fresh
         if let entry = playerInfoCache[videoId], !entry.isExpired {
             cacheLog.debug("[prefetch] SKIP \(videoId, privacy: .public) — already fresh")

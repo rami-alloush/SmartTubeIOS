@@ -228,19 +228,34 @@ public struct VideoCardView: View {
 
     // MARK: Shared
 
+    @ViewBuilder
     private var thumbnailView: some View {
-        // Prefer the explicit thumbnailURL (set for playlist stubs and API-provided thumbs).
-        // Fall back to highQualityThumbnailURL only when no explicit URL was provided.
-        let url = video.thumbnailURL ?? video.highQualityThumbnailURL
-        return AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let img):
-                img.resizable().scaledToFill()
-            case .failure:
-                placeholderThumbnail
-            default:
-                placeholderThumbnail.overlay(ProgressView())
+        if video.thumbnailURL == nil, video.id == "WL" || video.id == "LL" {
+            systemPlaylistThumbnail
+        } else {
+            // Prefer the explicit thumbnailURL (set for playlist stubs and API-provided thumbs).
+            // Fall back to highQualityThumbnailURL only when no explicit URL was provided.
+            let url = video.thumbnailURL ?? video.highQualityThumbnailURL
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                case .failure:
+                    placeholderThumbnail
+                default:
+                    placeholderThumbnail.overlay(ProgressView())
+                }
             }
+        }
+    }
+
+    private var systemPlaylistThumbnail: some View {
+        let icon = video.id == "WL" ? "clock.fill" : "hand.thumbsup.fill"
+        return ZStack {
+            Rectangle().fill(Color(.systemGray5))
+            Image(systemName: icon)
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(Color(.systemGray2))
         }
     }
 

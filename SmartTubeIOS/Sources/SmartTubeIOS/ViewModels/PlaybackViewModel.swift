@@ -35,18 +35,22 @@ public final class PlaybackViewModel {
     public private(set) var chapters: [Chapter] = []
     public private(set) var hasPrevious: Bool = false
     public private(set) var hasNext: Bool = false
+    /// The last stream URL handed to AVPlayer (primary or fallback). Stamped onto
+    /// Crashlytics non-fatal reports so the exact URL that failed is visible.
+    private var lastAttemptedStreamURL: URL?
     public var error: Error? {
         didSet {
             guard let error else { return }
             let nsError = error as NSError
             playerLog.recordNonFatal(error, userInfo: [
-                "video_id":      currentVideo?.id    ?? "unknown",
-                "video_title":   currentVideo?.title ?? "unknown",
-                "error_message": error.localizedDescription,
-                "error_domain":  nsError.domain,
-                "error_code":    "\(nsError.code)",
-                "has_retried":   "\(hasRetriedPlayback)",
-                "current_time":  "\(Int(currentTime))s",
+                "video_id":          currentVideo?.id    ?? "unknown",
+                "video_title":       currentVideo?.title ?? "unknown",
+                "stream_url":        lastAttemptedStreamURL?.absoluteString ?? "none",
+                "error_message":     error.localizedDescription,
+                "error_domain":      nsError.domain,
+                "error_code":        "\(nsError.code)",
+                "has_retried":       "\(hasRetriedPlayback)",
+                "current_time":      "\(Int(currentTime))s",
             ])
         }
     }
@@ -121,6 +125,7 @@ public final class PlaybackViewModel {
     public let player = AVPlayer()
     @ObservationIgnored nonisolated(unsafe) private var timeObserver: Any?
     @ObservationIgnored nonisolated(unsafe) private var audioSessionObserver: Any?
+    @ObservationIgnored nonisolated(unsafe) private var rateObserver: NSKeyValueObservation?
     /// Prevents infinite retry loops: set once the first fallback attempt has been made.
     private var hasRetriedPlayback: Bool = false
     /// True while a SponsorBlock auto-skip seek is in-flight. Guards against the periodic
@@ -194,6 +199,7 @@ public final class PlaybackViewModel {
         }
         #endif
         setupTimeObserver()
+        setupRateObserver()
         #if canImport(UIKit)
         setupRemoteCommandCenter()
         setupAudioSessionObserver()
@@ -202,6 +208,7 @@ public final class PlaybackViewModel {
 
     deinit {
         if let obs = timeObserver { player.removeTimeObserver(obs) }
+        rateObserver?.invalidate()
     }
 
     // MARK: - Load video
@@ -268,7 +275,7 @@ public final class PlaybackViewModel {
         loadTask = Task { await loadAsync(video: video) }
     }
 
-    /// Call when the app returns to the foreground.
+    /// Call when the app returns to the foreground and this PlayerView is the visible one.
     /// Reactivates the AVAudioSession and resumes the player if it was playing
     /// before the interruption/background transition.
     public func handleForeground() {
@@ -281,11 +288,22 @@ public final class PlaybackViewModel {
         }
         #endif
         // Resume only if we consider ourselves to be in playing state.
-        // isPlaying tracks our intent; player.rate reflects actual hardware state.
+        // isPlaying is kept in sync with player.rate via KVO, so this only fires
+        // when the player was paused while still intending to play (e.g. background transition).
         if isPlaying && player.rate == 0 {
             player.play()
             playerLog.notice("[handleForeground] resumed player after foreground transition")
         }
+    }
+
+    /// Call when the app enters the background.
+    /// Pauses playback when the user has disabled background audio.
+    public func handleBackground() {
+        guard !settings.backgroundPlaybackEnabled else { return }
+        guard isPlaying else { return }
+        player.pause()
+        // isPlaying is synced to false by the rate KVO observer.
+        playerLog.notice("[handleBackground] background playback disabled — paused")
     }
 
     /// Pauses playback and saves the watch position without tearing down the AVPlayerItem.
@@ -499,7 +517,16 @@ public final class PlaybackViewModel {
                 throw APIError.decodingError("No stream URL")
             }
             playerLog.notice("Starting AVPlayer with: \(streamURL.absoluteString.prefix(120))")
-            let item = AVPlayerItem(url: streamURL)
+            lastAttemptedStreamURL = streamURL
+            // YouTube HLS manifest URLs require the YouTube iOS app User-Agent to be sent
+            // in the fetch request. AVPlayer's default `AppleCoreMedia/x.x.x` User-Agent
+            // causes YouTube to return HTTP 404 immediately for the variant manifest.
+            // Injecting the correct User-Agent via AVURLAsset fixes this.
+            let playerAsset = AVURLAsset(
+                url: streamURL,
+                options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]]
+            )
+            let item = AVPlayerItem(asset: playerAsset)
             // Apply resolution cap using preferredMaximumResolution on the HLS adaptive stream.
             // This avoids HTTP 403 errors that occur when playing video-only adaptive URLs directly.
             if settings.preferredQuality != .auto, let maxH = settings.preferredQuality.maxHeight {
@@ -529,7 +556,6 @@ public final class PlaybackViewModel {
                         playerLog.error("❌ AVPlayerItem failed: \(err)")
                         if !self.hasRetriedPlayback, let video = self.currentVideo {
                             self.hasRetriedPlayback = true
-                            playerLog.notice("Retrying playback with authenticated TV client for \(video.id)")
                             Task { await self.retryWithFallbackPlayer(video: video, originalError: item.error) }
                         } else {
                             self.error = item.error
@@ -573,18 +599,23 @@ public final class PlaybackViewModel {
     // MARK: - Playback fallback
 
     /// Called when the primary iOS-client HLS stream fails to open.
-    /// Retries using the authenticated TV client, which may return a different
-    /// HLS manifest (e.g. without Dolby / multi-audio headers that the simulator
-    /// can't handle). Shows the original error if the fallback also fails.
+    /// Re-fetches using the Android InnerTube client, which returns direct CDN videoplayback
+    /// URLs instead of an IP-bound HLS manifest. YouTube's iOS-client HLS manifests embed
+    /// the requester's IP; on the iOS Simulator AVPlayer's download IP can differ from the
+    /// URLSession IP used by InnerTubeAPI, causing a 404. Android-client URLs are signed with
+    /// Android credentials and are not subject to the same IP-binding restriction.
+    /// Shows the original error if the Android-client fallback also fails.
     private func retryWithFallbackPlayer(video: Video, originalError: Error?) async {
         do {
-            let fallbackInfo = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
+            playerLog.notice("Retrying playback with Android client for \(video.id)")
+            let fallbackInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
             guard let fallbackURL = fallbackInfo.preferredStreamURL else {
                 playerLog.error("❌ Fallback player: no stream URL")
                 self.error = originalError
                 return
             }
             playerLog.notice("Fallback stream URL: \(fallbackURL.absoluteString.prefix(120))")
+            lastAttemptedStreamURL = fallbackURL
             let fallbackItem = AVPlayerItem(url: fallbackURL)
             itemObserverTask?.cancel()
             itemObserverTask = Task { [weak self] in
@@ -609,6 +640,8 @@ public final class PlaybackViewModel {
                 }
             }
             player.replaceCurrentItem(with: fallbackItem)
+            player.rate = Float(settings.playbackSpeed)
+            isPlaying = true
         } catch {
             playerLog.error("❌ Fallback player fetch failed: \(String(describing: error))")
             self.error = originalError
@@ -1207,6 +1240,30 @@ public final class PlaybackViewModel {
                 self.checkSponsorSkip(at: seconds)
                 self.updateCaptionCue(for: seconds)
                 if self.statsForNerdsVisible { self.updateStatsSnapshot() }
+            }
+        }
+    }
+
+    private func setupRateObserver() {
+        // KVO on player.rate so isPlaying stays in sync when the system externally
+        // pauses the player (e.g. headphones removed, audio session interruption ends
+        // without shouldResume). Without this, isPlaying stays true while the player
+        // is actually silent, causing handleForeground() to re-start a ghost session.
+        rateObserver = player.observe(\.rate, options: [.new]) { [weak self] _, change in
+            guard let self, let newRate = change.newValue else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Ignore rate changes that we ourselves triggered (load/pause/resume/stop)
+                // by only acting when the player goes silent unexpectedly while we
+                // believed it was playing.
+                let playerWentSilent = newRate == 0 && self.isPlaying
+                if playerWentSilent {
+                    self.isPlaying = false
+                    playerLog.notice("[rateObserver] player.rate→0 while isPlaying=true — syncing isPlaying=false")
+                    #if canImport(UIKit)
+                    self.updateNowPlayingPlayback()
+                    #endif
+                }
             }
         }
     }

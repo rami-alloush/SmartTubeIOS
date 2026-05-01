@@ -11,6 +11,7 @@ public struct BrowseView: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.innerTubeAPI) private var api
     @State private var selectedVideo: Video?
+    @State private var selectedPlaylist: Video?
     @State private var shortsPresentation: ShortsPresentation?
     @State private var channelDestination: ChannelDestination?
     @State private var showSignIn = false
@@ -36,6 +37,9 @@ public struct BrowseView: View {
             PlayerView(video: video, api: api)
         }
         #endif
+        .navigationDestination(item: $selectedPlaylist) { stub in
+            PlaylistView(playlistId: stub.id, playlistTitle: stub.title, api: api)
+        }
         .navigationDestination(item: $channelDestination) { dest in
             ChannelView(channelId: dest.channelId)
         }
@@ -186,7 +190,9 @@ public struct BrowseView: View {
     }
 
     private func selectVideo(_ video: Video, from groupVideos: [Video]) {
-        if video.isShort {
+        if vm.currentSection.type == .playlists {
+            selectedPlaylist = video
+        } else if video.isShort {
             let shorts = groupVideos.filter { $0.isShort }
             let idx = shorts.firstIndex(where: { $0.id == video.id }) ?? 0
             shortsPresentation = ShortsPresentation(videos: shorts, startIndex: idx)
