@@ -1,0 +1,514 @@
+import Foundation
+import Testing
+@testable import SmartTubeIOSCore
+
+// MARK: - MockInnerTubeAPI
+//
+// Synchronous, controllable stand-in for InnerTubeAPI.
+// Set `*Result` properties to control what each fetch returns.
+// All calls record themselves in `calls` for assertion.
+
+@MainActor
+final class MockInnerTubeAPI: InnerTubeAPIProtocol {
+
+    // MARK: - Call recorder
+
+    struct Call: Equatable {
+        let method: String
+        let args: [String]
+    }
+    var calls: [Call] = []
+
+    // MARK: - Configurable return values
+
+    var homeRowsResult: [VideoGroup] = []
+    var subscriptionsResult: VideoGroup = VideoGroup(title: "Subs", videos: [])
+    var historyResult: VideoGroup = VideoGroup(title: "History", videos: [])
+    var shortsResult: VideoGroup = VideoGroup(title: "Shorts", videos: [])
+    var musicResult: VideoGroup = VideoGroup(title: "Music", videos: [])
+    var gamingResult: VideoGroup = VideoGroup(title: "Gaming", videos: [])
+    var newsResult: VideoGroup = VideoGroup(title: "News", videos: [])
+    var liveResult: VideoGroup = VideoGroup(title: "Live", videos: [])
+    var sportsResult: VideoGroup = VideoGroup(title: "Sports", videos: [])
+    var playlistsResult: [PlaylistInfo] = []
+    var channelsResult: [Channel] = []
+    var channelThumbnailResult: URL? = nil
+    var channelResult: (channel: Channel, videos: VideoGroup) = (
+        Channel(id: "ch1", title: "Channel"), VideoGroup(title: "Ch", videos: [])
+    )
+    var channelVideosResult: VideoGroup = VideoGroup(title: "ChVideos", videos: [])
+    var searchResult: VideoGroup = VideoGroup(title: "Search", videos: [])
+    var suggestionsResult: [String] = []
+    var playlistVideosResult: VideoGroup = VideoGroup(title: "Playlist", videos: [])
+    var errorToThrow: Error? = nil
+
+    // MARK: - Protocol conformance
+
+    func setAuthToken(_ token: String?) async {
+        calls.append(Call(method: "setAuthToken", args: [token ?? "nil"]))
+    }
+
+    func fetchHomeRows(continuationToken: String?) async throws -> [VideoGroup] {
+        calls.append(Call(method: "fetchHomeRows", args: [continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return homeRowsResult
+    }
+
+    func fetchSubscriptions(continuationToken: String?) async throws -> VideoGroup {
+        calls.append(Call(method: "fetchSubscriptions", args: [continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return subscriptionsResult
+    }
+
+    func fetchHistory(continuationToken: String?) async throws -> VideoGroup {
+        calls.append(Call(method: "fetchHistory", args: [continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return historyResult
+    }
+
+    func fetchShorts() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchShorts", args: []))
+        if let e = errorToThrow { throw e }
+        return shortsResult
+    }
+
+    func fetchMusic() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchMusic", args: []))
+        if let e = errorToThrow { throw e }
+        return musicResult
+    }
+
+    func fetchGaming() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchGaming", args: []))
+        if let e = errorToThrow { throw e }
+        return gamingResult
+    }
+
+    func fetchNews() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchNews", args: []))
+        if let e = errorToThrow { throw e }
+        return newsResult
+    }
+
+    func fetchLive() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchLive", args: []))
+        if let e = errorToThrow { throw e }
+        return liveResult
+    }
+
+    func fetchSports() async throws -> VideoGroup {
+        calls.append(Call(method: "fetchSports", args: []))
+        if let e = errorToThrow { throw e }
+        return sportsResult
+    }
+
+    func fetchUserPlaylists() async throws -> [PlaylistInfo] {
+        calls.append(Call(method: "fetchUserPlaylists", args: []))
+        if let e = errorToThrow { throw e }
+        return playlistsResult
+    }
+
+    func fetchSubscribedChannels() async throws -> [Channel] {
+        calls.append(Call(method: "fetchSubscribedChannels", args: []))
+        if let e = errorToThrow { throw e }
+        return channelsResult
+    }
+
+    func fetchChannelThumbnailURL(channelId: String) async throws -> URL? {
+        calls.append(Call(method: "fetchChannelThumbnailURL", args: [channelId]))
+        return channelThumbnailResult
+    }
+
+    func fetchChannel(channelId: String) async throws -> (channel: Channel, videos: VideoGroup) {
+        calls.append(Call(method: "fetchChannel", args: [channelId]))
+        if let e = errorToThrow { throw e }
+        return channelResult
+    }
+
+    func fetchChannelVideos(channelId: String, continuationToken: String?) async throws -> VideoGroup {
+        calls.append(Call(method: "fetchChannelVideos", args: [channelId, continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return channelVideosResult
+    }
+
+    func search(query: String, continuationToken: String?, filter: SearchFilter) async throws -> VideoGroup {
+        calls.append(Call(method: "search", args: [query, continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return searchResult
+    }
+
+    func fetchSearchSuggestions(query: String) async throws -> [String] {
+        calls.append(Call(method: "fetchSearchSuggestions", args: [query]))
+        if let e = errorToThrow { throw e }
+        return suggestionsResult
+    }
+
+    func fetchPlaylistVideos(playlistId: String, continuationToken: String?) async throws -> VideoGroup {
+        calls.append(Call(method: "fetchPlaylistVideos", args: [playlistId, continuationToken ?? "nil"]))
+        if let e = errorToThrow { throw e }
+        return playlistVideosResult
+    }
+}
+
+// MARK: - Helpers
+
+/// Yields control enough times so internal @MainActor Tasks spawned by
+/// the ViewModel can complete against an immediately-returning mock API.
+private func waitForTasks() async {
+    // Three yields cover: (1) task starts, (2) async call returns, (3) state written back
+    for _ in 0..<3 { await Task.yield() }
+    // Short sleep ensures child tasks scheduled on the global executor also finish.
+    try? await Task.sleep(for: .milliseconds(50))
+}
+
+private func makeVideo(_ id: String) -> Video {
+    Video(id: id, title: "Video \(id)", channelTitle: "Channel")
+}
+
+// MARK: - HomeViewModelTests
+
+@Suite("HomeViewModel")
+@MainActor
+struct HomeViewModelTests {
+
+    @Test("load() calls fetchHomeRows and fetchSubscriptions")
+    func loadCallsBothFetches() async {
+        let mock = MockInnerTubeAPI()
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: [makeVideo("vid_0000001")])]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [makeVideo("vid_0000002")])
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        let methods = mock.calls.map(\.method)
+        #expect(methods.contains("fetchHomeRows"))
+        #expect(methods.contains("fetchSubscriptions"))
+    }
+
+    @Test("After load() completes, isRefreshing is false")
+    func loadResetsIsRefreshing() async {
+        let mock = MockInnerTubeAPI()
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: [makeVideo("vid_0000001")])]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        #expect(!vm.isRefreshing)
+    }
+
+    @Test("Home section is populated with videos from fetchHomeRows")
+    func homeSectionPopulated() async {
+        let mock = MockInnerTubeAPI()
+        let video = makeVideo("vid_0000001")
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: [video])]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        let homeState = vm.sections.first { $0.section.type == .home }
+        #expect(homeState?.videos.isEmpty == false)
+    }
+
+    @Test("mergedVideos interleaves rec and sub videos")
+    func mergedVideosInterleaves() async {
+        let mock = MockInnerTubeAPI()
+        let recVideos = (0..<8).map { makeVideo("rec\($0)_AAAAAA") }
+        let subVideos = (0..<4).map { makeVideo("sub\($0)_BBBBBB") }
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: recVideos)]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: subVideos)
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        // mergedVideos inserts 1 sub every 4 recs; total should be > 8
+        #expect(vm.mergedVideos.count > 8)
+        // Subscription videos should appear in merged list
+        let ids = Set(vm.mergedVideos.map(\.id))
+        #expect(ids.contains("sub0_BBBBBB"))
+    }
+
+    @Test("mergedVideos with empty subs returns only recs")
+    func mergedVideosEmptySubsReturnsRecs() async {
+        let mock = MockInnerTubeAPI()
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: [makeVideo("vid_AAAAAAA")])]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        let recs = vm.sections.first { $0.section.type == .home }?.videos ?? []
+        #expect(vm.mergedVideos == recs)
+    }
+}
+
+// MARK: - BrowseViewModelTests
+
+@Suite("BrowseViewModel")
+@MainActor
+struct BrowseViewModelTests {
+
+    @Test("loadContent for .subscriptions calls fetchSubscriptions and populates videoGroups")
+    func loadSubscriptionsPopulatesGroups() async {
+        let mock = MockInnerTubeAPI()
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [makeVideo("subvid_AAAA")])
+
+        let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(mock.calls.contains { $0.method == "fetchSubscriptions" })
+        #expect(!vm.videoGroups.isEmpty)
+        #expect(vm.videoGroups[0].videos[0].id == "subvid_AAAA")
+    }
+
+    @Test("loadContent for .history calls fetchHistory")
+    func loadHistoryCallsFetch() async {
+        let mock = MockInnerTubeAPI()
+        mock.historyResult = VideoGroup(title: "History", videos: [makeVideo("histvid_AAAA")])
+
+        let section = BrowseSection(id: "history", title: "History", type: .history)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(mock.calls.contains { $0.method == "fetchHistory" })
+        #expect(vm.videoGroups.first?.videos.first?.id == "histvid_AAAA")
+    }
+
+    @Test("Empty subscriptions result sets isAuthRequired = true")
+    func emptySubscriptionsSetAuthRequired() async {
+        let mock = MockInnerTubeAPI()
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+
+        let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(vm.isAuthRequired)
+    }
+
+    @Test("loadContent for .shorts calls fetchShorts")
+    func loadShortsCallsFetch() async {
+        let mock = MockInnerTubeAPI()
+        mock.shortsResult = VideoGroup(title: "Shorts", videos: [makeVideo("shortvid_AAAA")])
+
+        let section = BrowseSection(id: "shorts", title: "Shorts", type: .shorts)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(mock.calls.contains { $0.method == "fetchShorts" })
+    }
+
+    @Test("Error on non-auth section sets error property")
+    func errorOnFetchSetsErrorProperty() async {
+        struct TestError: Error {}
+        let mock = MockInnerTubeAPI()
+        mock.errorToThrow = TestError()
+
+        let section = BrowseSection(id: "shorts", title: "Shorts", type: .shorts)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(vm.error != nil)
+    }
+
+    @Test("isLoading is false after fetch completes")
+    func isLoadingFalseAfterFetch() async {
+        let mock = MockInnerTubeAPI()
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [makeVideo("vid_AAAAAAA")])
+
+        let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForTasks()
+
+        #expect(!vm.isLoading)
+    }
+}
+
+// MARK: - SearchViewModelTests
+
+@Suite("SearchViewModel")
+@MainActor
+struct SearchViewModelTests {
+
+    @Test("search() with non-empty query populates results")
+    func searchPopulatesResults() async {
+        let mock = MockInnerTubeAPI()
+        mock.searchResult = VideoGroup(title: "Results", videos: [makeVideo("result_AAAAA")])
+
+        let vm = SearchViewModel(api: mock)
+        vm.query = "swift programming"
+        vm.search()
+        await waitForTasks()
+
+        #expect(!vm.results.isEmpty)
+        #expect(vm.results[0].id == "result_AAAAA")
+    }
+
+    @Test("search() with whitespace-only query is a no-op")
+    func searchWithWhitespaceOnlyIsNoOp() async {
+        let mock = MockInnerTubeAPI()
+        mock.searchResult = VideoGroup(title: "Results", videos: [makeVideo("result_AAAAA")])
+
+        let vm = SearchViewModel(api: mock)
+        vm.query = "   "
+        vm.search()
+        await waitForTasks()
+
+        #expect(vm.results.isEmpty)
+        #expect(!mock.calls.contains { $0.method == "search" })
+    }
+
+    @Test("loadMore() with nextPageToken appends results")
+    func loadMoreAppendsResults() async {
+        let mock = MockInnerTubeAPI()
+        let page1 = VideoGroup(title: "R", videos: [makeVideo("p1_0000001")], nextPageToken: "token123")
+        let page2 = VideoGroup(title: "R", videos: [makeVideo("p2_0000002")])
+        mock.searchResult = page1
+
+        let vm = SearchViewModel(api: mock)
+        vm.query = "test"
+        vm.search()
+        await waitForTasks()
+
+        // Now set up page 2 and trigger loadMore
+        mock.searchResult = page2
+        vm.loadMore()
+        await waitForTasks()
+
+        #expect(vm.results.count == 2)
+        let ids = vm.results.map(\.id)
+        #expect(ids.contains("p1_0000001"))
+        #expect(ids.contains("p2_0000002"))
+    }
+
+    @Test("isLoading is false after search completes")
+    func isLoadingFalseAfterSearch() async {
+        let mock = MockInnerTubeAPI()
+        mock.searchResult = VideoGroup(title: "R", videos: [])
+
+        let vm = SearchViewModel(api: mock)
+        vm.query = "query"
+        vm.search()
+        await waitForTasks()
+
+        #expect(!vm.isLoading)
+    }
+
+    @Test("applyFilter reruns search with new filter")
+    func applyFilterReruns() async {
+        let mock = MockInnerTubeAPI()
+        mock.searchResult = VideoGroup(title: "R", videos: [makeVideo("vid_AAAAAAA")])
+
+        let vm = SearchViewModel(api: mock)
+        vm.query = "swift"
+        vm.search()
+        await waitForTasks()
+
+        let beforeCount = mock.calls.filter { $0.method == "search" }.count
+        var filter = SearchFilter()
+        filter.sortOrder = .viewCount
+        vm.applyFilter(filter)
+        await waitForTasks()
+
+        let afterCount = mock.calls.filter { $0.method == "search" }.count
+        #expect(afterCount > beforeCount)
+    }
+}
+
+// MARK: - PlaylistViewModelTests
+
+@Suite("PlaylistViewModel")
+@MainActor
+struct PlaylistViewModelTests {
+
+    @Test("load() fetches playlist videos and populates videos array")
+    func loadPopulatesVideos() async {
+        let mock = MockInnerTubeAPI()
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [
+            makeVideo("plvid_AAAAA"),
+            makeVideo("plvid_BBBBB"),
+        ])
+
+        let vm = PlaylistViewModel(api: mock)
+        vm.load(playlistId: "PLtest1234567")
+        await waitForTasks()
+
+        #expect(vm.videos.count == 2)
+        #expect(mock.calls.contains { $0.method == "fetchPlaylistVideos" })
+    }
+
+    @Test("load() tags each video with playlistId")
+    func loadTagsVideosWithPlaylistId() async {
+        let mock = MockInnerTubeAPI()
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [makeVideo("vid_AAAAAAA")])
+
+        let vm = PlaylistViewModel(api: mock)
+        vm.load(playlistId: "PLtest1234567")
+        await waitForTasks()
+
+        #expect(vm.videos.first?.playlistId == "PLtest1234567")
+    }
+
+    @Test("load(refresh: true) clears videos and reloads")
+    func loadRefreshClearsAndReloads() async {
+        let mock = MockInnerTubeAPI()
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [makeVideo("vid_AAAAAAA")])
+
+        let vm = PlaylistViewModel(api: mock)
+        vm.load(playlistId: "PLtest1234567")
+        await waitForTasks()
+
+        // Refresh — should clear and re-fetch
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [makeVideo("vid_BBBBBBB")])
+        vm.load(playlistId: "PLtest1234567", refresh: true)
+        await waitForTasks()
+
+        #expect(vm.videos.count == 1)
+        #expect(vm.videos[0].id == "vid_BBBBBBB")
+    }
+
+    @Test("loadMoreIfNeeded appends next page when on last video")
+    func loadMoreAppendsNextPage() async {
+        let mock = MockInnerTubeAPI()
+        let page1Video = makeVideo("page1_AAAAA")
+        mock.playlistVideosResult = VideoGroup(
+            title: "PL", videos: [page1Video], nextPageToken: "token_page2"
+        )
+
+        let vm = PlaylistViewModel(api: mock)
+        vm.load(playlistId: "PLtest1234567")
+        await waitForTasks()
+
+        // Set up page 2
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [makeVideo("page2_BBBBB")])
+        vm.loadMoreIfNeeded(lastVideo: page1Video)
+        await waitForTasks()
+
+        #expect(vm.videos.count == 2)
+    }
+
+    @Test("isLoading is false after fetch completes")
+    func isLoadingFalseAfterFetch() async {
+        let mock = MockInnerTubeAPI()
+        mock.playlistVideosResult = VideoGroup(title: "PL", videos: [])
+
+        let vm = PlaylistViewModel(api: mock)
+        vm.load(playlistId: "PLtest1234567")
+        await waitForTasks()
+
+        #expect(!vm.isLoading)
+    }
+}

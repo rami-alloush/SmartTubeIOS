@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 import os
-import SmartTubeIOSCore
 
-private let homeLog = CrashlyticsLogger(category: "Home")
+private let homeLog = ViewModelLogger(category: "Home")
 
 // MARK: - HomeViewModel
 //
@@ -87,10 +86,10 @@ public final class HomeViewModel {
 
     // MARK: - Dependencies
 
-    private let api: InnerTubeAPI
+    private let api: any InnerTubeAPIProtocol
     private var loadTask: Task<Void, Never>?
 
-    public init(api: InnerTubeAPI = InnerTubeAPI()) {
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
         self.sections = Self.shelfSections.map { SectionState(section: $0) }
     }
@@ -184,7 +183,7 @@ public final class HomeViewModel {
 
     /// Non-isolated so child tasks run on the global executor and network
     /// calls can overlap.
-    private static func fetchVideos(type: BrowseSection.SectionType, api: InnerTubeAPI) async -> ([Video], String?) {
+    private static func fetchVideos(type: BrowseSection.SectionType, api: any InnerTubeAPIProtocol) async -> ([Video], String?) {
         do {
             switch type {
             case .subscriptions:
@@ -210,7 +209,7 @@ public final class HomeViewModel {
         }
     }
 
-    private static func fetchMoreVideos(type: BrowseSection.SectionType, token: String, api: InnerTubeAPI) async -> ([Video], String?) {
+    private static func fetchMoreVideos(type: BrowseSection.SectionType, token: String, api: any InnerTubeAPIProtocol) async -> ([Video], String?) {
         do {
             switch type {
             case .subscriptions:

@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 import os
-import SmartTubeIOSCore
 
-private let browseLog = CrashlyticsLogger(category: "Browse")
+private let browseLog = ViewModelLogger(category: "Browse")
 
 // MARK: - BrowseViewModel
 //
@@ -33,13 +32,13 @@ public final class BrowseViewModel {
 
     // MARK: - Dependencies
 
-    private let api: InnerTubeAPI
+    private let api: any InnerTubeAPIProtocol
     private var fetchTask: Task<Void, Never>?
     private var enrichTask: Task<Void, Never>?
     /// When `false`, the History section returns empty content rather than fetching from YouTube.
     private var historyEnabled: Bool = true
 
-    public init(api: InnerTubeAPI = InnerTubeAPI(), initialSection: BrowseSection? = nil) {
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI(), initialSection: BrowseSection? = nil) {
         self.api = api
         if let initial = initialSection {
             // Ensure the initial section appears in the picker list.

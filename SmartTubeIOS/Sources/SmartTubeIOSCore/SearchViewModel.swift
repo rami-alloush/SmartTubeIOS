@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import SmartTubeIOSCore
 
 // MARK: - SearchViewModel
 //
@@ -17,7 +16,7 @@ public final class SearchViewModel {
     public private(set) var isLoading: Bool = false
     public var error: Error?
 
-    private let api: InnerTubeAPI
+    private let api: any InnerTubeAPIProtocol
     private var nextPageToken: String?
     private var searchTask: Task<Void, Never>?
     private var suggestTask: Task<Void, Never>?
@@ -28,7 +27,7 @@ public final class SearchViewModel {
         "documentary", "gaming highlights"
     ]
 
-    public init(api: InnerTubeAPI = InnerTubeAPI()) {
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
         suggestions = Self.recommendedTerms
     }
@@ -121,10 +120,10 @@ public final class ChannelViewModel {
     public private(set) var isLoading: Bool = false
     public var error: Error?
 
-    private let api: InnerTubeAPI
+    private let api: any InnerTubeAPIProtocol
     private var nextPageToken: String?
 
-    public init(api: InnerTubeAPI = InnerTubeAPI()) {
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
     }
 

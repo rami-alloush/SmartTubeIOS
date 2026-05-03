@@ -118,3 +118,63 @@ struct SearchFilterUITests {
         }
     }
 }
+
+// MARK: - SearchFilterCombinedParamsTests
+
+@Suite("Search Filter Combined Params")
+struct SearchFilterCombinedParamsTests {
+
+    @Test("Setting all fields produces non-nil params")
+    func allFieldsSetProducesParams() {
+        var filter = SearchFilter()
+        filter.sortOrder  = .viewCount
+        filter.uploadDate = .thisWeek
+        filter.type       = .video
+        filter.duration   = .long
+        #expect(filter.encodedParams() != nil)
+    }
+
+    @Test("Encoded params are valid base64")
+    func encodedParamsAreBase64() throws {
+        var filter = SearchFilter()
+        filter.sortOrder = .rating
+        let params = try #require(filter.encodedParams())
+        let data = Data(base64Encoded: params, options: .ignoreUnknownCharacters)
+        #expect(data != nil, "encodedParams() must produce a valid base64 string")
+    }
+
+    @Test("Only uploadDate set changes params relative to default")
+    func uploadDateOnlyChangesParams() {
+        var filter = SearchFilter()
+        filter.uploadDate = .today
+        #expect(filter.encodedParams() != SearchFilter.default.encodedParams())
+    }
+
+    @Test("Only duration set produces non-nil params")
+    func durationOnlyProducesParams() {
+        var filter = SearchFilter()
+        filter.duration = .short
+        #expect(filter.encodedParams() != nil)
+    }
+
+    @Test("Only type set produces non-nil params")
+    func typeOnlyProducesParams() {
+        var filter = SearchFilter()
+        filter.type = .channel
+        #expect(filter.encodedParams() != nil)
+    }
+
+    @Test("Each non-default SortOrder produces different params")
+    func sortOrdersProduceDifferentParams() {
+        let nonDefault = SearchFilter.SortOrder.allCases.filter { $0 != .relevance }
+        var seen: Set<String> = []
+        for order in nonDefault {
+            var filter = SearchFilter()
+            filter.sortOrder = order
+            if let p = filter.encodedParams() {
+                seen.insert(p)
+            }
+        }
+        #expect(seen.count == nonDefault.count, "Each sort order should produce unique params")
+    }
+}

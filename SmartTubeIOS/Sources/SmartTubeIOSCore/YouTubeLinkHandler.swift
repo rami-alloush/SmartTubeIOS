@@ -51,7 +51,8 @@ public enum YouTubeLinkHandler {
 
         // /watch?v=VIDEO_ID
         if path.lowercased() == "/watch" || path.lowercased().hasPrefix("/watch") {
-            return queryParam("v", in: url)
+            guard let v = queryParam("v", in: url) else { return nil }
+            return validID(v)
         }
 
         return nil

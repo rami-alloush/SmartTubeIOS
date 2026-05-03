@@ -36,9 +36,24 @@ public actor VideoStateStore {
     private static let maxEntries = 1_000
 
     private var states: [String: State] = [:]
+    private let defaults: UserDefaults
 
     private init() {
+        self.defaults = .standard
         if let data = UserDefaults.standard.data(forKey: Self.udKey),
+           let decoded = try? JSONDecoder().decode([String: State].self, from: data) {
+            states = decoded
+        }
+    }
+
+    /// Designated initializer for unit testing. Pass a unique `suiteName` string
+    /// (e.g. `"test-\(UUID().uuidString)"`) to get a fully isolated store with
+    /// no shared `UserDefaults` state — `String` is `Sendable` so this crosses
+    /// actor isolation boundaries cleanly in Swift 6 strict concurrency.
+    init(suiteName: String) {
+        let ud = UserDefaults(suiteName: suiteName) ?? .standard
+        self.defaults = ud
+        if let data = ud.data(forKey: Self.udKey),
            let decoded = try? JSONDecoder().decode([String: State].self, from: data) {
             states = decoded
         }
@@ -74,7 +89,7 @@ public actor VideoStateStore {
 
     private func persist() {
         guard let data = try? JSONEncoder().encode(states) else { return }
-        UserDefaults.standard.set(data, forKey: Self.udKey)
+        defaults.set(data, forKey: Self.udKey)
     }
 
     private func prune() {

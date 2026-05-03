@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 import os
-import SmartTubeIOSCore
 
-private let playlistLog = CrashlyticsLogger(category: "Playlist")
+private let playlistLog = ViewModelLogger(category: "Playlist")
 
 // MARK: - PlaylistViewModel
 //
@@ -20,9 +19,9 @@ public final class PlaylistViewModel {
     private var playlistId: String = ""
     private var nextPageToken: String?
     private var fetchTask: Task<Void, Never>?
-    private let api: InnerTubeAPI
+    private let api: any InnerTubeAPIProtocol
 
-    public init(api: InnerTubeAPI = InnerTubeAPI()) {
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
     }
 

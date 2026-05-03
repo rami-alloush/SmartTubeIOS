@@ -40,6 +40,7 @@ let package = Package(
                 .product(name: "FirebaseCrashlytics", package: "firebase-ios-sdk"),
             ],
             path: "Sources/SmartTubeIOS",
+            resources: [.process("Localizable.xcstrings")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // MARK: Tests

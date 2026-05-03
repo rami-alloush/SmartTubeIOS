@@ -365,6 +365,7 @@ struct HistoryParsingTests {
     // Shape confirmed by live fetchHistory log on 2026-04-03.
     @Test func tileRendererContentIdPath() async throws {
         let tileRenderer: [String: Any] = [
+            "contentType": "TILE_CONTENT_TYPE_VIDEO",
             "contentId": "RoLKhzJG3nc",
             "style": "TILE_STYLE_YTLR_DEFAULT",
             "onSelectCommand": [
@@ -496,6 +497,327 @@ struct HomeRowParsingTests {
 
 // MARK: - Helpers
 
+
+// MARK: - TimeFormattingTests
+
+@Suite("Time Formatting")
+struct TimeFormattingTests {
+
+    @Test("Zero seconds formats as 0:00")
+    func zeroSeconds() {
+        #expect(formatDuration(0) == "0:00")
+    }
+
+    @Test("Negative value is clamped to 0:00")
+    func negativeClampedToZero() {
+        #expect(formatDuration(-10) == "0:00")
+    }
+
+    @Test("Exactly one minute formats as 1:00")
+    func exactlyOneMinute() {
+        #expect(formatDuration(60) == "1:00")
+    }
+
+    @Test("59 minutes 59 seconds has no hours component")
+    func hoursThreshold() {
+        #expect(formatDuration(3599) == "59:59")
+    }
+
+    @Test("Exactly one hour shows H:MM:SS")
+    func exactlyOneHour() {
+        #expect(formatDuration(3600) == "1:00:00")
+    }
+
+    @Test("Large value 23:59:59 formats correctly")
+    func largeValue() {
+        #expect(formatDuration(86399) == "23:59:59")
+    }
+
+    @Test("Single digit seconds are zero-padded")
+    func singleDigitSecondsPadded() {
+        #expect(formatDuration(65) == "1:05")
+    }
+
+    @Test("Single digit minutes in hour format are zero-padded")
+    func singleDigitMinuteInHourFormat() {
+        #expect(formatDuration(3661) == "1:01:01")
+    }
+}
+
+// MARK: - AudioTrackTests
+
+@Suite("Audio Track")
+struct AudioTrackTests {
+
+    @Test("Init preserves all fields")
+    func initPreservesFields() {
+        let track = AudioTrack(id: "en", name: "English", languageCode: "en", isOriginal: true)
+        #expect(track.id == "en")
+        #expect(track.name == "English")
+        #expect(track.languageCode == "en")
+        #expect(track.isOriginal == true)
+    }
+
+    @Test("Tracks with same values are equal")
+    func equalTracksAreEqual() {
+        let a = AudioTrack(id: "en", name: "English", languageCode: "en", isOriginal: true)
+        let b = AudioTrack(id: "en", name: "English", languageCode: "en", isOriginal: true)
+        #expect(a == b)
+    }
+
+    @Test("Tracks with different id are not equal")
+    func differentIdNotEqual() {
+        let a = AudioTrack(id: "en", name: "English", languageCode: "en", isOriginal: true)
+        let b = AudioTrack(id: "es", name: "Spanish", languageCode: "es", isOriginal: false)
+        #expect(a != b)
+    }
+
+    @Test("AudioTrack can be inserted into a Set")
+    func canBeStoredInSet() {
+        let a = AudioTrack(id: "en", name: "English", languageCode: "en", isOriginal: true)
+        let b = AudioTrack(id: "es", name: "Spanish", languageCode: "es", isOriginal: false)
+        let set: Set<AudioTrack> = [a, b, a]
+        #expect(set.count == 2)
+    }
+
+    @Test("Non-original track stores isOriginal false")
+    func nonOriginalTrack() {
+        let track = AudioTrack(id: "fr", name: "French", languageCode: "fr", isOriginal: false)
+        #expect(!track.isOriginal)
+    }
+}
+
+// MARK: - InnerTubeAPI Parsing Gap Tests
+
+@Suite("InnerTube API Parsing Gaps")
+struct InnerTubeAPIParsingGapsTests {
+
+    // MARK: - Shorts tagging
+
+    @Test("tileRenderer with TILE_STYLE_YTLR_SHORTS style is tagged isShort = true")
+    func tileRendererShortsTagged() async throws {
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [
+                        [
+                            "itemSectionRenderer": [
+                                "contents": [
+                                    [
+                                        "tileRenderer": [
+                                            "contentType": "TILE_CONTENT_TYPE_VIDEO",
+                                            "style": "TILE_STYLE_YTLR_SHORTS",
+                                            "contentId": "short1234567",
+                                            "metadata": [
+                                                "tileMetadataRenderer": [
+                                                    "title": ["simpleText": "A Short"]
+                                                ]
+                                            ],
+                                            "onSelectCommand": [
+                                                "watchEndpoint": ["videoId": "short1234567"]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "History")
+        let video = try #require(group.videos.first)
+        #expect(video.isShort, "TILE_STYLE_YTLR_SHORTS tile must be tagged isShort = true")
+    }
+
+    @Test("videoRenderer with reelWatchEndpoint is tagged isShort = true")
+    func videoRendererReelEndpointTaggedShort() async throws {
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "twoColumnBrowseResultsRenderer": [
+                    "tabs": [[
+                        "tabRenderer": [
+                            "content": [
+                                "richGridRenderer": [
+                                    "contents": [
+                                        [
+                                            "richItemRenderer": [
+                                                "content": [
+                                                    "videoRenderer": [
+                                                        "videoId": "short1234567",
+                                                        "title": ["runs": [["text": "A Short Video"]]],
+                                                        "ownerText": ["runs": [["text": "Channel"]]],
+                                                        "thumbnail": ["thumbnails": [
+                                                            ["url": "https://i.ytimg.com/vi/short1234567/hqdefault.jpg"]
+                                                        ]],
+                                                        "navigationEndpoint": [
+                                                            "reelWatchEndpoint": ["videoId": "short1234567"]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Home")
+        let video = try #require(group.videos.first)
+        #expect(video.isShort, "videoRenderer with reelWatchEndpoint must be tagged isShort = true")
+    }
+
+    // MARK: - Empty response
+
+    @Test("Empty JSON response produces an empty VideoGroup")
+    func emptyContentsReturnsEmptyGroup() async throws {
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting([:], title: nil)
+        #expect(group.videos.isEmpty)
+    }
+
+    // MARK: - Multiple items
+
+    @Test("Three richItemRenderer entries all produce three Videos")
+    func multipleRichItemRenderersAllParsed() async throws {
+        func makeItem(_ videoId: String) -> [String: Any] {
+            [
+                "richItemRenderer": [
+                    "content": [
+                        "videoRenderer": [
+                            "videoId": videoId,
+                            "title": ["runs": [["text": "Video \(videoId)"]]],
+                            "ownerText": ["runs": [["text": "Channel"]]],
+                            "thumbnail": ["thumbnails": [
+                                ["url": "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg"]
+                            ]],
+                            "navigationEndpoint": ["watchEndpoint": ["videoId": videoId]]
+                        ]
+                    ]
+                ]
+            ]
+        }
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "twoColumnBrowseResultsRenderer": [
+                    "tabs": [[
+                        "tabRenderer": [
+                            "content": [
+                                "richGridRenderer": [
+                                    "contents": [
+                                        makeItem("video1_AAAAA"),
+                                        makeItem("video2_BBBBB"),
+                                        makeItem("video3_CCCCC"),
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Home")
+        #expect(group.videos.count == 3, "All three richItemRenderer items should be parsed")
+        let ids = Set(group.videos.map { $0.id })
+        #expect(ids.contains("video1_AAAAA"))
+        #expect(ids.contains("video2_BBBBB"))
+        #expect(ids.contains("video3_CCCCC"))
+    }
+
+    @Test("richItemRenderer wrapping reelItemRenderer is tagged isShort = true")
+    func richItemRendererWithReelEndpointIsShort() async throws {
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "twoColumnBrowseResultsRenderer": [
+                    "tabs": [[
+                        "tabRenderer": [
+                            "content": [
+                                "richGridRenderer": [
+                                    "contents": [
+                                        [
+                                            "richItemRenderer": [
+                                                "content": [
+                                                    "reelItemRenderer": [
+                                                        "videoId": "reel1234567",
+                                                        "headline": ["simpleText": "My Short"]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Home")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "reel1234567")
+        #expect(video.isShort, "richItemRenderer wrapping reelItemRenderer must be isShort = true")
+    }
+
+    // MARK: - Continuation / nextPageToken
+
+    @Test("continuationItemRenderer token is extracted as nextPageToken")
+    func nextPageTokenExtracted() async throws {
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "twoColumnBrowseResultsRenderer": [
+                    "tabs": [[
+                        "tabRenderer": [
+                            "content": [
+                                "richGridRenderer": [
+                                    "contents": [
+                                        [
+                                            "richItemRenderer": [
+                                                "content": [
+                                                    "videoRenderer": [
+                                                        "videoId": "video1_AAAAA",
+                                                        "title": ["runs": [["text": "Test"]]],
+                                                        "ownerText": ["runs": [["text": "Ch"]]],
+                                                        "thumbnail": ["thumbnails": [
+                                                            ["url": "https://i.ytimg.com/vi/video1_AAAAA/hqdefault.jpg"]
+                                                        ]],
+                                                        "navigationEndpoint": [
+                                                            "watchEndpoint": ["videoId": "video1_AAAAA"]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ],
+                                        [
+                                            "continuationItemRenderer": [
+                                                "continuationEndpoint": [
+                                                    "continuationCommand": [
+                                                        "token": "CONTINUATION_TOKEN_XYZ"
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Home")
+        #expect(group.nextPageToken == "CONTINUATION_TOKEN_XYZ")
+    }
+}
+
+// MARK: - Private helpers
 
 private func makeTileResponse(
     videoId: String,
