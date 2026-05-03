@@ -17,15 +17,6 @@
 		AA01000000000000000000A4 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01000000000000000000A1 /* ShareViewController.swift */; };
 		AA01000000000000000000A5 /* SmartTubeIOSCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA01000000000000000000B1 /* SmartTubeIOSCore */; };
 		AA01000000000000000000A6 /* SmartTubeShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA01000000000000000000A3 /* SmartTubeShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
-		C1D2E3F4A5B6C7D8E9F0A1B2 /* PlayerNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */; };
-		CD550C82FB83F1B06A867F3F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 161D597B9340722805A04592 /* Foundation.framework */; };
-		D222FD43501FE20610A249CC /* PlaylistsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43AC502830145DD05002B5A2 /* PlaylistsNavigationUITests.swift */; };
-		D4F5A6B7C8D9E0F1A2B3C4D5 /* SubscriptionsPlaybackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E4F5A6B7C8D9E0F1A2B3C4 /* SubscriptionsPlaybackUITests.swift */; };
-		D9B2E782B8D7E9E750193022 /* SmartTubeDownloadWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79E77E6DD18B12CA7A5341D0 /* SmartTubeDownloadWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		DD2551477B9F9B6D89AE6FCB /* AppEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29356C9641042E3DA5F16175 /* AppEntry.swift */; };
-		E3F4A5B6C7D8E9F0A1B2C3D4 /* CategoryChipHTTP400UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A5B6C7D8E9F0A1B2C3D4E5 /* CategoryChipHTTP400UITests.swift */; };
-		E5F6A7B8C9D0E1F2A3B4C5D6 /* SubscriptionsScrollRestorationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F7A8B9C0D1E2F3A4B5C6 /* SubscriptionsScrollRestorationUITests.swift */; };
 		AA11000000000000000001A2 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000001A1 /* UITestHelpers.swift */; };
 		AA11000000000000000002A2 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000002A1 /* SettingsUITests.swift */; };
 		AA11000000000000000003A2 /* LibraryPlaylistsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000003A1 /* LibraryPlaylistsUITests.swift */; };
@@ -35,6 +26,15 @@
 		AA11000000000000000007A2 /* ChannelViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000007A1 /* ChannelViewUITests.swift */; };
 		AA11000000000000000008A2 /* ShortsPlayerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000008A1 /* ShortsPlayerUITests.swift */; };
 		AA11000000000000000009A2 /* PlayerControlsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000009A1 /* PlayerControlsUITests.swift */; };
+		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
+		C1D2E3F4A5B6C7D8E9F0A1B2 /* PlayerNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */; };
+		CD550C82FB83F1B06A867F3F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 161D597B9340722805A04592 /* Foundation.framework */; };
+		D222FD43501FE20610A249CC /* PlaylistsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43AC502830145DD05002B5A2 /* PlaylistsNavigationUITests.swift */; };
+		D4F5A6B7C8D9E0F1A2B3C4D5 /* SubscriptionsPlaybackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E4F5A6B7C8D9E0F1A2B3C4 /* SubscriptionsPlaybackUITests.swift */; };
+		D9B2E782B8D7E9E750193022 /* SmartTubeDownloadWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79E77E6DD18B12CA7A5341D0 /* SmartTubeDownloadWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DD2551477B9F9B6D89AE6FCB /* AppEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29356C9641042E3DA5F16175 /* AppEntry.swift */; };
+		E3F4A5B6C7D8E9F0A1B2C3D4 /* CategoryChipHTTP400UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A5B6C7D8E9F0A1B2C3D4E5 /* CategoryChipHTTP400UITests.swift */; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* SubscriptionsScrollRestorationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F7A8B9C0D1E2F3A4B5C6 /* SubscriptionsScrollRestorationUITests.swift */; };
 		F1CDC40190BFE18C52E5AD1B /* SmartTubeIOSCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4D96747315A9E066D09F1F4E /* SmartTubeIOSCore */; };
 		FB01000000000000000000A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = FA01000000000000000000A1 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
@@ -103,15 +103,6 @@
 		AA01000000000000000000A3 /* SmartTubeShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SmartTubeShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA01000000000000000000C1 /* SmartTubeApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeApp.entitlements; sourceTree = "<group>"; };
 		AA01000000000000000000C2 /* SmartTubeShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeShareExtension.entitlements; sourceTree = "<group>"; };
-		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerNavigationUITests.swift; sourceTree = "<group>"; };
-		B7482B081D440A26079AA9BC /* SmartTubeIOS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SmartTubeIOS; path = ../SmartTubeIOS; sourceTree = SOURCE_ROOT; };
-		C3E4F5A6B7C8D9E0F1A2B3C4 /* SubscriptionsPlaybackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsPlaybackUITests.swift; sourceTree = "<group>"; };
-		CA34C2AD8A70726C11C5F851 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D5E6F7A8B9C0D1E2F3A4B5C6 /* SubscriptionsScrollRestorationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsScrollRestorationUITests.swift; sourceTree = "<group>"; };
-		DA3810E40296738F4C5E0B95 /* SmartTubeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartTubeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		F4A5B6C7D8E9F0A1B2C3D4E5 /* CategoryChipHTTP400UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChipHTTP400UITests.swift; sourceTree = "<group>"; };
-		FA01000000000000000000A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		AA11000000000000000001A1 /* UITestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestHelpers.swift; sourceTree = "<group>"; };
 		AA11000000000000000002A1 /* SettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUITests.swift; sourceTree = "<group>"; };
 		AA11000000000000000003A1 /* LibraryPlaylistsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPlaylistsUITests.swift; sourceTree = "<group>"; };
@@ -121,6 +112,15 @@
 		AA11000000000000000007A1 /* ChannelViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelViewUITests.swift; sourceTree = "<group>"; };
 		AA11000000000000000008A1 /* ShortsPlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortsPlayerUITests.swift; sourceTree = "<group>"; };
 		AA11000000000000000009A1 /* PlayerControlsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsUITests.swift; sourceTree = "<group>"; };
+		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerNavigationUITests.swift; sourceTree = "<group>"; };
+		B7482B081D440A26079AA9BC /* SmartTubeIOS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SmartTubeIOS; path = ../SmartTubeIOS; sourceTree = SOURCE_ROOT; };
+		C3E4F5A6B7C8D9E0F1A2B3C4 /* SubscriptionsPlaybackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsPlaybackUITests.swift; sourceTree = "<group>"; };
+		CA34C2AD8A70726C11C5F851 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D5E6F7A8B9C0D1E2F3A4B5C6 /* SubscriptionsScrollRestorationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsScrollRestorationUITests.swift; sourceTree = "<group>"; };
+		DA3810E40296738F4C5E0B95 /* SmartTubeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartTubeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F4A5B6C7D8E9F0A1B2C3D4E5 /* CategoryChipHTTP400UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChipHTTP400UITests.swift; sourceTree = "<group>"; };
+		FA01000000000000000000A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -508,7 +508,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${BUILD_DIR%Build/*}SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
+			shellScript = "\"${BUILD_DIR%Build/*}SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\" -gsp \"${SRCROOT}/SmartTubeApp/GoogleService-Info.plist\"\n";
 		};
 		FFDDBB9900112233445566AA /* Copy Firebase Binary dSYMs */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -753,7 +753,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1089,7 +1089,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

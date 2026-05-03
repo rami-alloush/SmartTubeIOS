@@ -26,6 +26,7 @@ public struct PlayerView: View {
     @State private var showQualityPicker = false
     @State private var showCaptionPicker = false
     @State private var showAudioTrackPicker = false
+    @State private var showSleepTimerPicker = false
     @State private var showMoreMenu = false
     @State private var showDescriptionSheet = false
     @State private var showCommentsSheet = false
@@ -262,6 +263,13 @@ public struct PlayerView: View {
                         .animation(.easeOut(duration: 0.2), value: showAudioTrackPicker)
                 }
                 #endif
+
+                // Sleep timer picker — pure SwiftUI overlay, no UIKit presentation.
+                if showSleepTimerPicker {
+                    sleepTimerPickerOverlay
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.easeOut(duration: 0.2), value: showSleepTimerPicker)
+                }
 
                 // Description sheet — pure SwiftUI overlay.
                 if showDescriptionSheet {
@@ -839,11 +847,9 @@ public struct PlayerView: View {
                 Divider()
                 #endif
                 // Sleep timer
-                Menu {
-                    Button("Off") { vm.setSleepTimer(minutes: nil) }
-                    ForEach(PlaybackViewModel.sleepTimerOptions, id: \.self) { mins in
-                        Button("\(mins) min") { vm.setSleepTimer(minutes: mins) }
-                    }
+                Button {
+                    showMoreMenu = false
+                    showSleepTimerPicker = true
                 } label: {
                     HStack {
                         Label("Sleep Timer", systemImage: "moon.zzz")
@@ -1237,17 +1243,27 @@ public struct PlayerView: View {
                     let trackW = geo.size.width - hPad * 2
                     let fraction = CGFloat(vm.scrubTime / vm.duration)
                     let thumbX = hPad + trackW * fraction
-                    let labelW: CGFloat = 90
+                    let chapterAtScrub = vm.chapters.last(where: { $0.startTime <= vm.scrubTime })
+                    let labelW: CGFloat = chapterAtScrub != nil ? min(geo.size.width * 0.45, 220) : 90
                     let clampedX = min(max(thumbX, hPad + labelW / 2), geo.size.width - hPad - labelW / 2)
 
-                    Text(formatDuration(vm.scrubTime))
-                        .font(.body.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
-                        .frame(width: labelW)
-                        .position(x: clampedX, y: geo.size.height / 2)
+                    VStack(spacing: 2) {
+                        if let chapter = chapterAtScrub {
+                            Text(chapter.title)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        Text(formatDuration(vm.scrubTime))
+                            .font(.body.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
+                    .frame(width: labelW)
+                    .position(x: clampedX, y: geo.size.height / 2)
                 }
             }
             .frame(height: 36)
@@ -1313,18 +1329,28 @@ public struct PlayerView: View {
                     let trackW = geo.size.width - hPad * 2
                     let fraction = CGFloat(vm.scrubTime / vm.duration)
                     let thumbX = hPad + trackW * fraction
-                    let labelW: CGFloat = 64
+                    let chapterAtScrub = vm.chapters.last(where: { $0.startTime <= vm.scrubTime })
+                    let labelW: CGFloat = chapterAtScrub != nil ? min(geo.size.width * 0.5, 180) : 64
                     let clampedX = min(max(thumbX, hPad + labelW / 2), geo.size.width - hPad - labelW / 2)
 
-                    Text(formatDuration(vm.scrubTime))
-                        .font(.caption.monospacedDigit())
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 6))
-                        .frame(width: labelW)
-                        .position(x: clampedX, y: geo.size.height / 2)
+                    VStack(spacing: 2) {
+                        if let chapter = chapterAtScrub {
+                            Text(chapter.title)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        Text(formatDuration(vm.scrubTime))
+                            .font(.caption.monospacedDigit())
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 6))
+                    .frame(width: labelW)
+                    .position(x: clampedX, y: geo.size.height / 2)
                 }
             }
             .frame(height: 28)
@@ -1566,6 +1592,76 @@ public struct PlayerView: View {
                             .buttonStyle(.plain)
                             Divider()
                         }
+                    }
+                }
+                .frame(maxHeight: 320)
+            }
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        }
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Sleep timer picker overlay
+
+    private var sleepTimerPickerOverlay: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture { showSleepTimerPicker = false }
+            VStack(spacing: 0) {
+                HStack {
+                    Button("Cancel") { showSleepTimerPicker = false }
+                        .padding()
+                    Spacer()
+                    Text("Sleep Timer")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Color.clear.frame(width: 70, height: 44)
+                }
+                Divider()
+                VStack(spacing: 0) {
+                    Button {
+                        vm.setSleepTimer(minutes: nil)
+                        showSleepTimerPicker = false
+                    } label: {
+                        HStack {
+                            Text("Off")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if vm.sleepTimerMinutes == nil {
+                                Image(systemName: AppSymbol.checkmark)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                    ForEach(PlaybackViewModel.sleepTimerOptions, id: \.self) { mins in
+                        Button {
+                            vm.setSleepTimer(minutes: mins)
+                            showSleepTimerPicker = false
+                        } label: {
+                            HStack {
+                                Text("\(mins) min")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if vm.sleepTimerMinutes == mins {
+                                    Image(systemName: AppSymbol.checkmark)
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
                     }
                 }
                 .frame(maxHeight: 320)

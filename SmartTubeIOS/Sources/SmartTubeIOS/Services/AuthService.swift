@@ -63,6 +63,7 @@ public final class AuthService {
     private var currentDeviceCode: String?
     private var currentInterval: TimeInterval = 5
     private var currentCreds: YouTubeClientCredentials?
+    private var isSigningIn: Bool = false
 
     private let tokenKey   = "st_access_token"
     private let refreshKey = "st_refresh_token"
@@ -93,6 +94,12 @@ public final class AuthService {
     /// Step 1 – request a device code and expose the user_code for display.
     /// Call this when the user taps "Sign in".
     public func beginSignIn() async {
+        guard !isSigningIn else {
+            authLog.notice("beginSignIn() — already in progress, ignoring duplicate call")
+            return
+        }
+        isSigningIn = true
+        defer { isSigningIn = false }
         pollTask?.cancel()
         error = nil
         pendingActivation = nil

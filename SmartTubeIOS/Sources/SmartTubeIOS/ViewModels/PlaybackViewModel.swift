@@ -209,6 +209,16 @@ public final class PlaybackViewModel {
     deinit {
         if let obs = timeObserver { player.removeTimeObserver(obs) }
         rateObserver?.invalidate()
+        if let obs = audioSessionObserver { NotificationCenter.default.removeObserver(obs) }
+        #if canImport(UIKit)
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
+        #endif
     }
 
     // MARK: - Load video
@@ -325,6 +335,15 @@ public final class PlaybackViewModel {
         controlsTimer?.cancel()
         #if canImport(UIKit)
         updateNowPlayingPlayback()
+        // Deregister from the global command center so a suspended VM never
+        // handles lock screen Play while another VM is the active player.
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
         #endif
     }
 
@@ -337,6 +356,10 @@ public final class PlaybackViewModel {
         }
         playerLog.notice("[resume] resume() called — currentVideo=\(self.currentVideo?.id ?? "nil")")
         wasPlayingBeforeSuspend = false
+        #if canImport(UIKit)
+        // Re-register lock screen commands (removed in suspend()).
+        setupRemoteCommandCenter()
+        #endif
         player.rate = Float(settings.playbackSpeed)
         isPlaying = true
         showControls()
@@ -583,6 +606,12 @@ public final class PlaybackViewModel {
                 }
             }
 
+            #if canImport(UIKit)
+            // Re-register lock screen commands before starting playback.
+            // Commands are removed in suspend()/stop(); re-registering here
+            // ensures they work when load() is called after a stop().
+            setupRemoteCommandCenter()
+            #endif
             player.rate = Float(settings.playbackSpeed)
             isPlaying = true
             #if canImport(UIKit)
@@ -1291,7 +1320,18 @@ public final class PlaybackViewModel {
         seekDebounceTask?.cancel()
         #if canImport(UIKit)
         clearNowPlayingInfo()
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
         #endif
+        if let obs = audioSessionObserver {
+            NotificationCenter.default.removeObserver(obs)
+            audioSessionObserver = nil
+        }
     }
 }
 

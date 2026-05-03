@@ -11,6 +11,7 @@ public struct SettingsView: View {
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var store
     @State private var showSignIn = false
+    @State private var reportSent = false
     #if os(tvOS)
     @State private var showKofiQR = false
     @State private var showGithubQR = false
@@ -231,7 +232,7 @@ public struct SettingsView: View {
     // MARK: - About
 
     private var aboutSection: some View {
-        Section("About") {
+        Section {
             LabeledContent("Version", value: appVersion)
             #if os(tvOS)
             Button {
@@ -252,8 +253,25 @@ public struct SettingsView: View {
                 Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
             }
             #endif
+            Button {
+                CrashlyticsLogger.sendDiagnosticReport()
+                reportSent = true
+            } label: {
+                if reportSent {
+                    Label("Report Sent", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Label("Send Diagnostic Report", systemImage: "ladybug")
+                }
+            }
+            .disabled(reportSent)
+            .accessibilityIdentifier("settings.sendDiagnosticReportButton")
             Button("Reset All Settings", role: .destructive) { store.reset() }
                 .accessibilityIdentifier("settings.resetAllButton")
+        } header: {
+            Text("About")
+        } footer: {
+            Text("Diagnostic Report sends recent app logs to the developer to help investigate issues.")
         }
     }
 

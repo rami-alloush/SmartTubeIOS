@@ -22,12 +22,16 @@ public struct ShortsPlayerView: View {
     @State private var vm: PlaybackViewModel
     @State private var currentIndex: Int
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(SettingsStore.self) private var store
     @Environment(AuthService.self) private var authService
     @State private var slideOffset: CGFloat = 0
     @State private var isTransitioning = false
     @State private var isFetchingMore = false
     @State private var channelDestination: ChannelDestination?
+    /// True while the app is backgrounded — guards onDisappear from calling stop()
+    /// when iOS fires it as a side-effect of backgrounding rather than navigation.
+    @State private var isInBackground = false
     private let api: InnerTubeAPI
 
     public init(videos: [Video], startIndex: Int = 0, api: InnerTubeAPI) {
@@ -180,8 +184,31 @@ public struct ShortsPlayerView: View {
         .toolbar(.hidden, for: .tabBar)
         #endif
         .ignoresSafeArea()
-        .onAppear { loadVideo(at: currentIndex) }
-        .onDisappear { vm.stop() }
+        .onAppear {
+            // Guard against spurious re-appears (e.g. sheet dismissal on top of
+            // the NavigationStack) triggering an unnecessary full reload.
+            if vm.currentVideoId == videos[currentIndex].id {
+                if vm.wasPlayingBeforeSuspend { vm.resume() }
+            } else {
+                loadVideo(at: currentIndex)
+            }
+        }
+        .onDisappear {
+            guard !isInBackground else { return }
+            vm.stop()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                isInBackground = true
+                vm.handleBackground()
+            case .active:
+                isInBackground = false
+                vm.handleForeground()
+            default:
+                break
+            }
+        }
         .navigationDestination(item: $channelDestination) { dest in
             ChannelView(channelId: dest.channelId)
         }
@@ -255,6 +282,7 @@ public struct ShortsPlayerView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(channelId == nil || channelId?.isEmpty == true)
+                        .accessibilityIdentifier("shorts.channelButton")
                     }
                     Spacer()
                     Button { vm.togglePlayPause() } label: {

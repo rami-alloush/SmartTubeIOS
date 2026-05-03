@@ -56,4 +56,18 @@ struct CrashlyticsLogger: Sendable {
         crashlytics.setCustomValue(id, forKey: "active_video_id")
         crashlytics.setCustomValue(title.prefix(120).description, forKey: "active_video_title")
     }
+
+    /// Records a user-triggered diagnostic non-fatal event in Crashlytics.
+    /// All breadcrumbs accumulated during the session are attached to this event,
+    /// giving a detailed picture of the app flow leading up to the user's report.
+    static func sendDiagnosticReport() {
+        let crashlytics = Crashlytics.crashlytics()
+        crashlytics.log("[Diagnostic] User-requested diagnostic report — see breadcrumbs for session flow.")
+        let error = NSError(
+            domain: "SmartTube.UserDiagnostic",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "User-requested diagnostic report"]
+        )
+        crashlytics.record(error: error)
+    }
 }
