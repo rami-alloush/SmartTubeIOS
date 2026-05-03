@@ -53,6 +53,7 @@ public struct BrowseSection: Identifiable, Hashable, Sendable {
 
     public enum SectionType: String, CaseIterable, Codable, Sendable {
         case home          = "home"
+        case recommended   = "recommended"
         case subscriptions = "subscriptions"
         case history       = "history"
         case playlists     = "playlists"
@@ -70,6 +71,7 @@ public struct BrowseSection: Identifiable, Hashable, Sendable {
         public var defaultTitle: String {
             switch self {
             case .home:          return "Home"
+            case .recommended:   return "Recommended"
             case .subscriptions: return "Subscriptions"
             case .history:       return "History"
             case .playlists:     return "Playlists"
@@ -108,6 +110,7 @@ public struct BrowseSection: Identifiable, Hashable, Sendable {
 
     /// All known sections including extended categories (music, gaming, etc.).
     public static let allSections: [BrowseSection] = defaultSections + [
+        BrowseSection(type: .recommended),
         BrowseSection(type: .shorts),
         BrowseSection(type: .music),
         BrowseSection(type: .gaming),

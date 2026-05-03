@@ -130,7 +130,7 @@ public actor VideoPreloadCache {
                 sponsorCategories: sponsorCategories,
                 authToken: authToken
             )
-            await self.decrementPrefetchCount()
+            self.decrementPrefetchCount()
         }
         prefetchTasks[videoId] = task
     }

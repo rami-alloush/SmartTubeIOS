@@ -99,13 +99,13 @@ public struct SettingsView: View {
 
             #if !os(tvOS)
             Stepper(
-                "Seek Back: \(store.settings.seekBackSeconds)s",
+                "Seek Back: \(store.settings.seekBackSeconds) s",
                 value: $store.settings.seekBackSeconds,
                 in: 5...60,
                 step: 5
             )
             Stepper(
-                "Seek Forward: \(store.settings.seekForwardSeconds)s",
+                "Seek Forward: \(store.settings.seekForwardSeconds) s",
                 value: $store.settings.seekForwardSeconds,
                 in: 5...60,
                 step: 5
@@ -198,10 +198,10 @@ public struct SettingsView: View {
                 // Minimum segment duration
                 Picker("Min. Segment Length", selection: $store.settings.sponsorBlockMinSegmentDuration) {
                     Text("Off").tag(0.0)
-                    Text("1 s").tag(1.0)
-                    Text("2 s").tag(2.0)
-                    Text("5 s").tag(5.0)
-                    Text("10 s").tag(10.0)
+                    Text("1s").tag(1.0)
+                    Text("2s").tag(2.0)
+                    Text("5s").tag(5.0)
+                    Text("10s").tag(10.0)
                 }
 
                 // Excluded channels

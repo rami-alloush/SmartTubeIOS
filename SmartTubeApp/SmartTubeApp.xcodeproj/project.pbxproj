@@ -26,6 +26,9 @@
 		AA11000000000000000007A2 /* ChannelViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000007A1 /* ChannelViewUITests.swift */; };
 		AA11000000000000000008A2 /* ShortsPlayerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000008A1 /* ShortsPlayerUITests.swift */; };
 		AA11000000000000000009A2 /* PlayerControlsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000009A1 /* PlayerControlsUITests.swift */; };
+		AA1100000000000000000AA2 /* AudioGhostStreamRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000AA1 /* AudioGhostStreamRegressionUITests.swift */; };
+		AA1100000000000000000BA2 /* AudioOriginalTrackSelectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */; };
+		AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000CA1 /* RecommendedChipUITests.swift */; };
 		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
 		C1D2E3F4A5B6C7D8E9F0A1B2 /* PlayerNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */; };
 		CD550C82FB83F1B06A867F3F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 161D597B9340722805A04592 /* Foundation.framework */; };
@@ -112,6 +115,9 @@
 		AA11000000000000000007A1 /* ChannelViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelViewUITests.swift; sourceTree = "<group>"; };
 		AA11000000000000000008A1 /* ShortsPlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortsPlayerUITests.swift; sourceTree = "<group>"; };
 		AA11000000000000000009A1 /* PlayerControlsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000AA1 /* AudioGhostStreamRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioGhostStreamRegressionUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOriginalTrackSelectionUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000CA1 /* RecommendedChipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedChipUITests.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerNavigationUITests.swift; sourceTree = "<group>"; };
 		B7482B081D440A26079AA9BC /* SmartTubeIOS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SmartTubeIOS; path = ../SmartTubeIOS; sourceTree = SOURCE_ROOT; };
@@ -203,6 +209,9 @@
 				AA11000000000000000007A1 /* ChannelViewUITests.swift */,
 				AA11000000000000000008A1 /* ShortsPlayerUITests.swift */,
 				AA11000000000000000009A1 /* PlayerControlsUITests.swift */,
+				AA1100000000000000000AA1 /* AudioGhostStreamRegressionUITests.swift */,
+				AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */,
+				AA1100000000000000000CA1 /* RecommendedChipUITests.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -493,6 +502,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		67F34A972FA0A6A200EA6054 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -574,6 +584,9 @@
 				AA11000000000000000007A2 /* ChannelViewUITests.swift in Sources */,
 				AA11000000000000000008A2 /* ShortsPlayerUITests.swift in Sources */,
 				AA11000000000000000009A2 /* PlayerControlsUITests.swift in Sources */,
+				AA1100000000000000000AA2 /* AudioGhostStreamRegressionUITests.swift in Sources */,
+				AA1100000000000000000BA2 /* AudioOriginalTrackSelectionUITests.swift in Sources */,
+				AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -736,7 +749,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

@@ -31,9 +31,15 @@ public struct HomeView: View {
     #endif
     private var visibleSections: [BrowseSection] {
         let types = store.settings.enabledSections
-        let all: [BrowseSection] = types.isEmpty
+        var all: [BrowseSection] = types.isEmpty
             ? BrowseSection.defaultSections
             : types.compactMap { type in BrowseSection.allSections.first { $0.type == type } }
+        // Always keep a "Recommended" chip directly after the "Home" chip so the
+        // user can filter to only recommended videos regardless of settings.
+        if !all.contains(where: { $0.type == .recommended }),
+           let homeIdx = all.firstIndex(where: { $0.type == .home }) {
+            all.insert(BrowseSection(type: .recommended), at: homeIdx + 1)
+        }
         if store.settings.hideShorts {
             return all.filter { $0.type != .shorts }
         }
@@ -229,69 +235,31 @@ public struct HomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Home shelves  (multi-section overview)
+    // MARK: - Home shelves  (unified interleaved feed)
 
     private var homeShelves: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(homeVM.sections) { state in
-                    if state.isLoading || !state.videos.isEmpty {
-                        sectionView(state: state)
-                    }
-                }
-            }
-        }
-        .refreshable { homeVM.load() }
-        #if os(tvOS)
-        .focusSection()
-        #endif
-    }
-
-    @ViewBuilder
-    private func sectionView(state: HomeViewModel.SectionState) -> some View {
-        let hideShorts = store.settings.hideShorts
-        let videos: [Video] = hideShorts ? state.videos.filter { !$0.isShort } : state.videos
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(state.section.title)
-                    #if os(tvOS)
-                    .font(.title2.bold())
-                    #else
-                    .font(.title3.bold())
-                    #endif
-                    .padding(.horizontal)
-                    .padding(.top, 20)
-                    .padding(.bottom, 8)
-                Spacer()
-                if !state.videos.isEmpty && state.section.type != .home {
-                    Button("See all") {
-                        if let chip = visibleSections.first(where: { $0.id == state.section.id }) {
-                            selectedSection = chip
-                            sectionVM.select(section: chip)
-                        }
-                    }
-                    #if os(tvOS)
-                    .font(.title3)
-                    #else
-                    .font(.subheadline)
-                    #endif
-                    .padding(.trailing)
-                    .padding(.top, 20)
-                }
-            }
-            if state.isLoading {
+        Group {
+            if homeVM.isLoadingAny && homeVM.mergedVideos.isEmpty {
                 ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VideoGridSection(
-                    videos: videos,
-                    onSelect: { selectVideo($0, from: videos) },
-                    loadMore: { homeVM.loadMore(sectionId: state.section.id) }
-                )
-                if state.isLoadingMore {
-                    ProgressView().frame(maxWidth: .infinity).padding()
+                let hideShorts = store.settings.hideShorts
+                let videos = hideShorts ? homeVM.mergedVideos.filter { !$0.isShort } : homeVM.mergedVideos
+                ScrollView {
+                    VideoGridSection(
+                        videos: videos,
+                        onSelect: { selectVideo($0, from: videos) },
+                        loadMore: { homeVM.loadMoreMerged() }
+                    )
+                    let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }
+                    if isLoadingMore {
+                        ProgressView().frame(maxWidth: .infinity).padding()
+                    }
                 }
+                .refreshable { homeVM.load() }
+                #if os(tvOS)
+                .focusSection()
+                #endif
             }
         }
     }
@@ -319,28 +287,32 @@ public struct HomeView: View {
             return copy
         }
         let gridVideos = sectionVM.videoGroups.filter { $0.layout != .row }.flatMap(\.videos).filter { !hideShorts || !$0.isShort }
-        // LazyVStack for performance. Scroll position is preserved by UIKit across
-        // fullScreenCover modal transitions (PlayerView is now presented as a cover).
+        // VStack (not LazyVStack) is required here. LazyVGrid inside LazyVStack
+        // collapses to zero height — grid items become invisible and non-tappable
+        // because LazyVStack never provides a measured height to LazyVGrid.
+        // Row groups are few (typically ≤15 carousels) so eager rendering is fine.
         return ScrollView {
-            ForEach(rowGroups) { group in
-                if let title = group.title, !title.isEmpty {
-                    Text(title)
-                        .font(.headline)
-                        .padding(.horizontal)
-                        .padding(.top, 16)
-                        .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(rowGroups) { group in
+                    if let title = group.title, !title.isEmpty {
+                        Text(title)
+                            .font(.headline)
+                            .padding(.horizontal)
+                            .padding(.top, 16)
+                            .padding(.bottom, 4)
+                    }
+                    VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
                 }
-                VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
-            }
-            if !gridVideos.isEmpty {
-                VideoGridSection(
-                    videos: gridVideos,
-                    onSelect: { selectVideo($0, from: gridVideos) },
-                    loadMore: { if let last = gridVideos.last { sectionVM.loadMoreIfNeeded(lastVideo: last) } }
-                )
-            }
-            if sectionVM.isLoading {
-                ProgressView().frame(maxWidth: .infinity).padding()
+                if !gridVideos.isEmpty {
+                    VideoGridSection(
+                        videos: gridVideos,
+                        onSelect: { selectVideo($0, from: gridVideos) },
+                        loadMore: { if let last = gridVideos.last { sectionVM.loadMoreIfNeeded(lastVideo: last) } }
+                    )
+                }
+                if sectionVM.isLoading {
+                    ProgressView().frame(maxWidth: .infinity).padding()
+                }
             }
         }
         .accessibilityIdentifier("home.sectionFeed")

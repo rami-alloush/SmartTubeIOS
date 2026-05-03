@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SmartTubeIOS",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14),

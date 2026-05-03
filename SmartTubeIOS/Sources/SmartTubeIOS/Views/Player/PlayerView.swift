@@ -170,6 +170,27 @@ public struct PlayerView: View {
                         .ignoresSafeArea()
                         .transition(.opacity)
                         .animation(.easeInOut(duration: 0.25), value: vm.controlsVisible)
+                        #if os(iOS)
+                        // Allow horizontal swipe navigation even when the controls overlay is
+                        // on screen.  .simultaneousGesture fires alongside button taps so the
+                        // controls remain fully interactive; only clear horizontal drags
+                        // (abs(dx) > abs(dy), distance > 50 pt) trigger navigation.
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 50, coordinateSpace: .global)
+                                .onEnded { value in
+                                    let dx = value.translation.width
+                                    let dy = value.translation.height
+                                    guard abs(dx) > abs(dy),
+                                          !isTransitioning,
+                                          !vm.isScrubbing else { return }
+                                    if dx < 0, vm.hasNext {
+                                        performHorizontalTransition(direction: -1, screenWidth: geo.size.width) { vm.playNext() }
+                                    } else if dx > 0, vm.hasPrevious {
+                                        performHorizontalTransition(direction: 1, screenWidth: geo.size.width) { vm.playPrevious() }
+                                    }
+                                }
+                        )
+                        #endif
                 }
 
                 // Error banner
@@ -436,10 +457,16 @@ public struct PlayerView: View {
             switch newState {
             case .done:
                 let title = vm.playerInfo?.video.title ?? video.title
-                downloadAlertItem = DownloadAlertItem(title: "Saved to Gallery", message: "\"\(title)\" has been saved to your Photos library.")
+                downloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Saved to Gallery", bundle: .module),
+                    message: String(localized: "\"\(title)\" has been saved to your Photos library.", bundle: .module)
+                )
                 downloadService.reset()
             case .failed(let reason):
-                downloadAlertItem = DownloadAlertItem(title: "Download Failed", message: reason)
+                downloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Download Failed", bundle: .module),
+                    message: reason
+                )
                 downloadService.reset()
             default:
                 break
@@ -575,6 +602,7 @@ public struct PlayerView: View {
                         .background(.black.opacity(0.4))
                         .clipShape(Circle())
                 }
+                .accessibilityIdentifier("player.moreButton")
                 #if os(tvOS)
                 .buttonStyle(.plain)
                 .scaleEffect(highlightedControl == .more ? 1.5 : 1.0)
@@ -929,6 +957,7 @@ public struct PlayerView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)
+                    .accessibilityIdentifier("player.moreMenu.audioTrackRow")
                     Divider()
                 }
                 #endif
@@ -1109,7 +1138,6 @@ public struct PlayerView: View {
 
     private func loadComments() {
         let videoId = (vm.playerInfo?.video ?? video).id
-        let token = authService.accessToken
         isLoadingComments = true
         Task {
             do {
@@ -1833,6 +1861,8 @@ public struct PlayerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("player.audioTrackPicker")
         }
         .ignoresSafeArea()
     }

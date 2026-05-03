@@ -40,6 +40,51 @@ public final class HomeViewModel {
         BrowseSection(id: BrowseSection.SectionType.subscriptions.rawValue, title: "Subscriptions", type: .subscriptions),
     ]
 
+    /// Number of recommended videos inserted between each subscription video
+    /// in the interleaved home feed.
+    private static let interleaveRatio = 4
+
+    /// `true` while either the recommended or subscriptions section is still on
+    /// its initial load (no videos yet).  Used by the view to show a spinner.
+    public var isLoadingAny: Bool {
+        sections.contains { $0.isLoading }
+    }
+
+    /// A single interleaved video list that mixes recommended and subscription
+    /// videos: one subscription video is inserted after every `interleaveRatio`
+    /// recommended videos.  Subscription videos that duplicate an already-seen
+    /// recommended ID are skipped.
+    public var mergedVideos: [Video] {
+        let recState  = sections.first { $0.section.type == .home }
+        let subState  = sections.first { $0.section.type == .subscriptions }
+        let recs  = recState?.videos  ?? []
+        let subs  = subState?.videos  ?? []
+
+        guard !subs.isEmpty else { return recs }
+        guard !recs.isEmpty else { return subs }
+
+        let recIds = Set(recs.map(\.id))
+        let uniqueSubs = subs.filter { !recIds.contains($0.id) }
+
+        var result: [Video] = []
+        result.reserveCapacity(recs.count + uniqueSubs.count)
+
+        var subIndex = 0
+        for (i, rec) in recs.enumerated() {
+            result.append(rec)
+            let slot = i + 1
+            if slot % Self.interleaveRatio == 0, subIndex < uniqueSubs.count {
+                result.append(uniqueSubs[subIndex])
+                subIndex += 1
+            }
+        }
+        // Append any remaining subscription videos after all recommended videos.
+        if subIndex < uniqueSubs.count {
+            result.append(contentsOf: uniqueSubs[subIndex...])
+        }
+        return result
+    }
+
     // MARK: - Dependencies
 
     private let api: InnerTubeAPI
@@ -123,6 +168,15 @@ public final class HomeViewModel {
                 sections[idx].nextPageToken = nextToken
                 sections[idx].isLoadingMore = false
             }
+        }
+    }
+
+    /// Called by the merged home feed when the user scrolls near the bottom.
+    /// Pages both the recommended and subscriptions sections simultaneously so
+    /// the interleaved list keeps growing evenly.
+    public func loadMoreMerged() {
+        for state in sections where state.section.type == .home || state.section.type == .subscriptions {
+            loadMore(sectionId: state.id)
         }
     }
 

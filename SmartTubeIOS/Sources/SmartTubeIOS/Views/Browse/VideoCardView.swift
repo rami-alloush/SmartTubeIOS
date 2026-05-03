@@ -108,10 +108,16 @@ public struct VideoCardView: View {
         .onChange(of: downloadService.state) { _, newState in
             switch newState {
             case .done:
-                downloadAlertItem = DownloadAlertItem(title: "Saved to Gallery", message: "\"\(video.title)\" has been saved to your Photos library.")
+                downloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Saved to Gallery", bundle: .module),
+                    message: String(localized: "\"\(video.title)\" has been saved to your Photos library.", bundle: .module)
+                )
                 downloadService.reset()
             case .failed(let reason):
-                downloadAlertItem = DownloadAlertItem(title: "Download Failed", message: reason)
+                downloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Download Failed", bundle: .module),
+                    message: reason
+                )
                 downloadService.reset()
             default:
                 break

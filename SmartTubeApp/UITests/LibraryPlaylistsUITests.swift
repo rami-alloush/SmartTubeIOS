@@ -188,4 +188,45 @@ final class LibraryPlaylistsUITests: XCTestCase {
         XCTAssertLessThan(firstCardMaxYAfterBack, 100,
             "Scroll position should be restored after back navigation (first card still off-screen)")
     }
+
+    // MARK: - Pagination test (signed-in account with a playlist of 16+ videos required)
+
+    /// Verifies that scrolling to the bottom of a playlist loads more videos beyond
+    /// the first page (~15 items returned by the TV InnerTube client).
+    func testPlaylistLoadsMoreVideosOnScroll() throws {
+        try openPlaylistsSegment()
+        guard let playlistCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
+            throw XCTSkip("No playlist cards — signed-in account with playlists required")
+        }
+        playlistCard.tap()
+
+        let feed = app.scrollViews["playlistView.feed"]
+        guard feed.waitForExistence(timeout: 15) else {
+            throw XCTSkip("playlistView.feed did not appear — playlist may be empty")
+        }
+        guard UITestHelpers.waitForVideoCards(in: app, timeout: 20) != nil else {
+            throw XCTSkip("No video cards in playlist")
+        }
+
+        // Count cards after initial load.
+        let cardsPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
+        let cards = app.descendants(matching: .any).matching(cardsPredicate)
+        let initialCount = cards.count
+        guard initialCount >= 15 else {
+            throw XCTSkip("Playlist has fewer than 15 videos — pagination won't trigger (got \(initialCount))")
+        }
+
+        // Scroll to the bottom repeatedly to trigger the loadMoreIfNeeded onAppear.
+        for _ in 0..<6 {
+            feed.swipeUp(velocity: .fast)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        // Wait up to 10 s for the card count to grow beyond the initial page.
+        let morePredicate = NSPredicate(format: "count > \(initialCount)")
+        let moreExpectation = XCTNSPredicateExpectation(predicate: morePredicate, object: cards)
+        let result = XCTWaiter().wait(for: [moreExpectation], timeout: 10)
+        XCTAssertEqual(result, .completed,
+            "Playlist should load more videos after scrolling to the bottom (initial: \(initialCount), after scroll: \(cards.count))")
+    }
 }

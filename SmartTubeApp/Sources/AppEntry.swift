@@ -105,6 +105,7 @@ struct AppEntry: App {
         WindowGroup {
             if isShortsUITesting {
                 ShortsPlayerView(videos: AppEntry.stubShorts, startIndex: 0, api: InnerTubeAPI())
+                    .environment(authService)
                     .environment(settingsStore)
             } else {
                 RootView()

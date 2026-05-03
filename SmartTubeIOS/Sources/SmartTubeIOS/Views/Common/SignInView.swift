@@ -365,6 +365,7 @@ private struct CountdownView: View {
     private var timeString: String {
         let mins = Int(remaining) / 60
         let secs = Int(remaining) % 60
-        return String(format: "Code expires in %d:%02d", mins, secs)
+        let fmt = String(localized: "Code expires in %d:%02d", bundle: .module)
+        return String(format: fmt, mins, secs)
     }
 }

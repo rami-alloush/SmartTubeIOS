@@ -1799,7 +1799,6 @@ public actor InnerTubeAPI {
             raw.compactMap { f -> VideoFormat? in
                 guard f["itag"] is Int else { return nil }
                 let urlStr = f["url"] as? String
-                let hasCipher = f["signatureCipher"] != nil || f["cipher"] != nil
                 let url = urlStr.flatMap { URL(string: $0) }
                 let quality = f["qualityLabel"] as? String ?? f["quality"] as? String ?? "unknown"
                 let mimeType = f["mimeType"] as? String ?? ""

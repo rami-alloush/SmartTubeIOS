@@ -25,15 +25,15 @@ extension SponsorSegment.Category {
     /// Human-readable label shown in the skip toast and settings UI.
     var displayName: String {
         switch self {
-        case .sponsor:       return "Sponsor"
-        case .selfPromo:     return "Self-Promotion"
-        case .interaction:   return "Interaction Reminder"
-        case .intro:         return "Intro/Recap"
-        case .outro:         return "Outro/Credits"
-        case .preview:       return "Preview/Hook"
-        case .filler:        return "Filler Tangent"
-        case .musicOfftopic: return "Music (Off-Topic)"
-        case .poiHighlight:  return "Highlight"
+        case .sponsor:       return String(localized: "Sponsor", bundle: .module)
+        case .selfPromo:     return String(localized: "Self-Promotion", bundle: .module)
+        case .interaction:   return String(localized: "Interaction Reminder", bundle: .module)
+        case .intro:         return String(localized: "Intro/Recap", bundle: .module)
+        case .outro:         return String(localized: "Outro/Credits", bundle: .module)
+        case .preview:       return String(localized: "Preview/Hook", bundle: .module)
+        case .filler:        return String(localized: "Filler Tangent", bundle: .module)
+        case .musicOfftopic: return String(localized: "Music (Off-Topic)", bundle: .module)
+        case .poiHighlight:  return String(localized: "Highlight", bundle: .module)
         }
     }
 }

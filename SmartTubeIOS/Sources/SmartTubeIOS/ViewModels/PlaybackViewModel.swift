@@ -928,17 +928,21 @@ public final class PlaybackViewModel {
             let asset = item.asset
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
                   group.options.count > 1 else { return }
-            let currentSelection = await item.currentMediaSelection
             var tracks: [AudioTrack] = []
             var optionMap: [String: AVMediaSelectionOption] = [:]
-            for option in group.options {
+            for (index, option) in group.options.enumerated() {
                 let locale = option.locale?.identifier
                     ?? option.extendedLanguageTag
                     ?? "unknown"
                 let displayName = option.locale.flatMap {
                     Locale.current.localizedString(forLanguageCode: $0.identifier)
                 } ?? locale
-                let isDefault = currentSelection.selectedMediaOption(in: group) == option
+                // Use the HLS DEFAULT=YES flag to identify the original track — not AVPlayer's
+                // automatic selection, which follows device locale and would wrongly mark an
+                // AI-dubbed track as "original" on non-English devices.
+                // When the manifest has no DEFAULT=YES (group.defaultOption == nil), treat
+                // the first rendition as original — YouTube orders originals first.
+                let isDefault = group.defaultOption != nil ? group.defaultOption == option : index == 0
                 let track = AudioTrack(id: locale, name: displayName,
                                        languageCode: locale, isOriginal: isDefault)
                 tracks.append(track)
@@ -958,8 +962,8 @@ public final class PlaybackViewModel {
                     ?? tracks.first(where: \.isOriginal)
             }()
             self.selectedAudioTrack = autoSelect
-            if let autoSelect, let option = optionMap[autoSelect.id],
-               autoSelect.id != tracks.first(where: \.isOriginal)?.id {
+            // Always explicitly select so AVPlayer doesn't override with a locale-based pick.
+            if let autoSelect, let option = optionMap[autoSelect.id] {
                 item.select(option, in: group)
             }
             playerLog.notice("Audio tracks: \(tracks.map(\.name).joined(separator: ", ")) — auto-selected: \(autoSelect?.name ?? "default")")

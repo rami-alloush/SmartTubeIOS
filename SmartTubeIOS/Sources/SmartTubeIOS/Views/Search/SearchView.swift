@@ -123,22 +123,22 @@ public struct SearchView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     if vm.filter.sortOrder != .relevance {
-                        FilterChip(label: vm.filter.sortOrder.label) {
+                        FilterChip(label: LocalizedStringKey(vm.filter.sortOrder.label)) {
                             var f = vm.filter; f.sortOrder = .relevance; vm.applyFilter(f)
                         }
                     }
                     if vm.filter.uploadDate != .anytime {
-                        FilterChip(label: vm.filter.uploadDate.label) {
+                        FilterChip(label: LocalizedStringKey(vm.filter.uploadDate.label)) {
                             var f = vm.filter; f.uploadDate = .anytime; vm.applyFilter(f)
                         }
                     }
                     if vm.filter.type != .any {
-                        FilterChip(label: vm.filter.type.label) {
+                        FilterChip(label: LocalizedStringKey(vm.filter.type.label)) {
                             var f = vm.filter; f.type = .any; vm.applyFilter(f)
                         }
                     }
                     if vm.filter.duration != .any {
-                        FilterChip(label: vm.filter.duration.label) {
+                        FilterChip(label: LocalizedStringKey(vm.filter.duration.label)) {
                             var f = vm.filter; f.duration = .any; vm.applyFilter(f)
                         }
                     }
@@ -238,7 +238,7 @@ public struct SearchView: View {
 // MARK: - FilterChip
 
 private struct FilterChip: View {
-    let label: String
+    let label: LocalizedStringKey
     let onRemove: () -> Void
 
     var body: some View {
@@ -278,7 +278,7 @@ struct SearchFilterSheet: View {
                 Section("Sort by") {
                     Picker("Sort", selection: $draft.sortOrder) {
                         ForEach(SearchFilter.SortOrder.allCases, id: \.self) { order in
-                            Text(order.label).tag(order)
+                            Text(LocalizedStringKey(order.label)).tag(order)
                         }
                     }
                     .pickerStyle(.inline)
@@ -288,17 +288,17 @@ struct SearchFilterSheet: View {
                 Section("Upload date") {
                     Picker("Upload date", selection: $draft.uploadDate) {
                         ForEach(SearchFilter.UploadDate.allCases, id: \.self) { date in
-                            Text(date.label).tag(date)
+                            Text(LocalizedStringKey(date.label)).tag(date)
                         }
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
                 }
 
-                Section("Type") {
-                    Picker("Type", selection: $draft.type) {
+                Section(String(localized: "search.filter.type", bundle: .module)) {
+                    Picker(String(localized: "search.filter.type", bundle: .module), selection: $draft.type) {
                         ForEach(SearchFilter.VideoType.allCases, id: \.self) { type in
-                            Text(type.label).tag(type)
+                            Text(LocalizedStringKey(type.label)).tag(type)
                         }
                     }
                     .pickerStyle(.inline)
@@ -308,7 +308,7 @@ struct SearchFilterSheet: View {
                 Section("Duration") {
                     Picker("Duration", selection: $draft.duration) {
                         ForEach(SearchFilter.Duration.allCases, id: \.self) { dur in
-                            Text(dur.label).tag(dur)
+                            Text(LocalizedStringKey(dur.label)).tag(dur)
                         }
                     }
                     .pickerStyle(.inline)

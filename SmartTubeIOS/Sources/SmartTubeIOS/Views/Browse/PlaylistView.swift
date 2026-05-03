@@ -69,6 +69,7 @@ public struct PlaylistView: View {
                             .padding(.vertical, 6)
                             .accessibilityIdentifier("video.card.\(video.id)")
                             .onTapGesture { selectedVideo = video }
+                            .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
                         Divider().padding(.horizontal)
                     }
                     if vm.isLoading {
@@ -81,6 +82,7 @@ public struct PlaylistView: View {
                         VideoCardView(video: video, compact: false)
                             .accessibilityIdentifier("video.card.\(video.id)")
                             .onTapGesture { selectedVideo = video }
+                            .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
                     }
                 }
                 .padding(.horizontal)

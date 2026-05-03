@@ -145,7 +145,7 @@ public final class BrowseViewModel {
         do {
             switch section.type {
 
-            case .home:
+            case .home, .recommended:
                 let rows = try await api.fetchHomeRows()
                 if !Task.isCancelled {
                     if rows.flatMap({ $0.videos }).isEmpty {
@@ -260,7 +260,7 @@ public final class BrowseViewModel {
         defer { isLoading = false }
         do {
             switch section.type {
-            case .home:
+            case .home, .recommended:
                 let newRows = try await api.fetchHomeRows(continuationToken: token)
                 if !Task.isCancelled { videoGroups.append(contentsOf: newRows) }
             case .subscriptions:
