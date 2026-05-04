@@ -148,6 +148,11 @@ final class MockInnerTubeAPI: InnerTubeAPIProtocol {
         if let e = errorToThrow { throw e }
         return playlistVideosResult
     }
+
+    func addToWatchLater(videoId: String) async throws {
+        calls.append(Call(method: "addToWatchLater", args: [videoId]))
+        if let e = errorToThrow { throw e }
+    }
 }
 
 // MARK: - Helpers

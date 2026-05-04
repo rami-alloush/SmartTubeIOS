@@ -741,6 +741,18 @@ public actor InnerTubeAPI {
         _ = try await postTV(endpoint: "like/removelike", body: body)
     }
 
+    /// Adds a video to the authenticated user's Watch Later playlist (id "WL").
+    /// Uses the TVHTML5 client's `browse_edit_playlist` endpoint with ACTION_ADD_VIDEO,
+    /// mirroring the Android SmartTube `PlaylistPresenter` → `ACTION_ADD_VIDEO` flow.
+    /// Requires authentication.
+    public func addToWatchLater(videoId: String) async throws {
+        var body = makeBody(client: tvClientContext)
+        body["playlistId"] = "WL"
+        body["actions"] = [["addedVideoId": videoId, "action": "ACTION_ADD_VIDEO"]]
+        _ = try await postTV(endpoint: "browse_edit_playlist", body: body)
+        tubeLog.notice("addToWatchLater videoId=\(videoId, privacy: .public)")
+    }
+
     // MARK: - Home rows (TYPE_ROW layout)
 
     /// Fetches the home feed as multiple named shelves (TYPE_ROW in Android).

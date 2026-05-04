@@ -20,7 +20,9 @@ public struct VideoCardView: View {
 
     @Environment(AuthService.self) private var authService
     @Environment(SettingsStore.self) private var store
+    @Environment(\.innerTubeAPI) private var api
     @State private var localProgress: Double?
+    @State private var watchLaterAlert: DownloadAlertItem?
     #if !os(tvOS)
     @State private var downloadService = VideoDownloadService()
     @State private var downloadAlertItem: DownloadAlertItem?
@@ -80,6 +82,26 @@ public struct VideoCardView: View {
                     Label("Open Channel", systemImage: AppSymbol.personRectangle)
                 }
             }
+            if authService.isSignedIn {
+                Button {
+                    Task {
+                        do {
+                            try await api.addToWatchLater(videoId: video.id)
+                            watchLaterAlert = DownloadAlertItem(
+                                title: String(localized: "Saved to Watch Later", bundle: .module),
+                                message: String(localized: "\"\(video.title)\" was added to your Watch Later playlist.", bundle: .module)
+                            )
+                        } catch {
+                            watchLaterAlert = DownloadAlertItem(
+                                title: String(localized: "Could Not Save", bundle: .module),
+                                message: error.localizedDescription
+                            )
+                        }
+                    }
+                } label: {
+                    Label("Save to Watch Later", systemImage: AppSymbol.watchLater)
+                }
+            }
             #if !os(tvOS)
             Button {
                 downloadService.download(video: video)
@@ -133,6 +155,9 @@ public struct VideoCardView: View {
         .zIndex(isFocused ? 1 : 0)
         .animation(.easeInOut(duration: 0.15), value: isFocused)
         #endif
+        .alert(item: $watchLaterAlert) { item in
+            Alert(title: Text(item.title), message: Text(item.message), dismissButton: .default(Text("OK")))
+        }
     }
 
     // MARK: Grid layout (default)
