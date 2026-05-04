@@ -306,29 +306,52 @@ struct VideoGridSection: View {
                 }
             }
         } else {
+            #if os(tvOS)
+            // LazyVGrid on tvOS causes the first row of grid items to appear
+            // invisible — the focus engine cannot traverse cells that have not
+            // been laid out yet. Use LazyVStack + HStack rows (4 per row) instead,
+            // which is the same approach BrowseView.content already uses on tvOS.
+            let columnCount = 4
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(stride(from: 0, to: videos.count, by: columnCount)), id: \.self) { startIdx in
+                    let rowVideos = Array(videos[startIdx..<min(startIdx + columnCount, videos.count)])
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(rowVideos) { video in
+                            Button { onSelect(video) } label: {
+                                VideoCardView(video: video, compact: false)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("video.card.\(video.id)")
+                        }
+                        let remainder = columnCount - rowVideos.count
+                        if remainder > 0 {
+                            ForEach(0..<remainder, id: \.self) { _ in
+                                Color.clear.frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                    .onAppear {
+                        if rowVideos.last?.id == videos.last?.id { loadMore?() }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            #else
             LazyVGrid(columns: videoGridColumns, spacing: 12) {
                 ForEach(videos) { video in
-                    #if os(tvOS)
-                    Button { onSelect(video) } label: {
-                        VideoCardView(video: video, compact: false)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("video.card.\(video.id)")
-                    .onAppear {
-                        if video.id == videos.last?.id { loadMore?() }
-                    }
-                    #else
                     VideoCardView(video: video, compact: false)
                         .accessibilityIdentifier("video.card.\(video.id)")
                         .onTapGesture { onSelect(video) }
                         .onAppear {
                             if video.id == videos.last?.id { loadMore?() }
                         }
-                    #endif
                 }
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
+            #endif
         }
     }
 }

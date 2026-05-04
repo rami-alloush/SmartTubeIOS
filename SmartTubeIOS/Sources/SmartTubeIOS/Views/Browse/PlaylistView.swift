@@ -38,8 +38,12 @@ public struct PlaylistView: View {
         .onAppear {
             vm.load(playlistId: playlistId)
         }
-        #if !os(macOS)
+        #if os(iOS)
         .fullScreenCover(item: $selectedVideo) { video in
+            PlayerView(video: video, api: api)
+        }
+        #elseif os(tvOS)
+        .navigationDestination(item: $selectedVideo) { video in
             PlayerView(video: video, api: api)
         }
         #endif
@@ -64,12 +68,23 @@ public struct PlaylistView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(vm.videos) { video in
+                        #if os(tvOS)
+                        Button { selectedVideo = video } label: {
+                            VideoCardView(video: video, compact: true)
+                                .padding(.horizontal)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("video.card.\(video.id)")
+                        .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
+                        #else
                         VideoCardView(video: video, compact: true)
                             .padding(.horizontal)
                             .padding(.vertical, 6)
                             .accessibilityIdentifier("video.card.\(video.id)")
                             .onTapGesture { selectedVideo = video }
                             .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
+                        #endif
                         Divider().padding(.horizontal)
                     }
                     if vm.isLoading {
@@ -77,6 +92,35 @@ public struct PlaylistView: View {
                     }
                 }
             } else {
+                #if os(tvOS)
+                let columnCount = 4
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(stride(from: 0, to: vm.videos.count, by: columnCount)), id: \.self) { startIdx in
+                        let rowVideos = Array(vm.videos[startIdx..<min(startIdx + columnCount, vm.videos.count)])
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(rowVideos) { video in
+                                Button { selectedVideo = video } label: {
+                                    VideoCardView(video: video, compact: false)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("video.card.\(video.id)")
+                            }
+                            let remainder = columnCount - rowVideos.count
+                            if remainder > 0 {
+                                ForEach(0..<remainder, id: \.self) { _ in
+                                    Color.clear.frame(maxWidth: .infinity)
+                                }
+                            }
+                        }
+                        .onAppear {
+                            if let last = rowVideos.last { vm.loadMoreIfNeeded(lastVideo: last) }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                #else
                 LazyVGrid(columns: videoGridColumns, spacing: 12) {
                     ForEach(vm.videos) { video in
                         VideoCardView(video: video, compact: false)
@@ -87,6 +131,7 @@ public struct PlaylistView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
+                #endif
                 if vm.isLoading {
                     ProgressView().frame(maxWidth: .infinity).padding()
                 }

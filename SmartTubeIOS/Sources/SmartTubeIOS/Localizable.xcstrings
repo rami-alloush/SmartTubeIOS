@@ -7763,6 +7763,21 @@
         }
       }
     },
+    "On this device, tap the button below \u2014 the sign-in page opens with your code already filled in.": {
+      "comment": "Sign-in activation screen subtitle (iOS/macOS) \u2014 prompts user to tap the primary link button",
+      "extractionState": "manual",
+      "localizations": {}
+    },
+    "Open Activation Page": {
+      "comment": "Sign-in primary action button \u2014 opens the activation URL in the browser with code pre-filled",
+      "extractionState": "manual",
+      "localizations": {}
+    },
+    "Or scan from another device": {
+      "comment": "Sign-in activation screen divider label separating the primary link button from the QR code",
+      "extractionState": "manual",
+      "localizations": {}
+    },
     "Open a channel and tap \"Exclude from SponsorBlock\" to add it here.": {
       "comment": "SponsorBlock excluded-channels empty state description",
       "extractionState": "manual",

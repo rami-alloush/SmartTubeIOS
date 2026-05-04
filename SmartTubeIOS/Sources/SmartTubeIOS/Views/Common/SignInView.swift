@@ -10,6 +10,7 @@ import CoreImage.CIFilterBuiltins
 public struct SignInView: View {
     @Environment(AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var showError = false
 
     public init() {}
@@ -206,10 +207,30 @@ public struct SignInView: View {
                 VStack(spacing: 6) {
                     Text("Activate SmartTube")
                         .font(.title2).fontWeight(.bold)
-                    Text("On any device, open the link below and enter the code.")
+                    Text("On this device, tap the button below — the sign-in page opens with your code already filled in.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                }
+
+                // Primary CTA: opens the activation URL with user_code pre-filled
+                Button {
+                    openURL(URL(string: activationQRURL(info: info)) ?? info.verificationURL)
+                } label: {
+                    Label("Open Activation Page", systemImage: "arrow.up.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                // ── Or: scan from another device ────────────────────────────
+                HStack(spacing: 8) {
+                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+                    Text("Or scan from another device")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
                 }
 
                 // QR code — scan to open the activation URL with code pre-filled
@@ -220,15 +241,9 @@ public struct SignInView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
 
-                VStack(spacing: 4) {
-                    Text("Scan to open activation page")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Link(info.verificationURL.absoluteString,
-                         destination: URL(string: activationQRURL(info: info)) ?? info.verificationURL)
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                }
+                Text("Scan to open activation page")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 // User code box
                 Text(info.userCode)

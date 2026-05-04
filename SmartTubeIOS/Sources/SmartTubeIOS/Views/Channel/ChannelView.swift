@@ -156,6 +156,34 @@ public struct ChannelView: View {
                     }
                 }
             } else {
+                #if os(tvOS)
+                let columnCount = 4
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(stride(from: 0, to: videos.count, by: columnCount)), id: \.self) { startIdx in
+                        let rowVideos = Array(videos[startIdx..<min(startIdx + columnCount, videos.count)])
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(rowVideos) { video in
+                                Button { selectedVideo = video } label: {
+                                    VideoCardView(video: video, compact: false)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("video.card.\(video.id)")
+                            }
+                            let remainder = columnCount - rowVideos.count
+                            if remainder > 0 {
+                                ForEach(0..<remainder, id: \.self) { _ in
+                                    Color.clear.frame(maxWidth: .infinity)
+                                }
+                            }
+                        }
+                        .onAppear {
+                            if rowVideos.last?.id == vm.videos.last?.id { vm.loadMore() }
+                        }
+                    }
+                }
+                .padding()
+                #else
                 LazyVGrid(columns: videoGridColumns, spacing: 12) {
                     ForEach(videos) { video in
                         VideoCardView(video: video, compact: false)
@@ -167,6 +195,7 @@ public struct ChannelView: View {
                     }
                 }
                 .padding()
+                #endif
             }
         }
     }
