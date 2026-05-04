@@ -121,7 +121,7 @@ public struct PlaylistView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
                 #else
-                LazyVGrid(columns: videoGridColumns, spacing: 12) {
+                LazyVGrid(columns: videoGridColumns, spacing: videoGridRowSpacing) {
                     ForEach(vm.videos) { video in
                         VideoCardView(video: video, compact: false)
                             .accessibilityIdentifier("video.card.\(video.id)")

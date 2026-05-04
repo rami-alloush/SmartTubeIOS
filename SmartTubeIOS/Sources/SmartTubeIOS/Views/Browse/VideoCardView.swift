@@ -161,29 +161,17 @@ public struct VideoCardView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(video.title)
-                    #if os(tvOS)
-                    .font(.title3.weight(.medium))
-                    #else
                     .font(.subheadline.weight(.medium))
-                    #endif
                     .lineLimit(2, reservesSpace: true)
                 Text(video.channelTitle)
-                    #if os(tvOS)
-                    .font(.subheadline)
-                    #else
                     .font(.caption)
-                    #endif
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     let vc = video.formattedViewCount
                     if !vc.isEmpty { Text(vc) }
                 }
-                #if os(tvOS)
-                .font(.caption)
-                #else
                 .font(.caption2)
-                #endif
                 .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 2)
@@ -211,18 +199,10 @@ public struct VideoCardView: View {
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text(video.title)
-                    #if os(tvOS)
-                    .font(.title3)
-                    #else
                     .font(.subheadline)
-                    #endif
                     .lineLimit(2)
                 Text(video.channelTitle)
-                    #if os(tvOS)
-                    .font(.subheadline)
-                    #else
                     .font(.caption)
-                    #endif
                     .foregroundStyle(.secondary)
                 let vc = video.formattedViewCount
                 if !vc.isEmpty {

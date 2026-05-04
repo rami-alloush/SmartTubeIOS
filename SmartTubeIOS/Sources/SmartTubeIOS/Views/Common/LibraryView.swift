@@ -80,9 +80,9 @@ public struct LibraryView: View {
                         selectedSection = sec
                     } label: {
                         Text(sec.rawValue)
-                            .font(.title3.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
+                            .font(.headline)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
                             .background(
                                 (isSelected || focusedSection == sec) ? Color.primary : Color.secondary.opacity(0.15),
                                 in: Capsule()

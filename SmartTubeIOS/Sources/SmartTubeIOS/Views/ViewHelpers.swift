@@ -29,13 +29,15 @@ struct ChannelDestination: Identifiable, Hashable {
 /// iOS: adaptive, ~2 columns on iPhone.
 #if os(tvOS)
 let videoGridColumns = [
-    GridItem(.flexible(), spacing: 16),
-    GridItem(.flexible(), spacing: 16),
-    GridItem(.flexible(), spacing: 16),
-    GridItem(.flexible(), spacing: 16)
+    GridItem(.flexible(), spacing: 40),
+    GridItem(.flexible(), spacing: 40),
+    GridItem(.flexible(), spacing: 40),
+    GridItem(.flexible(), spacing: 40)
 ]
+let videoGridRowSpacing: CGFloat = 40
 #else
 let videoGridColumns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 12)]
+let videoGridRowSpacing: CGFloat = 12
 #endif
 
 // MARK: - DownloadAlertItem

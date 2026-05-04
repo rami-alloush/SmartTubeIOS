@@ -184,7 +184,7 @@ public struct ChannelView: View {
                 }
                 .padding()
                 #else
-                LazyVGrid(columns: videoGridColumns, spacing: 12) {
+                LazyVGrid(columns: videoGridColumns, spacing: videoGridRowSpacing) {
                     ForEach(videos) { video in
                         VideoCardView(video: video, compact: false)
                             .accessibilityIdentifier("video.card.\(video.id)")

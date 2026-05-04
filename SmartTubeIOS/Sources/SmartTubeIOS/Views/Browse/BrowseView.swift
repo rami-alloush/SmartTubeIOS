@@ -139,7 +139,7 @@ public struct BrowseView: View {
                         VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
                     }
                     ForEach(Array(stride(from: 0, to: gridVideos.count, by: 2)), id: \.self) { idx in
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .top, spacing: videoGridRowSpacing) {
                             let v1 = gridVideos[idx]
                             #if os(tvOS)
                             Button { selectVideo(v1, from: gridVideos) } label: {
@@ -173,8 +173,8 @@ public struct BrowseView: View {
                                 Color.clear.frame(maxWidth: .infinity)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 0)
+                        .padding(.vertical, videoGridRowSpacing / 2)
                         .onAppear {
                             if idx + 2 >= gridVideos.count, let last = gridVideos.last {
                                 vm.loadMoreIfNeeded(lastVideo: last)
@@ -312,10 +312,10 @@ struct VideoGridSection: View {
             // been laid out yet. Use LazyVStack + HStack rows (4 per row) instead,
             // which is the same approach BrowseView.content already uses on tvOS.
             let columnCount = 4
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: videoGridRowSpacing) {
                 ForEach(Array(stride(from: 0, to: videos.count, by: columnCount)), id: \.self) { startIdx in
                     let rowVideos = Array(videos[startIdx..<min(startIdx + columnCount, videos.count)])
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: videoGridRowSpacing) {
                         ForEach(rowVideos) { video in
                             Button { onSelect(video) } label: {
                                 VideoCardView(video: video, compact: false)
@@ -336,10 +336,10 @@ struct VideoGridSection: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 0)
             .padding(.vertical, 8)
             #else
-            LazyVGrid(columns: videoGridColumns, spacing: 12) {
+            LazyVGrid(columns: videoGridColumns, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
                     VideoCardView(video: video, compact: false)
                         .accessibilityIdentifier("video.card.\(video.id)")
@@ -365,7 +365,7 @@ struct VideoRowSection: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
                     #if os(tvOS)
                     Button { onSelect(video) } label: {

@@ -144,9 +144,9 @@ public struct HomeView: View {
         let isFocused = focusedSection == section
         return Button(action: action) {
             Text(section.title)
-                .font(.title3.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .font(.headline)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
                 .background(
                     (isSelected || isFocused) ? Color.primary : Color.secondary.opacity(0.15),
                     in: Capsule()
