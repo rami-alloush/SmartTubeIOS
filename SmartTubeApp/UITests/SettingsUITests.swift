@@ -239,8 +239,12 @@ final class SettingsUITests: XCTestCase {
             "frame was \(app.frame.size)"
         )
 
-        // Dismiss and restore toggle state
-        app.swipeDown()
+        // Dismiss by tapping the always-present back button.
+        // The player is hosted in a UIKit .fullScreen modal, which ignores swipe-to-dismiss.
+        let dismissButton = app.buttons["player.backButton"].firstMatch
+        XCTAssertTrue(dismissButton.waitForExistence(timeout: 5),
+                      "player.backButton must be reachable for dismissal")
+        dismissButton.tap()
         if !wasOn {
             openSettings()
             UITestHelpers.scrollUntilVisible(toggle, in: form)

@@ -213,6 +213,14 @@ public actor VideoPreloadCache {
         trackingCache.removeAll()
     }
 
+    /// Call when a 403 is received for a cached player-info URL.
+    /// The cached URL is IP-bound and is now stale; evicting forces a fresh fetch on next load.
+    public func invalidatePlayerInfo(for videoId: String) {
+        guard playerInfoCache[videoId] != nil else { return }
+        cacheLog.notice("[evict] 403 — invalidating playerInfoCache for \(videoId, privacy: .public)")
+        playerInfoCache.removeValue(forKey: videoId)
+    }
+
     // MARK: - Private: prefetch implementation
 
     private func runPrefetch(

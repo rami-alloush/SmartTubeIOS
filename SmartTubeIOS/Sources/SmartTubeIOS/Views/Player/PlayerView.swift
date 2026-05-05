@@ -1006,7 +1006,7 @@ public struct PlayerView: View {
     }
 
     private func errorBanner(_ err: Error) -> some View {
-        VStack {
+        VStack(spacing: 12) {
             HStack {
                 Image(systemName: AppSymbol.warning)
                     .foregroundStyle(.yellow)
@@ -1014,10 +1014,22 @@ public struct PlayerView: View {
                     .font(.callout)
                     .foregroundStyle(.white)
             }
-            .padding()
-            .background(.black.opacity(0.75))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            Button {
+                vm.retryLoad()
+            } label: {
+                Text("Try Again")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+            }
+            .accessibilityIdentifier("player.retryButton")
         }
+        .padding()
+        .background(.black.opacity(0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .padding()
         .accessibilityIdentifier("player.errorBanner")
     }

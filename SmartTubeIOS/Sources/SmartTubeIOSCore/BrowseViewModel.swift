@@ -4,6 +4,19 @@ import os
 
 private let browseLog = ViewModelLogger(category: "Browse")
 
+// MARK: - BrowseError
+
+public enum BrowseError: LocalizedError {
+    case timeout
+
+    public var errorDescription: String? {
+        switch self {
+        case .timeout:
+            return "The feed took too long to load. Check your connection and try again."
+        }
+    }
+}
+
 // MARK: - BrowseViewModel
 //
 // Drives the main browse screen.  Mirrors the Android `BrowsePresenter`.
@@ -137,12 +150,46 @@ public final class BrowseViewModel {
 
     // MARK: - Private fetching
 
+    private static let fetchTimeoutSeconds: TimeInterval = 20
+
     private func fetchSection(_ section: BrowseSection) async {
         isLoading = true
         defer { isLoading = false }
         browseLog.notice("Fetching section: \(section.title) (\(String(describing: section.type)))")
         do {
-            switch section.type {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await self.fetchSectionBody(section) }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(Self.fetchTimeoutSeconds))
+                    throw BrowseError.timeout
+                }
+                try await group.next()
+                group.cancelAll()
+            }
+        } catch {
+            if !Task.isCancelled {
+                let authSections: Set<BrowseSection.SectionType> = [.subscriptions, .history, .playlists, .channels]
+                if let apiErr = error as? APIError,
+                   case .httpError(let code) = apiErr,
+                   (code == 401 || code == 403),
+                   authSections.contains(section.type) {
+                    isAuthRequired = true
+                    browseLog.notice("Auth required for \(section.title) (HTTP \(code))")
+                } else {
+                    isAuthRequired = false
+                    if case BrowseError.timeout = error {
+                        browseLog.error("⏱ \(section.title) timed out after \(Int(Self.fetchTimeoutSeconds))s")
+                    } else {
+                        browseLog.error("❌ \(section.title) error: \(String(describing: error))")
+                    }
+                    self.error = error
+                }
+            }
+        }
+    }
+
+    private func fetchSectionBody(_ section: BrowseSection) async throws {
+        switch section.type {
 
             case .home, .recommended:
                 let rows = try await api.fetchHomeRows()
@@ -233,24 +280,6 @@ public final class BrowseViewModel {
                 break
             }
             if !Task.isCancelled { loadedAt = Date() }
-        } catch {
-            if !Task.isCancelled {
-                // HTTP 401/403 on an auth-gated section means the user is not signed in
-                // rather than a real error — surface it as a sign-in prompt.
-                let authSections: Set<BrowseSection.SectionType> = [.subscriptions, .history, .playlists, .channels]
-                if let apiErr = error as? APIError,
-                   case .httpError(let code) = apiErr,
-                   (code == 401 || code == 403),
-                   authSections.contains(section.type) {
-                    isAuthRequired = true
-                    browseLog.notice("Auth required for \(section.title) (HTTP \(code))")
-                } else {
-                    isAuthRequired = false
-                    browseLog.error("❌ \(section.title) error: \(String(describing: error))")
-                    self.error = error
-                }
-            }
-        }
     }
 
     private func fetchNextPage(for section: BrowseSection) async {

@@ -411,6 +411,14 @@ extension PlayerView {
         else { return }
         var top = root
         while let presented = top.presentedViewController { top = presented }
+        // On iPad, UIActivityViewController must have a popover source or UIKit crashes.
+        if let popover = vc.popoverPresentationController {
+            popover.sourceView = top.view
+            popover.sourceRect = CGRect(
+                x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
         top.present(vc, animated: true)
     }
     #endif

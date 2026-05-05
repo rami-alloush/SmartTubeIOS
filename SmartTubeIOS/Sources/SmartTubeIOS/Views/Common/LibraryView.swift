@@ -15,6 +15,13 @@ public struct LibraryView: View {
     @State private var selectedVideo: Video?
     @State private var selectedPlaylist: Video?
     @State private var channelDestination: ChannelDestination?
+    /// KVO-based real-time scroll tracker — writes to a reference type so
+    /// every scroll tick does NOT trigger a SwiftUI re-render.
+    @State private var scrollStore = ScrollOffsetStore()
+    /// Snapshot of the offset taken the moment the player sheet opens.
+    @State private var savedScrollOffset: CGFloat? = nil
+    /// Non-nil while a restore is pending; cleared by `ScrollOffsetRestorer.onComplete`.
+    @State private var restoreOffset: CGFloat? = nil
     #if os(tvOS)
     @FocusState private var focusedSection: LibrarySection?
     #endif
@@ -127,6 +134,11 @@ public struct LibraryView: View {
                     emptyLibraryView
                 } else {
                     ScrollView {
+                        // KVO reader — always present; writes to ScrollOffsetStore
+                        // without triggering SwiftUI re-renders on every scroll tick.
+                        ScrollOffsetReader(store: scrollStore)
+                            .frame(width: 0, height: 0)
+
                         if browseVM.isLoading && videos.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding()
                         }
@@ -145,6 +157,12 @@ public struct LibraryView: View {
                                 }
                             }
                         )
+                        // Offset restorer — always present; no-op when restoreOffset is nil.
+                        ScrollOffsetRestorer(targetOffset: restoreOffset) {
+                            restoreOffset = nil
+                        }
+                        .frame(width: 0, height: 0)
+
                         if browseVM.isLoading && !videos.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding()
                         }
@@ -168,6 +186,15 @@ public struct LibraryView: View {
                 title: section.rawValue,
                 type: section.browseSectionType
             ))
+        }
+        .onChange(of: selectedVideo) { old, new in
+            if old == nil, new != nil {
+                // Read the live KVO value — always accurate, even mid-scroll.
+                savedScrollOffset = scrollStore.currentOffset
+            } else if old != nil, new == nil, let saved = savedScrollOffset {
+                restoreOffset = saved
+                savedScrollOffset = nil
+            }
         }
         .onAppear {
             browseVM.select(section: BrowseSection(

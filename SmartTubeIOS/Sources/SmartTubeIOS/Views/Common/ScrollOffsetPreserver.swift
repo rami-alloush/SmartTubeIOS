@@ -24,6 +24,80 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
 /// ScrollOffsetRestorer(targetOffset: restoreOffset) { restoreOffset = nil }
 ///     .frame(width: 0, height: 0)
 /// ```
+// MARK: - ScrollOffsetStore
+
+/// Reference-type container that holds the current vertical scroll offset,
+/// updated via KVO without triggering SwiftUI re-renders on every scroll tick.
+final class ScrollOffsetStore {
+    var currentOffset: CGFloat = 0
+}
+
+// MARK: - ScrollOffsetReader
+
+/// A zero-size `UIViewRepresentable` that attaches a KVO observer to the
+/// nearest ancestor `UIScrollView` and writes real-time `contentOffset.y`
+/// into a `ScrollOffsetStore`. Using a reference type avoids SwiftUI
+/// re-renders on every scroll frame.
+///
+/// Place unconditionally inside the `ScrollView` content so the view is
+/// always in the hierarchy.
+///
+/// ```swift
+/// @State private var scrollStore = ScrollOffsetStore()
+///
+/// ScrollView {
+///     ScrollOffsetReader(store: scrollStore).frame(width: 0, height: 0)
+///     // … content …
+/// }
+/// ```
+#if os(iOS) || os(tvOS)
+struct ScrollOffsetReader: UIViewRepresentable {
+    let store: ScrollOffsetStore
+
+    func makeCoordinator() -> Coordinator { Coordinator(store: store) }
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isHidden = true
+        return v
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.attach(to: uiView)
+    }
+
+    final class Coordinator: NSObject {
+        let store: ScrollOffsetStore
+        private weak var scrollView: UIScrollView?
+        private var observation: NSKeyValueObservation?
+
+        init(store: ScrollOffsetStore) { self.store = store }
+
+        func attach(to view: UIView) {
+            // Re-attach only when scrollView was deallocated or never set.
+            guard scrollView == nil else { return }
+            var cursor: UIView? = view.superview
+            while let current = cursor {
+                if let sv = current as? UIScrollView {
+                    scrollView = sv
+                    observation = sv.observe(\.contentOffset, options: .new) { [weak self] sv, _ in
+                        // Intentionally NOT dispatching to main — contentOffset KVO
+                        // already fires on the main thread during UIKit scroll events.
+                        self?.store.currentOffset = sv.contentOffset.y
+                    }
+                    return
+                }
+                cursor = current.superview
+            }
+        }
+
+        deinit { observation?.invalidate() }
+    }
+}
+#endif
+
+// MARK: - ScrollOffsetRestorer
+
 #if os(iOS) || os(tvOS)
 struct ScrollOffsetRestorer: UIViewRepresentable {
     /// Desired `contentOffset.y`. Pass `nil` to do nothing.

@@ -42,6 +42,13 @@ public final class PlaybackViewModel {
         didSet {
             guard let error else { return }
             let nsError = error as NSError
+            // Transient connectivity errors (-1005 = connection lost, -1009 = offline) are
+            // expected in poor-network conditions and are not actionable via Crashlytics.
+            // Logging them caused a spike in non-fatal events in v2.0 — skip them.
+            let transientCodes = [-1005, -1009]
+            guard !(nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code)) else {
+                return
+            }
             playerLog.recordNonFatal(error, userInfo: [
                 "video_id":          currentVideo?.id    ?? "unknown",
                 "video_title":       currentVideo?.title ?? "unknown",
@@ -287,6 +294,20 @@ public final class PlaybackViewModel {
         hasPrevious = !history.isEmpty
         hasRetriedPlayback = false
         loadTask = Task { await loadAsync(video: video) }
+    }
+
+    /// User-initiated retry after all automatic fallbacks have been exhausted.
+    /// Resets the retry guard and reloads the current video from scratch.
+    public func retryLoad() {
+        guard let video = currentVideo else { return }
+        error = nil
+        hasRetriedPlayback = false
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+            await self.loadAsync(video: video)
+        }
     }
 
     /// Call when the app returns to the foreground and this PlayerView is the visible one.
@@ -583,7 +604,16 @@ public final class PlaybackViewModel {
                         playerLog.error("❌ AVPlayerItem failed: \(err)")
                         if !self.hasRetriedPlayback, let video = self.currentVideo {
                             self.hasRetriedPlayback = true
-                            Task { await self.retryWithFallbackPlayer(video: video, originalError: item.error) }
+                            // NSURLErrorDomain -1102 = HTTP 403 from a CDN URL that is now IP-bound
+                            // to a different network. Invalidate the cached player info so the next
+                            // attempt fetches a fresh URL, then try the iOS client first.
+                            let nsErr = item.error as? NSError
+                            if nsErr?.domain == NSURLErrorDomain && nsErr?.code == -1102 {
+                                await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                                Task { await self.retryWith403Recovery(video: video, originalError: item.error) }
+                            } else {
+                                Task { await self.retryWithFallbackPlayer(video: video, originalError: item.error) }
+                            }
                         } else {
                             self.error = item.error
                         }
@@ -678,6 +708,53 @@ public final class PlaybackViewModel {
         } catch {
             playerLog.error("❌ Fallback player fetch failed: \(String(describing: error))")
             self.error = originalError
+        }
+    }
+
+    /// 403 recovery: re-fetch a fresh iOS-client player info (now that the stale cache entry
+    /// is evicted) and retry with the new URL.  Falls through to the Android client if the
+    /// fresh iOS-client URL also 403s.
+    private func retryWith403Recovery(video: Video, originalError: Error?) async {
+        do {
+            playerLog.notice("403 recovery — re-fetching iOS client player info for \(video.id)")
+            let freshInfo = try await api.fetchPlayerInfo(videoId: video.id)
+            await VideoPreloadCache.shared.store(playerInfo: freshInfo, for: video.id)
+            guard let freshURL = freshInfo.preferredStreamURL else {
+                playerLog.error("❌ 403 recovery: no stream URL in fresh iOS-client response")
+                await retryWithFallbackPlayer(video: video, originalError: originalError)
+                return
+            }
+            playerLog.notice("403 recovery stream URL: \(freshURL.absoluteString.prefix(120))")
+            lastAttemptedStreamURL = freshURL
+            let recoveryItem = AVPlayerItem(url: freshURL)
+            itemObserverTask?.cancel()
+            itemObserverTask = Task { [weak self] in
+                for await status in recoveryItem.statusStream {
+                    guard let self, !Task.isCancelled else { return }
+                    switch status {
+                    case .readyToPlay:
+                        playerLog.notice("✅ 403 recovery AVPlayerItem readyToPlay")
+                        if let pos = self.savedPositionToRestore, pos > 0 {
+                            self.savedPositionToRestore = nil
+                            self.seek(to: pos)
+                        }
+                    case .failed:
+                        let err = recoveryItem.error.map { "\($0)" } ?? "nil"
+                        playerLog.error("❌ 403 recovery AVPlayerItem failed: \(err) — falling back to Android client")
+                        await self.retryWithFallbackPlayer(video: video, originalError: originalError)
+                    case .unknown:
+                        break
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+            player.replaceCurrentItem(with: recoveryItem)
+            player.rate = Float(settings.playbackSpeed)
+            isPlaying = true
+        } catch {
+            playerLog.error("❌ 403 recovery fetch failed: \(String(describing: error)) — falling back to Android client")
+            await retryWithFallbackPlayer(video: video, originalError: originalError)
         }
     }
 
