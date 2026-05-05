@@ -17,17 +17,17 @@ private let swipeLog = CrashlyticsLogger(category: "Player")
 
 public struct PlayerView: View {
     public let video: Video
-    @State private var vm: PlaybackViewModel
+    @State var vm: PlaybackViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dismiss) private var dismiss
-    @Environment(SettingsStore.self) private var store
+    @Environment(\.dismiss) var dismiss
+    @Environment(SettingsStore.self) var store
     @Environment(AuthService.self) private var authService
-    @State private var showSpeedPicker = false
-    @State private var showQualityPicker = false
+    @State var showSpeedPicker = false
+    @State var showQualityPicker = false
     @State private var showCaptionPicker = false
     @State private var showAudioTrackPicker = false
-    @State private var showSleepTimerPicker = false
-    @State private var showMoreMenu = false
+    @State var showSleepTimerPicker = false
+    @State var showMoreMenu = false
     @State private var showDescriptionSheet = false
     @State private var showCommentsSheet = false
     @State private var videoComments: [Comment] = []
@@ -35,7 +35,7 @@ public struct PlayerView: View {
     @State private var commentsAPI: InnerTubeAPI
     @State private var slideOffset: CGFloat = 0
     @State private var isTransitioning = false
-    @State private var channelDestination: ChannelDestination?
+    @State var channelDestination: ChannelDestination?
     #if !os(tvOS)
     @State private var downloadService: VideoDownloadService
     @State private var downloadAlertItem: DownloadAlertItem?
@@ -55,25 +55,10 @@ public struct PlayerView: View {
     /// preventing ghost VMs from resuming audio when a new PlayerView is pushed on top.
     @State private var isVisible = false
     #if os(tvOS)
-    private enum TVPlayerControl: Equatable {
-        case back, channel, more                             // top row
-        case seekBack, playPause, seekForward                // centre row
-        case prevVideo, prevChapter, nextChapter, nextVideo  // bottom row
-        var isTopRow: Bool {
-            switch self { case .back, .channel, .more: true; default: false }
-        }
-        var isCenterRow: Bool {
-            switch self { case .seekBack, .playPause, .seekForward: true; default: false }
-        }
-    }
     @FocusState private var playerFocused: Bool
     /// Which playback control is visually highlighted in the overlay.
     /// nil = not in controls-nav mode; all remote input targets the video layer.
-    @State private var highlightedControl: TVPlayerControl? = nil
-    /// True when any picker/menu overlay is open — player yields focus to the overlay.
-    private var isAnyOverlayVisible: Bool {
-        showMoreMenu || showQualityPicker || showSpeedPicker || showSleepTimerPicker
-    }
+    @State var highlightedControl: TVPlayerControl? = nil
     #endif
 
     public init(video: Video, api: InnerTubeAPI) {
@@ -1261,167 +1246,6 @@ public struct PlayerView: View {
         #endif
     }
 
-    #if os(tvOS)
-    // MARK: - tvOS controls navigation
-
-    private func tvNextControl(from current: TVPlayerControl, direction: MoveCommandDirection) -> TVPlayerControl {
-        switch direction {
-        case .left:
-            switch current {
-            // top row
-            case .more:        return .channel
-            case .channel:     return .back
-            // center row
-            case .playPause:   return .seekBack
-            case .seekForward: return .playPause
-            // bottom row
-            case .prevChapter: return .prevVideo
-            case .nextChapter: return .prevChapter
-            case .nextVideo:   return vm.chapters.isEmpty ? .prevVideo : .nextChapter
-            default: return current
-            }
-        case .right:
-            switch current {
-            // top row
-            case .back:        return .channel
-            case .channel:     return .more
-            // center row
-            case .seekBack:    return .playPause
-            case .playPause:   return .seekForward
-            // bottom row
-            case .prevVideo:   return vm.chapters.isEmpty ? .nextVideo : .prevChapter
-            case .prevChapter: return .nextChapter
-            case .nextChapter: return .nextVideo
-            default: return current
-            }
-        case .up:
-            if current.isCenterRow { return .more }   // center → top row
-            if !current.isCenterRow && !current.isTopRow {
-                // bottom row → center row (map by position)
-                switch current {
-                case .prevVideo, .prevChapter: return .seekBack
-                default:                       return .seekForward
-                }
-            }
-            return current  // already at top
-        case .down:
-            if current.isTopRow { return .playPause }  // top row → center row
-            if current.isCenterRow {                   // center row → bottom row
-                switch current {
-                case .seekBack: return vm.chapters.isEmpty ? .prevVideo : .prevChapter
-                default:        return vm.chapters.isEmpty ? .nextVideo : .nextChapter
-                }
-            }
-            return current  // already at bottom
-        @unknown default: return current
-        }
-    }
-
-    private func tvActivateControl(_ control: TVPlayerControl) {
-        switch control {
-        case .back:        vm.stop(); withAnimation(.none) { dismiss() }
-        case .channel:
-            let channelId = vm.playerInfo?.video.channelId ?? video.channelId
-            if let cid = channelId, !cid.isEmpty { channelDestination = ChannelDestination(channelId: cid) }
-        case .more:        showMoreMenu = true; highlightedControl = nil
-        case .seekBack:    vm.seekRelative(seconds: -Double(store.settings.seekBackSeconds))
-        case .playPause:   vm.togglePlayPause()
-        case .seekForward: vm.seekRelative(seconds: Double(store.settings.seekForwardSeconds))
-        case .prevVideo:   if vm.hasPrevious { vm.playPrevious() }
-        case .prevChapter: if vm.hasPreviousChapter { vm.skipToPreviousChapter() }
-        case .nextChapter: if vm.hasNextChapter { vm.skipToNextChapter() }
-        case .nextVideo:   if vm.hasNext { vm.playNext() }
-        }
-    }
-    #endif
-
-    #if os(tvOS)
-    private var tvProgressBar: some View {
-        VStack(spacing: 6) {
-            // Scrub time tooltip
-            GeometryReader { geo in
-                if vm.isScrubbing && vm.duration > 0 {
-                    let hPad: CGFloat = 40
-                    let trackW = geo.size.width - hPad * 2
-                    let fraction = CGFloat(vm.scrubTime / vm.duration)
-                    let thumbX = hPad + trackW * fraction
-                    let chapterAtScrub = vm.chapters.last(where: { $0.startTime <= vm.scrubTime })
-                    let labelW: CGFloat = chapterAtScrub != nil ? min(geo.size.width * 0.45, 220) : 90
-                    let clampedX = min(max(thumbX, hPad + labelW / 2), geo.size.width - hPad - labelW / 2)
-
-                    VStack(spacing: 2) {
-                        if let chapter = chapterAtScrub {
-                            Text(chapter.title)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.white.opacity(0.85))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        Text(formatDuration(vm.scrubTime))
-                            .font(.body.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
-                    .frame(width: labelW)
-                    .position(x: clampedX, y: geo.size.height / 2)
-                }
-            }
-            .frame(height: 36)
-
-            // Track row
-            GeometryReader { geo in
-                let hPad: CGFloat = 40
-                let trackW = geo.size.width - hPad * 2
-                let time = vm.isScrubbing ? vm.scrubTime : vm.currentTime
-                let progress = vm.duration > 0 ? CGFloat(time / vm.duration) : 0
-                let thumbX = hPad + trackW * progress
-
-                ZStack {
-                    // Background track
-                    Capsule()
-                        .fill(Color.white.opacity(0.25))
-                        .frame(height: 6)
-                        .padding(.horizontal, hPad)
-
-                    // Progress fill
-                    HStack(spacing: 0) {
-                        Capsule()
-                            .fill(Color.red.opacity(0.85))
-                            .frame(width: max(thumbX - hPad, 0), height: 6)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.leading, hPad)
-
-                    // Thumb
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 22, height: 22)
-                        .shadow(color: .black.opacity(0.4), radius: 4)
-                        .position(x: thumbX, y: geo.size.height / 2)
-                }
-                .overlay(sponsorBlockMarkers)
-                .overlay(chapterMarkers)
-            }
-            .frame(height: 36)
-
-            // Time labels
-            HStack {
-                Text(formatDuration(vm.currentTime))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.leading, 40)
-                Spacer()
-                Text(formatDuration(vm.duration))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.trailing, 40)
-            }
-        }
-    }
-    #endif
-
     private var iosProgressBar: some View {
         VStack(spacing: 4) {
             // Tooltip row — always occupies space so layout doesn't jump
@@ -1508,7 +1332,7 @@ public struct PlayerView: View {
 
     // Chapter tick marks on the progress bar — small white notches at each chapter boundary.
     // Each tick has a 24×44 pt transparent tap area so the user can tap to jump to it.
-    private var chapterMarkers: some View {
+    var chapterMarkers: some View {
         GeometryReader { geo in
             ForEach(vm.chapters) { chapter in
                 let x = geo.size.width * CGFloat(chapter.startTime / max(vm.duration, 1))
@@ -1529,7 +1353,7 @@ public struct PlayerView: View {
     }
 
     // SponsorBlock segment markers on the progress bar
-    private var sponsorBlockMarkers: some View {
+    var sponsorBlockMarkers: some View {
         GeometryReader { geo in
             ForEach(vm.sponsorSegments) { seg in
                 let x = geo.size.width * CGFloat(seg.start / max(vm.duration, 1))
