@@ -419,11 +419,19 @@ public struct PlayerView: View {
             playerFocused = true
             #endif
             #if os(iOS)
-            swipeLog.notice("[orientation] landscapeAlwaysPlay=\(store.settings.landscapeAlwaysPlay)")
-            if store.settings.landscapeAlwaysPlay {
-                swipeLog.notice("[orientation] requesting .landscape on appear")
+            swipeLog.notice("[orientation] onAppear — calling beginGeneratingDeviceOrientationNotifications")
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            let rawOrientation = UIDevice.current.orientation
+            let physicallyLandscape = rawOrientation.isLandscape
+            let alwaysPlayOnAppear = store.settings.landscapeAlwaysPlay
+            let isLandscapeOnAppear = alwaysPlayOnAppear || physicallyLandscape
+            vm.isLandscape = isLandscapeOnAppear
+            swipeLog.notice("[orientation] onAppear — rawOrientation=\(rawOrientation.rawValue) physicallyLandscape=\(physicallyLandscape) landscapeAlwaysPlay=\(alwaysPlayOnAppear) → isLandscape=\(isLandscapeOnAppear)")
+            if alwaysPlayOnAppear {
+                swipeLog.notice("[orientation] onAppear — landscapeAlwaysPlay=true, setting playerIsActive=true")
                 OrientationManager.shared.playerIsActive = true
-                requestOrientation(.landscape)
+            } else {
+                swipeLog.notice("[orientation] onAppear — landscapeAlwaysPlay=false, playerIsActive remains false")
             }
             #endif
             if vm.currentVideoId == video.id {
@@ -446,12 +454,12 @@ public struct PlayerView: View {
             guard !isInBackground else { return }
             vm.suspend()
             #if os(iOS)
-            swipeLog.notice("[orientation] landscapeAlwaysPlay=\(store.settings.landscapeAlwaysPlay) — restoring on disappear")
-            if store.settings.landscapeAlwaysPlay {
-                swipeLog.notice("[orientation] requesting .allButUpsideDown on disappear")
-                requestOrientation(.portrait)
-                OrientationManager.shared.playerIsActive = false
-            }
+            let rawOrientationOnDisappear = UIDevice.current.orientation
+            swipeLog.notice("[orientation] onDisappear — rawOrientation=\(rawOrientationOnDisappear.rawValue) isLandscape was \(vm.isLandscape), playerIsActive was \(OrientationManager.shared.playerIsActive)")
+            OrientationManager.shared.playerIsActive = false
+            vm.isLandscape = false
+            swipeLog.notice("[orientation] onDisappear — playerIsActive=false isLandscape=false, calling endGeneratingDeviceOrientationNotifications")
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
             #endif
         }
         .onChange(of: scenePhase) { _, phase in
@@ -481,6 +489,35 @@ public struct PlayerView: View {
             pip?.delegate = delegate
             pipDelegate = delegate
             pipController = pip
+        }
+        // Update isLandscape when the device physically rotates.
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let orientation = UIDevice.current.orientation
+            swipeLog.notice("[orientation] orientationDidChange — rawValue=\(orientation.rawValue) isValidInterfaceOrientation=\(orientation.isValidInterfaceOrientation) isLandscape=\(orientation.isLandscape) isPortrait=\(orientation.isPortrait)")
+            guard orientation.isValidInterfaceOrientation else {
+                swipeLog.notice("[orientation] orientationDidChange — skipped (not a valid interface orientation, e.g. face-up/face-down/unknown)")
+                return
+            }
+            let alwaysLandscape = store.settings.landscapeAlwaysPlay
+            let physicalLandscape = orientation.isLandscape
+            let newIsLandscape = alwaysLandscape || physicalLandscape
+            let prevIsLandscape = vm.isLandscape
+            let prevPlayerIsActive = OrientationManager.shared.playerIsActive
+            vm.isLandscape = newIsLandscape
+            OrientationManager.shared.playerIsActive = newIsLandscape
+            swipeLog.notice("[orientation] orientationDidChange — landscapeAlwaysPlay=\(alwaysLandscape) physicalLandscape=\(physicalLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(newIsLandscape)")
+        }
+        // Keep isLandscape in sync when the user toggles "Landscape Always Play" while
+        // the player is on screen.
+        .onChange(of: store.settings.landscapeAlwaysPlay) { oldValue, alwaysLandscape in
+            let rawOrientation = UIDevice.current.orientation
+            let physicallyLandscape = rawOrientation.isLandscape
+            let newIsLandscape = alwaysLandscape || physicallyLandscape
+            let prevIsLandscape = vm.isLandscape
+            let prevPlayerIsActive = OrientationManager.shared.playerIsActive
+            vm.isLandscape = newIsLandscape
+            OrientationManager.shared.playerIsActive = alwaysLandscape
+            swipeLog.notice("[orientation] landscapeAlwaysPlay: \(oldValue) → \(alwaysLandscape) rawOrientation=\(rawOrientation.rawValue) physicallyLandscape=\(physicallyLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(alwaysLandscape)")
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in
@@ -2330,54 +2367,3 @@ private extension AppSettings.VideoGravityMode {
         self == .fill ? .resizeAspectFill : .resizeAspect
     }
 }
-
-// MARK: - Orientation helpers (iOS only)
-
-#if os(iOS)
-@MainActor
-private func requestOrientation(_ orientations: UIInterfaceOrientationMask) {
-    guard let scene = UIApplication.shared.connectedScenes
-        .compactMap({ $0 as? UIWindowScene }).first else {
-        swipeLog.error("[orientation] no UIWindowScene found — cannot rotate")
-        return
-    }
-    // Signal all VCs in the hierarchy to re-query supportedInterfaceOrientations.
-    // `keyWindow` can be nil in XCTest, so fall back to the first scene window
-    // with a rootViewController.
-    let window = scene.windows.first(where: { $0.rootViewController != nil })
-               ?? scene.windows.first
-    let rootVC = window?.rootViewController
-    // Call on root VC and topmost presented VC so all caches are invalidated.
-    rootVC?.setNeedsUpdateOfSupportedInterfaceOrientations()
-    var topVC = rootVC
-    while let presented = topVC?.presentedViewController { topVC = presented }
-    if topVC !== rootVC { topVC?.setNeedsUpdateOfSupportedInterfaceOrientations() }
-
-    swipeLog.notice("[orientation] requesting mask=\(orientations.rawValue)")
-    let pref = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-
-    Task { @MainActor [weak scene] in
-        // Brief yield so UIKit can process the setNeedsUpdateOfSupportedInterfaceOrientations
-        // calls above before requestGeometryUpdate consults the updated mask.
-        try? await Task.sleep(for: .milliseconds(50))
-        guard let scene else {
-            swipeLog.error("[orientation] scene deallocated before requestGeometryUpdate")
-            return
-        }
-
-        var geometryFailed = false
-        scene.requestGeometryUpdate(pref) { error in
-            geometryFailed = true
-            swipeLog.error("[orientation] requestGeometryUpdate error: \(error.localizedDescription)")
-        }
-
-        if geometryFailed {
-            // requestGeometryUpdate failed — this can happen when UIKit's
-            // supportedInterfaceOrientations cache hasn't been refreshed yet.
-            // Log for debugging; the physical device correctly rotates via the
-            // AppDelegate path (playerIsActive = true → .allButUpsideDown).
-            swipeLog.error("[orientation] rotation was not applied programmatically; device rotation will still work")
-        }
-    }
-}
-#endif

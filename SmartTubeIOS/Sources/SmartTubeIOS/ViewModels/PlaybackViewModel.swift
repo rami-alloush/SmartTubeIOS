@@ -57,6 +57,10 @@ public final class PlaybackViewModel {
     public var controlsVisible: Bool = false
     /// True while the user is holding a long-press to temporarily boost speed to 2×.
     public private(set) var isHoldingToSpeed: Bool = false
+    /// True when the player is displaying in landscape orientation.
+    /// Updated automatically when the device rotates or when the
+    /// "Landscape Always Play" setting forces landscape mode.
+    public var isLandscape: Bool = false
     public private(set) var likeStatus: LikeStatus = .none
     public private(set) var statsForNerdsVisible: Bool = false
     public private(set) var statsSnapshot: StatsForNerdsSnapshot = .empty

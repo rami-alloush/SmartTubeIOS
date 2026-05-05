@@ -221,12 +221,10 @@ final class SettingsUITests: XCTestCase {
                       "player.titleLabel must appear — PlayerView opened and orientation code ran")
 
         // Verify landscape orientation is SUPPORTED while the player is open.
-        // requestGeometryUpdate (programmatic rotation on appear) works on real devices
-        // where UIKit consults the AppDelegate directly for orientation changes.
-        // In the iOS 26 simulator the VC-hierarchy orientation cache can delay the
-        // rotation, so we force a device rotation here and verify the app stays
-        // in landscape — which confirms OrientationManager.playerIsActive = true and
-        // the AppDelegate is returning .allButUpsideDown.
+        // When landscapeAlwaysPlay is ON, PlayerView sets vm.isLandscape = true and
+        // OrientationManager.shared.playerIsActive = true on appear, so the AppDelegate
+        // returns .allButUpsideDown. We rotate the device here to confirm the app stays
+        // in landscape.
         XCUIDevice.shared.orientation = .landscapeLeft
         let landscapePredicate = NSPredicate { [app] _, _ in
             app.frame.size.width > app.frame.size.height
