@@ -413,6 +413,17 @@ extension PlaybackViewModel {
                             if nsErr?.domain == NSURLErrorDomain && nsErr?.code == -1102 {
                                 await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
                                 Task { await self.retryWith403Recovery(video: video, originalError: item.error) }
+                            } else if let info = self.playerInfo, info.hlsURL == nil,
+                                      info.bestAdaptiveVideoURL != nil,
+                                      info.bestAdaptiveAudioURL != nil {
+                                // The TV client returned streaming data without an HLS manifest.
+                                // The primary muxed-format URL (itag=18) failed — likely a CDN
+                                // pot-token or routing issue specific to the muxed itag.
+                                // Retry by compositing the best H.264 video-only + AAC audio-only
+                                // adaptive streams, which use different CDN endpoints and do not
+                                // have the same restriction.
+                                playerLog.notice("Primary muxed URL failed with no HLS available — retrying with adaptive composition")
+                                Task { await self.retryWithAdaptiveComposition(video: video, info: info, originalError: item.error) }
                             } else {
                                 Task { await self.retryWithFallbackPlayer(video: video, originalError: item.error) }
                             }

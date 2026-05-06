@@ -83,17 +83,22 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 struct MainTabView: View {
     @State private var searchVM = SearchViewModel()
+    @State private var selectedTab: AppSection = .home
     @Environment(\.innerTubeAPI) private var api
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             ForEach(AppSection.allCases) { section in
                 NavigationStack { section.destination(api: api) }
                     .tabItem { Label(section.rawValue, systemImage: section.icon) }
+                    .tag(section)
                     .accessibilityIdentifier("tab.\(section.rawValue.lowercased())")
             }
         }
         .environment(searchVM)
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToSearch)) { _ in
+            selectedTab = .search
+        }
     }
 }
 

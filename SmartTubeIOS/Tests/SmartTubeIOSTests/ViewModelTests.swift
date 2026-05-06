@@ -273,6 +273,7 @@ struct BrowseViewModelTests {
 
         let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
         let vm = BrowseViewModel(api: mock, initialSection: section)
+        await vm.updateAuthToken("fake-token")  // authenticated path
         vm.loadContent(for: section, refresh: true, source: "test")
         await waitForTasks()
 
@@ -295,17 +296,18 @@ struct BrowseViewModelTests {
         #expect(vm.videoGroups.first?.videos.first?.id == "histvid_AAAA")
     }
 
-    @Test("Empty subscriptions result sets isAuthRequired = true")
-    func emptySubscriptionsSetAuthRequired() async {
+    @Test("Empty subscriptions (local path) does not set isAuthRequired")
+    func emptyLocalSubscriptionsDoNotSetAuthRequired() async {
         let mock = MockInnerTubeAPI()
-        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+        // No auth token → takes local path; local follows are empty
 
         let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
         let vm = BrowseViewModel(api: mock, initialSection: section)
         vm.loadContent(for: section, refresh: true, source: "test")
         await waitForTasks()
 
-        #expect(vm.isAuthRequired)
+        // Local path never gates on auth — empty means "no follows yet", not "sign in"
+        #expect(!vm.isAuthRequired)
     }
 
     @Test("loadContent for .shorts calls fetchShorts")

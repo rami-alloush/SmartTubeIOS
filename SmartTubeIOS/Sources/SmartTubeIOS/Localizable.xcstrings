@@ -4885,6 +4885,12 @@
         }
       }
     },
+    "Follow" : {
+
+    },
+    "Follow channels to see their latest videos here" : {
+
+    },
     "General" : {
       "comment" : "Settings section header",
       "extractionState" : "manual",
@@ -10114,6 +10120,9 @@
         }
       }
     },
+    "Search for a channel and tap Follow." : {
+
+    },
     "Search for videos, channels & playlists" : {
       "comment" : "Search placeholder view body text",
       "extractionState" : "manual",
@@ -11631,6 +11640,9 @@
           }
         }
       }
+    },
+    "Sign in to see your %@" : {
+
     },
     "Sign in to see your feed" : {
       "comment" : "Home feed empty state when user is not signed in",
@@ -14053,6 +14065,9 @@
           }
         }
       }
+    },
+    "Unfollow" : {
+
     },
     "Unknown" : {
       "comment" : "Fallback account name when display name is unavailable",

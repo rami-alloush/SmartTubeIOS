@@ -7,6 +7,8 @@ extension Notification.Name {
     /// Posted when the user selects "Open Channel" from a video's context menu.
     /// userInfo keys: "channelId", "channelTitle"
     static let openChannel = Notification.Name("com.smarttube.openChannel")
+    /// Posted when a feature requests navigation to the Search tab (e.g. empty-state CTA).
+    static let navigateToSearch = Notification.Name("com.smarttube.navigateToSearch")
 }
 
 // MARK: - VideoCardView
@@ -193,6 +195,15 @@ public struct VideoCardView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .onTapGesture {
+                        guard let channelId = video.channelId, !channelId.isEmpty else { return }
+                        NotificationCenter.default.post(
+                            name: .openChannel,
+                            object: nil,
+                            userInfo: ["channelId": channelId, "channelTitle": video.channelTitle]
+                        )
+                    }
+                    .accessibilityIdentifier("video.card.channelName")
                 HStack(spacing: 4) {
                     let vc = video.formattedViewCount
                     if !vc.isEmpty { Text(vc) }
@@ -231,6 +242,15 @@ public struct VideoCardView: View {
                 Text(video.channelTitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .onTapGesture {
+                        guard let channelId = video.channelId, !channelId.isEmpty else { return }
+                        NotificationCenter.default.post(
+                            name: .openChannel,
+                            object: nil,
+                            userInfo: ["channelId": channelId, "channelTitle": video.channelTitle]
+                        )
+                    }
+                    .accessibilityIdentifier("video.card.channelName")
                 let vc = video.formattedViewCount
                 if !vc.isEmpty {
                     Text(vc)

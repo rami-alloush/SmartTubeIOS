@@ -154,8 +154,10 @@ final class AudioOriginalTrackSelectionUITests: XCTestCase {
 
     private func dismissMoreMenu() {
         let cancelButton = app.buttons["Cancel"].firstMatch
-        if cancelButton.waitForExistence(timeout: 2) {
-            cancelButton.tap()
+        if cancelButton.waitForExistence(timeout: 2), cancelButton.exists {
+            // Tap via coordinate to avoid the AX scroll-to-visible action, which fails
+            // with kAXErrorCannotComplete on UIKit sheet Cancel buttons.
+            cancelButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         } else {
             // Dismiss by tapping outside
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap()

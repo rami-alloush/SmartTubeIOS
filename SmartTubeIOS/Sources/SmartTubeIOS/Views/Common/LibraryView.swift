@@ -45,11 +45,7 @@ public struct LibraryView: View {
 
     public var body: some View {
         Group {
-            if auth.isSignedIn {
-                authenticatedContent
-            } else {
-                signedOutPrompt
-            }
+            libraryContent
         }
         #if os(iOS) || os(tvOS)
         .toolbar(.hidden, for: .navigationBar)
@@ -76,7 +72,7 @@ public struct LibraryView: View {
         }
     }
 
-    private var authenticatedContent: some View {
+    private var libraryContent: some View {
         VStack(spacing: 0) {
             #if os(tvOS)
             HStack(spacing: 8) {
@@ -127,17 +123,21 @@ public struct LibraryView: View {
             #endif
 
             Group {
-                let videos = browseVM.videoGroups.flatMap { $0.videos }
-                if browseVM.isLoading && videos.isEmpty {
+                if !auth.isSignedIn && selectedSection != .subscriptions {
+                    segmentSignInPrompt
+                } else if browseVM.isLoading && browseVM.videoGroups.flatMap({ $0.videos }).isEmpty {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if videos.isEmpty {
+                } else if browseVM.videoGroups.flatMap({ $0.videos }).isEmpty && !browseVM.isLoading {
                     emptyLibraryView
                 } else {
+                    let videos = browseVM.videoGroups.flatMap { $0.videos }
                     ScrollView {
                         // KVO reader — always present; writes to ScrollOffsetStore
                         // without triggering SwiftUI re-renders on every scroll tick.
+                        #if os(iOS) || os(tvOS)
                         ScrollOffsetReader(store: scrollStore)
                             .frame(width: 0, height: 0)
+                        #endif
 
                         if browseVM.isLoading && videos.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding()
@@ -158,10 +158,12 @@ public struct LibraryView: View {
                             }
                         )
                         // Offset restorer — always present; no-op when restoreOffset is nil.
+                        #if os(iOS) || os(tvOS)
                         ScrollOffsetRestorer(targetOffset: restoreOffset) {
                             restoreOffset = nil
                         }
                         .frame(width: 0, height: 0)
+                        #endif
 
                         if browseVM.isLoading && !videos.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding()
@@ -191,7 +193,9 @@ public struct LibraryView: View {
             if old == nil, new != nil {
                 // Read live UIKit contentOffset on the main actor — always accurate
                 // regardless of how many SwiftUI layout passes have occurred.
+                #if os(iOS) || os(tvOS)
                 savedScrollOffset = scrollStore.scrollView?.contentOffset.y ?? 0
+                #endif
             } else if old != nil, new == nil, let saved = savedScrollOffset {
                 restoreOffset = saved
                 savedScrollOffset = nil
@@ -206,24 +210,41 @@ public struct LibraryView: View {
         }
     }
 
-    private var emptyLibraryView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: AppSymbol.stackLayers)
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-            Text("Nothing here yet")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+    @ViewBuilder private var emptyLibraryView: some View {
+        if !auth.isSignedIn && selectedSection == .subscriptions {
+            VStack(spacing: 16) {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
+                Text("Follow channels to see their latest videos here")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Search") {
+                    NotificationCenter.default.post(name: .navigateToSearch, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 16) {
+                Image(systemName: AppSymbol.stackLayers)
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
+                Text("Nothing here yet")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var signedOutPrompt: some View {
+    private var segmentSignInPrompt: some View {
         VStack(spacing: 16) {
             Image(systemName: AppSymbol.personCircleQuestion)
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
-            Text("Sign in to see your library")
+            Text("Sign in to see your \(selectedSection.rawValue.lowercased())")
                 .font(.headline)
                 .foregroundStyle(.secondary)
             NavigationLink("Sign In") {

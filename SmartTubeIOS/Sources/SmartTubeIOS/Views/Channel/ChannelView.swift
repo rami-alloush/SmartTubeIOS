@@ -20,7 +20,9 @@ public struct ChannelView: View {
     @State private var shortsPresentation: ShortsPresentation?
     @State private var channelDestination: ChannelDestination?
     @State private var filter: ChannelFilter = .all
+    @State private var isFollowedLocally = false
     @Environment(SettingsStore.self) private var store
+    @Environment(AuthService.self) private var auth
     @Environment(\.innerTubeAPI) private var api
 
     public init(channelId: String) {
@@ -38,6 +40,10 @@ public struct ChannelView: View {
         }
         .navigationTitle(vm.channel?.title ?? "Channel")
         .onAppear { vm.load(channelId: channelId) }
+        .task(id: vm.channel?.id) {
+            guard let id = vm.channel?.id else { return }
+            isFollowedLocally = await LocalSubscriptionStore.shared.isFollowing(id)
+        }
         #if os(iOS)
         .landscapePlayerCover(item: $selectedVideo) { video in
             PlayerView(video: video, api: api)
@@ -261,9 +267,36 @@ public struct ChannelView: View {
                 }
             }
             Spacer()
+            if !auth.isSignedIn {
+                Button {
+                    Task { await toggleFollow(channel) }
+                } label: {
+                    Label(
+                        isFollowedLocally ? "Unfollow" : "Follow",
+                        systemImage: isFollowedLocally ? "bell.slash" : "bell"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("channel.followButton")
+            }
         }
         .padding()
         .background(.background)
         .accessibilityIdentifier("channel.header")
+    }
+
+    private func toggleFollow(_ channel: Channel) async {
+        if isFollowedLocally {
+            await LocalSubscriptionStore.shared.unfollow(channelId: channel.id)
+            isFollowedLocally = false
+        } else {
+            let local = LocalChannel(
+                id: channel.id,
+                title: channel.title,
+                thumbnailURL: channel.thumbnailURL
+            )
+            await LocalSubscriptionStore.shared.follow(local)
+            isFollowedLocally = true
+        }
     }
 }

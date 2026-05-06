@@ -28,9 +28,13 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
 
 /// Reference-type container that captures a weak reference to the nearest
 /// ancestor `UIScrollView`. All access must happen on the main thread / actor.
+#if os(iOS) || os(tvOS)
 final class ScrollOffsetStore: @unchecked Sendable {
     weak var scrollView: UIScrollView?
 }
+#else
+final class ScrollOffsetStore: @unchecked Sendable {}
+#endif
 
 // MARK: - ScrollOffsetReader
 

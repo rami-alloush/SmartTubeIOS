@@ -58,6 +58,92 @@ extension PlaybackViewModel {
         }
     }
 
+    /// Retries playback by compositing the best H.264 video-only stream and the best AAC
+    /// audio-only stream from the existing TV-client player info into an AVMutableComposition.
+    ///
+    /// Called when the primary muxed-format direct URL (itag=18, 360p) fails with an
+    /// AVFoundation error while the TV client returned no HLS manifest. The muxed CDN URL
+    /// uses a different CDN route than the adaptive streams and may be rejected by YouTube's
+    /// CDN (e.g. missing or invalid pot token for the muxed itag). The adaptive video/audio
+    /// URLs (itag=137/140 etc.) typically succeed because they are served by the standard
+    /// adaptive CDN path that does not apply the same restriction.
+    ///
+    /// Falls back to `retryWithFallbackPlayer` (Android client) if composition setup fails.
+    func retryWithAdaptiveComposition(video: Video, info: PlayerInfo, originalError: Error?) async {
+        guard let videoURL = info.bestAdaptiveVideoURL,
+              let audioURL = info.bestAdaptiveAudioURL else {
+            playerLog.error("❌ Adaptive composition: no adaptive URLs in player info")
+            await retryWithFallbackPlayer(video: video, originalError: originalError)
+            return
+        }
+        playerLog.notice("Adaptive composition: video=\(videoURL.absoluteString.prefix(80)) audio=\(audioURL.absoluteString.prefix(80))")
+
+        let ua = InnerTubeClients.iOS.userAgent
+        let videoAsset = AVURLAsset(url: videoURL, options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": ua]])
+        let audioAsset = AVURLAsset(url: audioURL, options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": ua]])
+
+        do {
+            // Load track lists from both remote assets concurrently.
+            async let videoTracks = videoAsset.loadTracks(withMediaType: .video)
+            async let audioTracks = audioAsset.loadTracks(withMediaType: .audio)
+            let (vTracks, aTracks) = try await (videoTracks, audioTracks)
+
+            guard let sourceVideoTrack = vTracks.first,
+                  let sourceAudioTrack = aTracks.first else {
+                playerLog.error("❌ Adaptive composition: no video or audio track in remote assets")
+                await retryWithFallbackPlayer(video: video, originalError: originalError)
+                return
+            }
+
+            let videoDuration = try await videoAsset.load(.duration)
+            let timeRange = CMTimeRange(start: .zero, duration: videoDuration)
+
+            let composition = AVMutableComposition()
+            guard let compVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+                  let compAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                playerLog.error("❌ Adaptive composition: could not add composition tracks")
+                await retryWithFallbackPlayer(video: video, originalError: originalError)
+                return
+            }
+
+            try compVideo.insertTimeRange(timeRange, of: sourceVideoTrack, at: .zero)
+            try compAudio.insertTimeRange(timeRange, of: sourceAudioTrack, at: .zero)
+
+            playerLog.notice("✅ Adaptive composition built — starting playback for \(video.id)")
+            lastAttemptedStreamURL = videoURL
+            let compositeItem = AVPlayerItem(asset: composition)
+
+            itemObserverTask?.cancel()
+            itemObserverTask = Task { [weak self] in
+                for await status in compositeItem.statusStream {
+                    guard let self, !Task.isCancelled else { return }
+                    switch status {
+                    case .readyToPlay:
+                        playerLog.notice("✅ Adaptive composition AVPlayerItem readyToPlay")
+                        if let pos = self.savedPositionToRestore, pos > 0 {
+                            self.savedPositionToRestore = nil
+                            self.seek(to: pos)
+                        }
+                    case .failed:
+                        let err = compositeItem.error.map { "\($0)" } ?? "nil"
+                        playerLog.error("❌ Adaptive composition AVPlayerItem failed: \(err)")
+                        await self.retryWithFallbackPlayer(video: video, originalError: compositeItem.error ?? originalError)
+                    case .unknown:
+                        break
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+            player.replaceCurrentItem(with: compositeItem)
+            player.rate = Float(settings.playbackSpeed)
+            isPlaying = true
+        } catch {
+            playerLog.error("❌ Adaptive composition setup failed: \(error) — falling back to Android client")
+            await retryWithFallbackPlayer(video: video, originalError: originalError)
+        }
+    }
+
     /// 403 recovery: re-fetch a fresh iOS-client player info (now that the stale cache entry
     /// is evicted) and retry with the new URL.  Falls through to the Android client if the
     /// fresh iOS-client URL also 403s.

@@ -326,10 +326,10 @@ public struct HomeView: View {
 
     private var feedEmptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: sectionVM.isAuthRequired ? "person.crop.circle.badge.exclamationmark" : "play.tv")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
             if sectionVM.isAuthRequired && !auth.isSignedIn {
+                Image(systemName: AppSymbol.personCircleWarning)
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
                 Text("Sign in to see this section")
                     .font(.title3)
                 Text("Your Google account is required.")
@@ -338,7 +338,24 @@ public struct HomeView: View {
                     .multilineTextAlignment(.center)
                 Button("Sign In") { showSignIn = true }
                     .buttonStyle(.borderedProminent)
+            } else if !auth.isSignedIn && (selectedSection.type == .subscriptions || selectedSection.type == .channels) {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
+                Text("Follow channels to see their latest videos here")
+                    .font(.title3)
+                    .multilineTextAlignment(.center)
+                Text("Search for a channel and tap Follow.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("Search") {
+                    NotificationCenter.default.post(name: .navigateToSearch, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
             } else {
+                Image(systemName: AppSymbol.tvPlay)
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
                 Text("Nothing here yet")
                     .font(.title3)
                     .foregroundStyle(.secondary)

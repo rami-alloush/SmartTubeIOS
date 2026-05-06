@@ -50,6 +50,13 @@ public final class BrowseViewModel {
     private var enrichTask: Task<Void, Never>?
     /// When `false`, the History section returns empty content rather than fetching from YouTube.
     private var historyEnabled: Bool = true
+    /// True when the Recommended section fell back to a `/search?q=popular` result
+    /// because the unauthenticated `/browse` home feed returned 0 videos.
+    /// In this mode, pagination must also go through `/search` (not `/browse`).
+    private var recommendedUsesSearchFallback: Bool = false
+    /// True when a non-nil auth token has been set via updateAuthToken(_:).
+    /// Used to select between the authenticated YouTube endpoints and the local RSS feed path.
+    private var hasAuthToken: Bool = false
 
     public init(api: any InnerTubeAPIProtocol = InnerTubeAPI(), initialSection: BrowseSection? = nil) {
         self.api = api
@@ -112,7 +119,12 @@ public final class BrowseViewModel {
               lastInGroup.id == lastVideo.id,
               lastGroup.nextPageToken != nil,
               !isLoading
-        else { return }
+        else {
+            let hasToken = videoGroups.last?.nextPageToken != nil
+            browseLog.notice("loadMore skipped: section=\(currentSection.title) isLoading=\(isLoading) hasToken=\(hasToken) lastVideoMatch=\(videoGroups.last?.videos.last?.id == lastVideo.id)")
+            return
+        }
+        browseLog.notice("loadMore triggered: section=\(currentSection.title) currentCount=\(videoGroups.first?.videos.count ?? 0)")
         isLoading = true  // synchronous guard — prevents duplicate tasks before the Task body runs
         fetchTask = Task { await fetchNextPage(for: currentSection) }
     }
@@ -142,9 +154,18 @@ public final class BrowseViewModel {
     /// Triggers a content reload when auth state changes.
     /// Sets the token on the API first so that the fetch always runs authenticated.
     public func updateAuthToken(_ token: String?) async {
+        let wasAuthenticated = hasAuthToken
+        hasAuthToken = token != nil
         await api.setAuthToken(token)
         if token != nil {
+            // Signed in — reload everything
             loadContent(refresh: true, source: "updateAuthToken")
+        } else if wasAuthenticated {
+            // Signed out — reload auth-gated sections to show local content instead
+            let authSections: Set<BrowseSection.SectionType> = [.subscriptions, .channels]
+            if authSections.contains(currentSection.type) {
+                loadContent(refresh: true, source: "updateAuthToken.signOut")
+            }
         }
     }
 
@@ -199,7 +220,9 @@ public final class BrowseViewModel {
                     if rows.flatMap({ $0.videos }).isEmpty {
                         isAuthRequired = true
                         let popular = try await api.search(query: "popular")
-                        videoGroups = [popular]
+                        var deduped = popular
+                        deduped.videos = deduplicated(popular.videos)
+                        videoGroups = [deduped]
                     } else {
                         isAuthRequired = false
                         videoGroups = rows
@@ -211,10 +234,15 @@ public final class BrowseViewModel {
                 if !Task.isCancelled {
                     if group.videos.isEmpty {
                         isAuthRequired = true
+                        recommendedUsesSearchFallback = true
                         let popular = try await api.search(query: "popular")
-                        videoGroups = [popular]
+                        browseLog.notice("Recommended: home feed empty, using search fallback (nextToken=\(popular.nextPageToken != nil))")
+                        var deduped = popular
+                        deduped.videos = deduplicated(popular.videos)
+                        videoGroups = [deduped]
                     } else {
                         isAuthRequired = false
+                        recommendedUsesSearchFallback = false
                         var deduped = group
                         deduped.videos = deduplicated(group.videos)
                         videoGroups = [deduped]
@@ -222,10 +250,18 @@ public final class BrowseViewModel {
                 }
 
             case .subscriptions:
-                let group = try await api.fetchSubscriptions()
-                if !Task.isCancelled {
-                    isAuthRequired = group.videos.isEmpty
-                    videoGroups = group.videos.isEmpty ? [] : [group]
+                if hasAuthToken {
+                    let group = try await api.fetchSubscriptions()
+                    if !Task.isCancelled {
+                        isAuthRequired = group.videos.isEmpty
+                        videoGroups = group.videos.isEmpty ? [] : [group]
+                    }
+                } else {
+                    let videos = await LocalSubscriptionFeedService.shared.fetchFeed(api: api)
+                    if !Task.isCancelled {
+                        isAuthRequired = false
+                        videoGroups = videos.isEmpty ? [] : [VideoGroup(title: "Subscriptions", videos: videos)]
+                    }
                 }
 
             case .history:
@@ -252,20 +288,30 @@ public final class BrowseViewModel {
                 }
 
             case .channels:
-                let channels = try await api.fetchSubscribedChannels()
-                browseLog.notice("channels fetch complete: \(channels.count) channels, isCancelled=\(Task.isCancelled)")
-                if !Task.isCancelled {
-                    isAuthRequired = channels.isEmpty
-                    subscribedChannels = channels
-                    videoGroups = []
-                    let chCount = subscribedChannels.count
-                    let authReq = isAuthRequired
-                    browseLog.notice("channels state set: subscribedChannels=\(chCount) isAuthRequired=\(authReq)")
-                    // Background-enrich avatars — the guide/params approaches yield no thumbnails;
-                    // fetch each channel's About tab concurrently to get the avatar URL.
-                    if !channels.isEmpty {
-                        enrichTask?.cancel()
-                        enrichTask = Task { await self.enrichChannelAvatars() }
+                if hasAuthToken {
+                    let channels = try await api.fetchSubscribedChannels()
+                    browseLog.notice("channels fetch complete: \(channels.count) channels, isCancelled=\(Task.isCancelled)")
+                    if !Task.isCancelled {
+                        isAuthRequired = channels.isEmpty
+                        subscribedChannels = channels
+                        videoGroups = []
+                        let chCount = subscribedChannels.count
+                        let authReq = isAuthRequired
+                        browseLog.notice("channels state set: subscribedChannels=\(chCount) isAuthRequired=\(authReq)")
+                        // Background-enrich avatars — the guide/params approaches yield no thumbnails;
+                        // fetch each channel's About tab concurrently to get the avatar URL.
+                        if !channels.isEmpty {
+                            enrichTask?.cancel()
+                            enrichTask = Task { await self.enrichChannelAvatars() }
+                        }
+                    }
+                } else {
+                    let localChannels = await LocalSubscriptionStore.shared.allChannels()
+                    browseLog.notice("channels (local): \(localChannels.count) followed channels, isCancelled=\(Task.isCancelled)")
+                    if !Task.isCancelled {
+                        isAuthRequired = false
+                        subscribedChannels = localChannels.map { $0.toChannel() }
+                        videoGroups = []
                     }
                 }
 
@@ -300,48 +346,117 @@ public final class BrowseViewModel {
     }
 
     private func fetchNextPage(for section: BrowseSection) async {
-        guard let token = videoGroups.last?.nextPageToken else { return }
+        guard let token = videoGroups.last?.nextPageToken else {
+            browseLog.notice("fetchNextPage: no token for section=\(section.title) — skipping")
+            return
+        }
+        browseLog.notice("fetchNextPage start: section=\(section.title) token=\(token.prefix(20))…")
         isLoading = true
         defer { isLoading = false }
         do {
             switch section.type {
             case .home:
                 let newRows = try await api.fetchHomeRows(continuationToken: token)
-                if !Task.isCancelled { videoGroups.append(contentsOf: newRows) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    let count = newRows.flatMap(\..videos).count
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(count) nextToken=\(newRows.last?.nextPageToken != nil)")
+                    videoGroups.append(contentsOf: newRows)
+                }
             case .recommended:
-                let group = try await api.fetchHome(continuationToken: token)
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if recommendedUsesSearchFallback {
+                    browseLog.notice("fetchNextPage: Recommended using search fallback path")
+                    let group = try await api.search(query: "popular", continuationToken: token, filter: .default)
+                    if Task.isCancelled {
+                        browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                    } else {
+                        browseLog.notice("fetchNextPage success (search fallback): section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                        mergeIntoFirstGroup(group)
+                    }
+                } else {
+                    let group = try await api.fetchHome(continuationToken: token)
+                    if Task.isCancelled {
+                        browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                    } else {
+                        browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                        mergeIntoFirstGroup(group)
+                    }
+                }
             case .subscriptions:
                 let group = try await api.fetchSubscriptions(continuationToken: token)
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .history:
                 let group = try await api.fetchHistory(continuationToken: token)
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .channels:
                 break  // channel list doesn't paginate via videoGroups
             case .shorts:
                 let group = try await api.fetchShorts()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .music:
                 let group = try await api.fetchMusic()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .gaming:
                 let group = try await api.fetchGaming()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .news:
                 let group = try await api.fetchNews()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .live:
                 let group = try await api.fetchLive()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             case .sports:
                 let group = try await api.fetchSports()
-                if !Task.isCancelled { mergeIntoFirstGroup(group) }
+                if Task.isCancelled {
+                    browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
+                } else {
+                    browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
+                    mergeIntoFirstGroup(group)
+                }
             default:
                 break
             }
         } catch {
-            if !Task.isCancelled { self.error = error }
+            if !Task.isCancelled {
+                browseLog.error("fetchNextPage failed: section=\(section.title) error=\(String(describing: error))")
+                self.error = error
+            }
         }
     }
 
