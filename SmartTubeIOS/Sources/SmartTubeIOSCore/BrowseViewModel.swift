@@ -150,7 +150,9 @@ public final class BrowseViewModel {
 
     // MARK: - Private fetching
 
-    private static let fetchTimeoutSeconds: TimeInterval = 20
+    private static var fetchTimeoutSeconds: TimeInterval {
+        ProcessInfo.processInfo.arguments.contains("--uitesting-extended-fetch-timeout") ? 60 : 20
+    }
 
     private func fetchSection(_ section: BrowseSection) async {
         isLoading = true
@@ -191,7 +193,7 @@ public final class BrowseViewModel {
     private func fetchSectionBody(_ section: BrowseSection) async throws {
         switch section.type {
 
-            case .home, .recommended:
+            case .home:
                 let rows = try await api.fetchHomeRows()
                 if !Task.isCancelled {
                     if rows.flatMap({ $0.videos }).isEmpty {
@@ -201,6 +203,21 @@ public final class BrowseViewModel {
                     } else {
                         isAuthRequired = false
                         videoGroups = rows
+                    }
+                }
+
+            case .recommended:
+                let group = try await api.fetchHome()
+                if !Task.isCancelled {
+                    if group.videos.isEmpty {
+                        isAuthRequired = true
+                        let popular = try await api.search(query: "popular")
+                        videoGroups = [popular]
+                    } else {
+                        isAuthRequired = false
+                        var deduped = group
+                        deduped.videos = deduplicated(group.videos)
+                        videoGroups = [deduped]
                     }
                 }
 
@@ -288,9 +305,12 @@ public final class BrowseViewModel {
         defer { isLoading = false }
         do {
             switch section.type {
-            case .home, .recommended:
+            case .home:
                 let newRows = try await api.fetchHomeRows(continuationToken: token)
                 if !Task.isCancelled { videoGroups.append(contentsOf: newRows) }
+            case .recommended:
+                let group = try await api.fetchHome(continuationToken: token)
+                if !Task.isCancelled { mergeIntoFirstGroup(group) }
             case .subscriptions:
                 let group = try await api.fetchSubscriptions(continuationToken: token)
                 if !Task.isCancelled { mergeIntoFirstGroup(group) }
@@ -331,9 +351,17 @@ public final class BrowseViewModel {
         if videoGroups.isEmpty {
             videoGroups.append(group)
         } else {
-            videoGroups[0].videos.append(contentsOf: group.videos)
+            let existingIDs = Set(videoGroups[0].videos.map(\.id))
+            let newVideos = group.videos.filter { !existingIDs.contains($0.id) }
+            videoGroups[0].videos.append(contentsOf: newVideos)
             videoGroups[0].nextPageToken = group.nextPageToken
         }
+    }
+
+    /// Returns `videos` with duplicate IDs removed, preserving first-occurrence order.
+    private func deduplicated(_ videos: [Video]) -> [Video] {
+        var seen = Set<String>()
+        return videos.filter { seen.insert($0.id).inserted }
     }
 
     // MARK: - Channel avatar enrichment

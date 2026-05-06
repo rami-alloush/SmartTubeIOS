@@ -1404,6 +1404,15 @@ public actor InnerTubeAPI {
                         if let v = parseVideoRenderer(videoRenderer) { videos.append(v) }
                     } else if let reelRenderer = content["reelItemRenderer"] as? [String: Any] {
                         if let v = parseReelItemRenderer(reelRenderer) { videos.append(v) }
+                    } else if let lockup = content["lockupViewModel"] as? [String: Any] {
+                        // WEB home v2: richItemRenderer wraps lockupViewModel
+                        if let v = parseLockupViewModel(lockup) { videos.append(v) }
+                    } else if let contItem = content["continuationItemRenderer"] as? [String: Any],
+                              let endpoint = contItem["continuationEndpoint"] as? [String: Any],
+                              let command = endpoint["continuationCommand"] as? [String: Any],
+                              let token = command["token"] as? String {
+                        // Continuation token nested inside richItemRenderer
+                        nextPageToken = token
                     } else {
                         for value in content.values { walk(value) }
                     }
@@ -1572,8 +1581,13 @@ public actor InnerTubeAPI {
               let videoId = watchEndpoint["videoId"] as? String else { return nil }
 
         // title: metadata.lockupMetadataViewModel.title
+        // The field may be a TextViewModel ({"content": "…"}) in newer API responses,
+        // or a legacy runs/simpleText dict handled by extractText.
         let lockupMeta = (lockup["metadata"] as? [String: Any])?["lockupMetadataViewModel"] as? [String: Any]
-        let title = (lockupMeta?["title"] as? [String: Any]).flatMap { extractText($0) } ?? ""
+        let title: String = {
+            guard let titleDict = lockupMeta?["title"] as? [String: Any] else { return "" }
+            return titleDict["content"] as? String ?? extractText(titleDict) ?? ""
+        }()
 
         // channelTitle + channelId: metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows
         // The first row typically contains the channel name with a browseEndpoint for the channel.

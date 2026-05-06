@@ -14,24 +14,6 @@ private let playerLog = CrashlyticsLogger(category: "Player")
 //
 // Manages video playback state and the AVPlayer instance.
 // Mirrors the Android `PlaybackPresenter` + `PlayerUIController`.
-//
-// Behaviour is split across extension files in the same folder:
-//   PlaybackViewModel+Loading.swift          – load / suspend / resume / stop lifecycle
-//   PlaybackViewModel+Fallback.swift         – AVPlayer error recovery (403, Android client)
-//   PlaybackViewModel+Quality.swift          – format selection & HLS variant parsing
-//   PlaybackViewModel+Captions.swift         – caption track selection & VTT cue matching
-//   PlaybackViewModel+AudioTracks.swift      – audio rendition discovery & auto-selection
-//   PlaybackViewModel+Controls.swift         – transport controls & scrubbing
-//   PlaybackViewModel+ControlsVisibility.swift – overlay show/hide timer
-//   PlaybackViewModel+Navigation.swift       – queue, history & chapter navigation
-//   PlaybackViewModel+SponsorBlock.swift     – SponsorBlock skip / toast
-//   PlaybackViewModel+StatsForNerds.swift    – diagnostics overlay + StatsForNerdsSnapshot
-//   PlaybackViewModel+LikeDislike.swift      – like / dislike
-//   PlaybackViewModel+SleepTimer.swift       – sleep timer
-//   PlaybackViewModel+Auth.swift             – auth token + cache eviction
-//   PlaybackViewModel+Observers.swift        – AVPlayer time & rate KVO observers
-//   PlaybackViewModel+NowPlaying.swift       – lock screen / remote command centre (UIKit)
-//   AVPlayerItem+StatusStream.swift          – statusStream async helper
 
 @MainActor
 @Observable
@@ -49,6 +31,8 @@ public final class PlaybackViewModel {
     public internal(set) var sponsorSegments: [SponsorSegment] = []
     /// The segment currently under the playhead whose action is `.showToast` (nil otherwise).
     public internal(set) var currentToastSegment: SponsorSegment? = nil
+    /// Short message displayed by `ToastModifier` in the player; cleared automatically after 2 s.
+    public var toastMessage: String? = nil
     public internal(set) var relatedVideos: [Video] = []
     public internal(set) var chapters: [Chapter] = []
     public internal(set) var hasPrevious: Bool = false
@@ -60,10 +44,15 @@ public final class PlaybackViewModel {
         didSet {
             guard let error else { return }
             let nsError = error as NSError
-            // Transient connectivity errors (-1005 = connection lost, -1009 = offline) are
-            // expected in poor-network conditions and are not actionable via Crashlytics.
-            // Logging them caused a spike in non-fatal events in v2.0 — skip them.
-            let transientCodes = [-1005, -1009]
+            // Transient connectivity errors are expected in poor-network conditions and are
+            // not actionable via Crashlytics. Logging them caused a spike in non-fatal events
+            // in v2.0 — skip them.
+            //   -1    = unknown (generic network failure, same signal as below)
+            //   -1001 = request timed out (slow server or poor connectivity)
+            //   -1005 = network connection lost
+            //   -1009 = device offline
+            //   -1202 = invalid/untrusted certificate (SSL inspection proxy, user-side issue)
+            let transientCodes = [-1, -1001, -1005, -1009, -1202]
             guard !(nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code)) else {
                 return
             }
@@ -163,6 +152,13 @@ public final class PlaybackViewModel {
     var isSkippingSegment: Bool = false
     var itemObserverTask: Task<Void, Never>?
     var endObserverTask: Task<Void, Never>?
+    /// In-flight quality-switch task. Cancelled before starting a new switch.
+    var qualityTask: Task<Void, Never>?
+    /// True while `replaceCurrentItem` is executing; guards the rate observer from
+    /// treating the transient rate-drop as an unexpected external pause.
+    var isSwappingItem: Bool = false
+    /// Height → variant playlist URL map built from the HLS master manifest.
+    var hlsVariantURLs: [Int: URL] = [:]
     var controlsTimer: Task<Void, Never>?
     @ObservationIgnored var sleepTimerTask: Task<Void, Never>?
     /// Remaining minutes on the sleep timer (nil = off). Observable so PlayerView can show it.
@@ -171,13 +167,6 @@ public final class PlaybackViewModel {
     public static let sleepTimerOptions: [Int] = [15, 30, 45, 60]
     /// Position to seek to once the AVPlayerItem is ready.
     var savedPositionToRestore: TimeInterval? = nil
-    /// In-flight quality-switch task. Cancelled before starting a new switch so
-    /// rapid taps in the quality picker never leave two competing replacements.
-    var qualityTask: Task<Void, Never>?
-    /// Maps HLS variant height (in pixels) to the direct single-quality playlist URL
-    /// parsed from the master manifest. Used by reloadHLSItem to bypass ABR entirely
-    /// when the user selects a specific quality tier.
-    var hlsVariantURLs: [Int: URL] = [:]
     /// Manages watch-history state: position saving, playback-started ping,
     /// and watchtime segment reporting. See WatchtimeTracker.
     var tracker: WatchtimeTracker
@@ -257,16 +246,14 @@ public final class PlaybackViewModel {
         #endif
     }
 
-    // MARK: - Settings
-
-    public func updateSettings(_ newSettings: AppSettings) {
-        settings = newSettings
-    }
-
-    // MARK: - Current video identity
+    // MARK: - Load video
 
     /// The ID of the video currently loaded (or being loaded). Exposed so PlayerView
     /// can detect spurious onAppear/onDisappear cycles (e.g. when a ShareLink sheet
     /// temporarily covers the player) and skip unnecessary reloads.
     public var currentVideoId: String? { currentVideo?.id }
+
+    public func updateSettings(_ newSettings: AppSettings) {
+        settings = newSettings
+    }
 }

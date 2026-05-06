@@ -43,7 +43,7 @@ extension PlaybackViewModel {
                 // Ignore rate changes that we ourselves triggered (load/pause/resume/stop)
                 // by only acting when the player goes silent unexpectedly while we
                 // believed it was playing.
-                let playerWentSilent = newRate == 0 && self.isPlaying
+                let playerWentSilent = newRate == 0 && self.isPlaying && !self.isSwappingItem
                 if playerWentSilent {
                     self.isPlaying = false
                     playerLog.notice("[rateObserver] player.rate→0 while isPlaying=true — syncing isPlaying=false")

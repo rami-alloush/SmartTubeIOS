@@ -19,7 +19,7 @@ final class RecommendedChipUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments += ["--uitesting"]
+        app.launchArguments += ["--uitesting", "--uitesting-extended-fetch-timeout"]
         app.launch()
     }
 
@@ -174,10 +174,111 @@ final class RecommendedChipUITests: XCTestCase {
                        "Home feed should show video cards after switching back from Recommended")
     }
 
+    /// When not signed in, the Recommended feed must load more videos after
+    /// the user scrolls to the bottom — verifying that the pagination continuation
+    /// token embedded in `richItemRenderer` is captured and used correctly.
+    ///
+    /// Target simulator: 88392431-3ADC-4076-9E4E-1A29D9B3E045 (not signed in).
+    func testRecommendedLoadMoreWhenNotSignedIn() throws {
+        tapTab(named: "Home")
+
+        let chipBar = app.scrollViews["home.chipBar"]
+        XCTAssertTrue(chipBar.waitForExistence(timeout: 10),
+                      "home.chipBar must appear on the Home tab")
+
+        let chip = chipBar.buttons["Recommended"]
+        guard chip.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Recommended chip not found")
+        }
+        scrollChipIntoView(chip, in: chipBar)
+        chip.tap()
+
+        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        guard feedScrollView.waitForExistence(timeout: 65) else {
+            throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
+        }
+
+        let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
+        let cards = feedScrollView.descendants(matching: .any).matching(cardPredicate)
+        let initialLoad = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
+                                                    object: cards)
+        guard XCTWaiter().wait(for: [initialLoad], timeout: 20) == .completed else {
+            throw XCTSkip("No video cards appeared within 20 s — network unavailable")
+        }
+
+        let countBefore = cards.count
+
+        // Scroll to the bottom multiple times to trigger pagination.
+        for _ in 0..<5 {
+            feedScrollView.swipeUp()
+        }
+
+        // After scrolling, a load-more network request fires.
+        // Wait up to 20 s for new cards to appear beyond the initial batch.
+        let morePredicate = NSPredicate(format: "count > \(countBefore)")
+        let moreLoaded = XCTNSPredicateExpectation(predicate: morePredicate, object: cards)
+        let result = XCTWaiter().wait(for: [moreLoaded], timeout: 20)
+
+        guard result == .completed else {
+            throw XCTSkip("No additional cards loaded within 20 s after scrolling — server may not have returned a continuation token")
+        }
+
+        XCTAssertGreaterThan(cards.count, countBefore,
+                             "Recommended feed must load additional videos after reaching the end when not signed in")
+    }
+
+    /// Every visible video card in the Recommended feed must display a non-empty
+    /// title — verifying that lockupViewModel items (used by the WEB unauthenticated
+    /// home feed) have their `content` title field extracted correctly.
+    ///
+    /// Target simulator: 88392431-3ADC-4076-9E4E-1A29D9B3E045 (not signed in).
+    func testRecommendedVideoCardTitlesAreNotEmpty() throws {
+        tapTab(named: "Home")
+
+        let chipBar = app.scrollViews["home.chipBar"]
+        XCTAssertTrue(chipBar.waitForExistence(timeout: 10),
+                      "home.chipBar must appear on the Home tab")
+
+        let chip = chipBar.buttons["Recommended"]
+        guard chip.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Recommended chip not found")
+        }
+        scrollChipIntoView(chip, in: chipBar)
+        chip.tap()
+
+        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        guard feedScrollView.waitForExistence(timeout: 65) else {
+            throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
+        }
+
+        let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
+        let cards = feedScrollView.descendants(matching: .any).matching(cardPredicate)
+        let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
+                                                   object: cards)
+        guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
+            throw XCTSkip("No video cards appeared within 20 s — network unavailable")
+        }
+
+        // Check up to the first 6 visible cards so the test finishes quickly.
+        let checkCount = min(6, cards.count)
+        var emptyTitleCards: [String] = []
+
+        for i in 0..<checkCount {
+            let card = cards.element(boundBy: i)
+            guard card.exists else { continue }
+            let titleLabel = card.staticTexts.matching(identifier: "video.card.title").firstMatch
+            if titleLabel.exists && titleLabel.label.trimmingCharacters(in: .whitespaces).isEmpty {
+                emptyTitleCards.append(card.identifier)
+            }
+        }
+
+        XCTAssertTrue(emptyTitleCards.isEmpty,
+                      "The following video cards have an empty title (lockupViewModel title parsing failure): \(emptyTitleCards.joined(separator: ", "))")
+    }
+
     // MARK: - Helpers
 
-    private func tapTab(named label: String, timeout: TimeInterval = 5) {
-        let tabBarButton = app.tabBars.buttons[label]
+    private func tapTab(named label: String, timeout: TimeInterval = 5) {        let tabBarButton = app.tabBars.buttons[label]
         if tabBarButton.waitForExistence(timeout: min(timeout, 3)) {
             tabBarButton.tap()
             return

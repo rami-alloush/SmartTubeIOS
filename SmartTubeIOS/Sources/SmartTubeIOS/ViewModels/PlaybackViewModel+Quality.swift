@@ -17,6 +17,7 @@ extension PlaybackViewModel {
     /// through `manifest.googlevideo.com` is the only reliable stream path.
     public func selectFormat(_ format: VideoFormat?) {
         selectedFormat = format
+        toastMessage = format.map { "\($0.height)p" } ?? "Auto"
         qualityTask?.cancel()
         qualityTask = nil
         let savedTime = currentTime
@@ -58,12 +59,38 @@ extension PlaybackViewModel {
         itemObserverTask = Task { [weak self] in
             for await status in item.statusStream {
                 guard let self, !Task.isCancelled else { return }
-                if status == .readyToPlay, time > 0 {
-                    self.seek(to: time)
+                switch status {
+                case .readyToPlay:
+                    if time > 0 { self.seek(to: time) }
+                    // Resume playback at the same speed the user had before the switch.
+                    self.player.rate = Float(self.settings.playbackSpeed)
+                    self.isPlaying = true
+                case .failed:
+                    let err = item.error.map { "\($0)" } ?? "nil"
+                    playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
+                    if qualityCap != nil {
+                        // The chosen quality variant cannot be decoded (e.g. VP9 on Simulator).
+                        // Revert to the HLS master so ABR can pick a decodable tier automatically.
+                        playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
+                        self.selectedFormat = nil
+                        self.toastMessage = "Quality unavailable — reverting to Auto"
+                        await self.reloadHLSItem(seekTo: self.currentTime, qualityCap: nil)
+                    } else {
+                        // Auto-quality HLS also failed — surface the error.
+                        self.error = item.error
+                    }
+                case .unknown:
+                    break
+                @unknown default:
+                    break
                 }
             }
         }
+        // Guard the rateObserver so it does not interpret replaceCurrentItem's
+        // internal rate-drop as an unexpected external pause.
+        isSwappingItem = true
         player.replaceCurrentItem(with: item)
+        isSwappingItem = false
     }
 
     /// Fetches the HLS master manifest and returns a map of stream height → variant playlist URL.

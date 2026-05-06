@@ -45,6 +45,7 @@ public struct PlayerView: View {
     @State private var pipDelegate: PiPDelegate?
     @State private var isPiPActive: Bool = false
     @State private var playerLayer: AVPlayerLayer?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     /// True while the app is backgrounded. Prevents `onDisappear` from calling
     /// `suspend()` when iOS fires it as a side-effect of backgrounding rather
@@ -60,6 +61,15 @@ public struct PlayerView: View {
     /// nil = not in controls-nav mode; all remote input targets the video layer.
     @State var highlightedControl: TVPlayerControl? = nil
     #endif
+
+    /// Scales player control icon sizes up on iPad so they're easier to tap.
+    private var controlScale: CGFloat {
+        #if os(iOS)
+        horizontalSizeClass == .regular ? 4.0 / 3.0 : 1.0
+        #else
+        1.0
+        #endif
+    }
 
     public init(video: Video, api: InnerTubeAPI) {
         self.video = video
@@ -636,7 +646,7 @@ public struct PlayerView: View {
                         }
                     } label: {
                         Image(systemName: isPiPActive ? "pip.exit" : "pip.enter")
-                            .font(.system(size: 18))
+                            .font(.system(size: 18 * controlScale))
                             .foregroundStyle(.white)
                             .padding(8)
                             .background(.black.opacity(0.4))
@@ -652,7 +662,7 @@ public struct PlayerView: View {
                     showMoreMenu = true
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 18))
+                        .font(.system(size: 18 * controlScale))
                         .foregroundStyle(.white)
                         .padding(8)
                         .background(.black.opacity(0.4))
@@ -721,7 +731,7 @@ public struct PlayerView: View {
                         vm.playPrevious()
                     } label: {
                         Image(systemName: AppSymbol.previousTrack)
-                            .font(.system(size: 18))
+                            .font(.system(size: 18 * controlScale))
                             .foregroundStyle(vm.hasPrevious && !vm.isLoading ? .white : .white.opacity(0.3))
                     }
                     .buttonStyle(.plain)
@@ -738,7 +748,7 @@ public struct PlayerView: View {
                             vm.skipToPreviousChapter()
                         } label: {
                             Image(systemName: AppSymbol.previousChapter)
-                                .font(.system(size: 18))
+                                .font(.system(size: 18 * controlScale))
                                 .foregroundStyle(vm.hasPreviousChapter && !vm.isLoading ? .white : .white.opacity(0.3))
                         }
                         .buttonStyle(.plain)
@@ -767,7 +777,7 @@ public struct PlayerView: View {
                             vm.skipToNextChapter()
                         } label: {
                             Image(systemName: AppSymbol.nextChapter)
-                                .font(.system(size: 18))
+                                .font(.system(size: 18 * controlScale))
                                 .foregroundStyle(vm.hasNextChapter && !vm.isLoading ? .white : .white.opacity(0.3))
                         }
                         .buttonStyle(.plain)
@@ -785,7 +795,7 @@ public struct PlayerView: View {
                         vm.playNext()
                     } label: {
                         Image(systemName: AppSymbol.nextTrack)
-                            .font(.system(size: 18))
+                            .font(.system(size: 18 * controlScale))
                             .foregroundStyle(vm.hasNext && !vm.isLoading ? .white : .white.opacity(0.3))
                     }
                     .buttonStyle(.plain)
@@ -832,7 +842,7 @@ public struct PlayerView: View {
     private var playPauseButton: some View {
         Button { vm.togglePlayPause() } label: {
             Image(systemName: vm.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 42))
+                .font(.system(size: 42 * controlScale))
                 .foregroundStyle(.white)
         }
         .buttonStyle(.plain)
@@ -847,7 +857,7 @@ public struct PlayerView: View {
     private func seekButton(symbol: String, seconds: TimeInterval, tvHighlighted: Bool = false) -> some View {
         Button { vm.seekRelative(seconds: seconds) } label: {
             Image(systemName: symbol)
-                .font(.system(size: 28))
+                .font(.system(size: 28 * controlScale))
                 .foregroundStyle(.white)
         }
         .buttonStyle(.plain)

@@ -16,6 +16,7 @@ public protocol InnerTubeAPIProtocol: AnyObject, Sendable {
     func setAuthToken(_ token: String?) async
 
     // MARK: Home / browse
+    func fetchHome(continuationToken: String?) async throws -> VideoGroup
     func fetchHomeRows(continuationToken: String?) async throws -> [VideoGroup]
     func fetchSubscriptions(continuationToken: String?) async throws -> VideoGroup
     func fetchHistory(continuationToken: String?) async throws -> VideoGroup
@@ -49,6 +50,11 @@ public protocol InnerTubeAPIProtocol: AnyObject, Sendable {
 // MARK: - Default-parameter convenience wrappers
 
 public extension InnerTubeAPIProtocol {
+
+    /// Fetches the flat recommended home feed from the first page.
+    func fetchHome() async throws -> VideoGroup {
+        try await fetchHome(continuationToken: nil)
+    }
 
     /// Fetches the home-feed row shelves from the first page.
     func fetchHomeRows() async throws -> [VideoGroup] {
