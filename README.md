@@ -92,6 +92,12 @@ Please ensure `Secrets.xcconfig` and `GoogleService-Info.plist` are **never** in
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full version history.
+
+---
+
 ## License
 
 [GPL-3.0](LICENSE)
