@@ -63,6 +63,8 @@ public struct PlayerView: View {
     #if os(iOS)
     /// Drives the brief "Fit" / "Fill" toast shown after a double-tap scale toggle.
     @State private var scaleToast: String?
+    /// Drives the brief seek-direction toast shown after a double-tap in the left/right zone.
+    @State private var seekToastMessage: String?
     #endif
     #if os(tvOS)
     @FocusState private var playerFocused: Bool
@@ -151,11 +153,19 @@ public struct PlayerView: View {
                         // Suppress toggle-controls when end cards are active — taps belong to the cards.
                         if !vm.hasVisibleEndCards { vm.toggleControls() }
                     },
-                    onDoubleTap: {
-                        let newMode: AppSettings.VideoGravityMode =
-                            store.settings.videoGravityMode == .fit ? .fill : .fit
-                        store.settings.videoGravityMode = newMode
-                        scaleToast = newMode == .fill ? "Fill" : "Fit"
+                    onDoubleTap: { normalizedX in
+                        if normalizedX < 1.0 / 3.0 {
+                            vm.seekRelative(seconds: -Double(store.settings.seekBackSeconds))
+                            seekToastMessage = "← \(store.settings.seekBackSeconds)s"
+                        } else if normalizedX > 2.0 / 3.0 {
+                            vm.seekRelative(seconds: Double(store.settings.seekForwardSeconds))
+                            seekToastMessage = "\(store.settings.seekForwardSeconds)s →"
+                        } else {
+                            let newMode: AppSettings.VideoGravityMode =
+                                store.settings.videoGravityMode == .fit ? .fill : .fit
+                            store.settings.videoGravityMode = newMode
+                            scaleToast = newMode == .fill ? "Fill" : "Fit"
+                        }
                     },
                     onTwoFingerTap: { vm.toggleStatsForNerds() },
                     onPanChanged: { dx in
@@ -351,6 +361,7 @@ public struct PlayerView: View {
         .background(Color.black.ignoresSafeArea())
         #if os(iOS)
         .toast(message: $scaleToast)
+        .toast(message: $seekToastMessage)
         #endif
         #if os(tvOS)
         // When no overlay is open, the outer view is the exclusive focus target and
@@ -573,7 +584,7 @@ public struct PlayerView: View {
                     // Brief delay lets the player body establish focus (via .prefersDefaultFocus)
                     // before the overlay opens, so moreMenuNamespace can attract focus correctly.
                     try? await Task.sleep(nanoseconds: 600_000_000)
-                    swipeLog.notice("[tv] --uitesting-open-more-menu: setting showMoreMenu=true (playerFocused=\(playerFocused))")
+                    swipeLog.notice("[tv] --uitesting-open-more-menu: setting showMoreMenu=true")
                     showMoreMenu = true
                 }
             }
@@ -1397,7 +1408,7 @@ private struct SwipeGestureOverlay: UIViewRepresentable {
     var onSwipeLeft:        () -> Void
     var onSwipeRight:       () -> Void
     var onTap:              () -> Void
-    var onDoubleTap:        () -> Void = {}
+    var onDoubleTap:        (CGFloat) -> Void = { _ in }
     var onTwoFingerTap:     () -> Void = {}
     var onPanChanged:       ((CGFloat) -> Void)?
     var onSwipeCancelled:   (() -> Void)?
@@ -1419,7 +1430,7 @@ private struct SwipeGestureOverlay: UIViewRepresentable {
         context.coordinator.pan = pan
 
         let doubleTap = UITapGestureRecognizer(target: context.coordinator,
-                                               action: #selector(Coordinator.handleDoubleTap))
+                                               action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.cancelsTouchesInView = false
         doubleTap.require(toFail: pan)
@@ -1494,7 +1505,11 @@ private struct SwipeGestureOverlay: UIViewRepresentable {
         }
 
         @MainActor @objc func handleTap() { parent.onTap() }
-        @MainActor @objc func handleDoubleTap() { parent.onDoubleTap() }
+        @MainActor @objc func handleDoubleTap(_ gr: UITapGestureRecognizer) {
+            let width = gr.view?.bounds.width ?? 1
+            let normalizedX = width > 0 ? gr.location(in: gr.view).x / width : 0.5
+            parent.onDoubleTap(normalizedX)
+        }
         @MainActor @objc func handleTwoFingerTap() { parent.onTwoFingerTap() }
 
         @MainActor @objc func handleLongPress(_ gr: UILongPressGestureRecognizer) {

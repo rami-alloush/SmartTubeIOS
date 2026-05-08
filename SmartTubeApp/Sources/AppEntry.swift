@@ -20,6 +20,8 @@ struct AppEntry: App {
     #if os(iOS)
     @State private var playerStateStore: PlayerStateStore
     #endif
+    @State private var deepLinkLaunchArgConsumed = false
+    @State private var pendingVideoArgConsumed = false
     @Environment(\.scenePhase) private var scenePhase
 
     private static let appGroup   = "group.com.void.smarttube"
@@ -145,6 +147,8 @@ struct AppEntry: App {
                     .onChange(of: scenePhase, initial: true) { _, phase in
                         if phase == .active {
                             consumePendingVideoID()
+                            consumePendingVideoFromLaunchArgs()
+                            consumeDeepLinkFromLaunchArgs()
                             authService.handleForeground()
                             browseViewModel.refreshIfStale()
                             #if os(iOS)
@@ -190,6 +194,46 @@ struct AppEntry: App {
 
         defaults.removeObject(forKey: Self.pendingKey)
         defaults.synchronize()
+        browseViewModel.deepLinkedVideo = Video(id: videoID, title: "", channelTitle: "")
+    }
+
+    /// Handles `--uitesting-deeplink-video=<id>` launch argument.
+    ///
+    /// Simulates `OpenYouTubeVideoIntent.perform()` firing `smarttube://video/<id>`
+    /// by re-opening the URL through `UIApplication.shared.open(_:)`. This goes through
+    /// the registered `onOpenURL` handler, which fires after the view hierarchy is
+    /// fully set up — avoiding the timing issue of setting `deepLinkedVideo` directly
+    /// during the initial scene-phase `.active` callback.
+    @MainActor
+    private func consumeDeepLinkFromLaunchArgs() {
+        guard !deepLinkLaunchArgConsumed else { return }
+        let args = ProcessInfo.processInfo.arguments
+        guard let arg = args.first(where: { $0.hasPrefix("--uitesting-deeplink-video=") }) else { return }
+        let videoID = String(arg.dropFirst("--uitesting-deeplink-video=".count))
+        guard !videoID.isEmpty, let deepLink = URL(string: "smarttube://video/\(videoID)") else { return }
+        deepLinkLaunchArgConsumed = true
+        #if os(iOS)
+        Task { @MainActor in
+            await UIApplication.shared.open(deepLink)
+        }
+        #endif
+    }
+
+    /// Handles `--uitesting-pending-video=<id>` launch argument.
+    ///
+    /// Simulates the App Group path: `consumePendingVideoID()` reads `pendingVideoID`
+    /// from `UserDefaults(suiteName: appGroup)` after the Share Extension writes it.
+    /// In XCUITest the test process cannot write to a shared app group container, so
+    /// this launch argument exercises the same `browseViewModel.deepLinkedVideo` code
+    /// path without touching UserDefaults at all. Fires only once per launch.
+    @MainActor
+    private func consumePendingVideoFromLaunchArgs() {
+        guard !pendingVideoArgConsumed else { return }
+        let args = ProcessInfo.processInfo.arguments
+        guard let arg = args.first(where: { $0.hasPrefix("--uitesting-pending-video=") }) else { return }
+        let videoID = String(arg.dropFirst("--uitesting-pending-video=".count))
+        guard !videoID.isEmpty else { return }
+        pendingVideoArgConsumed = true
         browseViewModel.deepLinkedVideo = Video(id: videoID, title: "", channelTitle: "")
     }
 
