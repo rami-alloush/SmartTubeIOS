@@ -35,6 +35,7 @@ struct AppEntry: App {
     private static let appGroup             = "group.com.void.smarttube"
     private static let pendingKey           = "pendingVideoID"
     private static let pendingWatchLaterKey = "pendingWatchLaterVideoID"
+    private static let pendingQueueKey      = "pendingQueueVideoID"
 
     init() {
         FirebaseApp.configure()
@@ -162,6 +163,7 @@ struct AppEntry: App {
                             browseViewModel.refreshIfStale()
                             #if os(iOS)
                             consumePendingWatchLaterID()
+                            consumePendingQueueVideoID()
                             if playerStateStore.presentation == .miniPlayer {
                                 playerStateStore.vm.handleForeground()
                             }
@@ -237,7 +239,19 @@ struct AppEntry: App {
 
         defaults.removeObject(forKey: Self.pendingWatchLaterKey)
         defaults.synchronize()
+        let token = authService.accessToken
+        guard token != nil else {
+            watchLaterAlert = WatchLaterAlert(
+                title: "Sign In Required",
+                message: "Please sign in to save videos to Watch Later."
+            )
+            return
+        }
         Task {
+            // On cold start the authService onChange Task that calls api.setAuthToken
+            // may not have run yet. Set the token explicitly here so the API call
+            // always has credentials regardless of Task scheduling order.
+            await api.setAuthToken(token)
             do {
                 try await api.addToWatchLater(videoId: videoID)
                 watchLaterAlert = WatchLaterAlert(
@@ -250,6 +264,20 @@ struct AppEntry: App {
                     message: error.localizedDescription
                 )
             }
+        }
+    }
+
+    @MainActor
+    private func consumePendingQueueVideoID() {
+        guard let defaults = UserDefaults(suiteName: Self.appGroup),
+              let videoID = defaults.string(forKey: Self.pendingQueueKey),
+              !videoID.isEmpty
+        else { return }
+
+        defaults.removeObject(forKey: Self.pendingQueueKey)
+        defaults.synchronize()
+        Task {
+            await CurrentQueueStore.shared.append(Video(id: videoID, title: "", channelTitle: ""))
         }
     }
     #endif

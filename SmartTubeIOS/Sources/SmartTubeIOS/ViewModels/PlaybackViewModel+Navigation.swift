@@ -8,8 +8,27 @@ private let playerLog = CrashlyticsLogger(category: "Player")
 
 extension PlaybackViewModel {
 
-    /// Play the next related video (first in the suggestions list).
+    /// Play the next related video. Advances through the Current Queue if one is
+    /// active; otherwise falls back to the first related (suggestion) video.
     public func playNext() {
+        if let idx = currentVideo?.playlistIndex,
+           currentVideo?.playlistId == CurrentQueueStore.playlistID {
+            Task {
+                if let next = await CurrentQueueStore.shared.videoAt(index: idx + 1) {
+                    playerLog.notice("playNext (queue): index=\(idx + 1) id=\(next.id)")
+                    load(video: next)
+                } else {
+                    playerLog.notice("playNext (queue): exhausted at index=\(idx), clearing")
+                    await CurrentQueueStore.shared.clear()
+                    playNextFromSuggestions()
+                }
+            }
+            return
+        }
+        playNextFromSuggestions()
+    }
+
+    private func playNextFromSuggestions() {
         guard let next = relatedVideos.first else { return }
         playerLog.notice("playNext: id=\(next.id)")
         load(video: next)
@@ -48,6 +67,19 @@ extension PlaybackViewModel {
         if settings.loopEnabled {
             player.seek(to: .zero)
             player.rate = Float(settings.playbackSpeed)
+            return
+        }
+        if let idx = currentVideo?.playlistIndex,
+           currentVideo?.playlistId == CurrentQueueStore.playlistID {
+            Task {
+                if let next = await CurrentQueueStore.shared.videoAt(index: idx + 1) {
+                    playerLog.notice("Autoplay (queue): index=\(idx + 1) id=\(next.id)")
+                    load(video: next)
+                } else {
+                    playerLog.notice("Autoplay (queue): exhausted, clearing")
+                    await CurrentQueueStore.shared.clear()
+                }
+            }
             return
         }
         if settings.shuffleEnabled, !relatedVideos.isEmpty {

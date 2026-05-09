@@ -13,6 +13,7 @@ public struct PlaylistView: View {
     @Environment(AuthService.self) private var auth
     @Environment(SettingsStore.self) private var store
     @Environment(\.innerTubeAPI) private var api
+    @Environment(\.dismiss) private var dismiss
     @State private var vm: PlaylistViewModel
     @State private var selectedVideo: Video?
     @State private var channelDestination: ChannelDestination?
@@ -38,6 +39,33 @@ public struct PlaylistView: View {
             }
         }
         .navigationTitle(playlistTitle)
+        .toolbar {
+            if playlistId == CurrentQueueStore.playlistID {
+                #if os(iOS) || os(tvOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) {
+                        Task {
+                            await CurrentQueueStore.shared.clear()
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Clear Queue", systemImage: "trash")
+                    }
+                }
+                #else
+                ToolbarItem {
+                    Button(role: .destructive) {
+                        Task {
+                            await CurrentQueueStore.shared.clear()
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Clear Queue", systemImage: "trash")
+                    }
+                }
+                #endif
+            }
+        }
         .onAppear {
             vm.load(playlistId: playlistId)
         }

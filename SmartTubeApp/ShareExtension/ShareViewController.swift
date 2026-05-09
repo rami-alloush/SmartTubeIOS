@@ -21,6 +21,7 @@ final class ShareViewController: UIViewController {
     private static let appGroup             = "group.com.void.smarttube"
     private static let pendingKey           = "pendingVideoID"
     private static let pendingWatchLaterKey = "pendingWatchLaterVideoID"
+    private static let pendingQueueKey      = "pendingQueueVideoID"
 
     // Set after successful URL extraction; nil means extraction failed or pending.
     private var deeplink: URL?
@@ -51,6 +52,21 @@ final class ShareViewController: UIViewController {
         config.baseForegroundColor = UIColor(red: 0.40, green: 0.20, blue: 0.80, alpha: 1)
         config.image = UIImage(
             systemName: "clock.badge.plus",
+            withConfiguration: UIImage.SymbolConfiguration(scale: .small)
+        )
+        config.imagePadding = 6
+        let b = UIButton(configuration: config)
+        b.translatesAutoresizingMaskIntoConstraints = false
+        return b
+    }()
+
+    private let addToQueueButton: UIButton = {
+        var config = UIButton.Configuration.bordered()
+        config.title = "Add to Queue"
+        config.cornerStyle = .large
+        config.baseForegroundColor = UIColor(red: 0.40, green: 0.20, blue: 0.80, alpha: 1)
+        config.image = UIImage(
+            systemName: "list.bullet.indent",
             withConfiguration: UIImage.SymbolConfiguration(scale: .small)
         )
         config.imagePadding = 6
@@ -131,10 +147,11 @@ final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
-        preferredContentSize = CGSize(width: view.bounds.width, height: 310)
+        preferredContentSize = CGSize(width: view.bounds.width, height: 372)
 
         buttonStack.addArrangedSubview(openButton)
         buttonStack.addArrangedSubview(watchLaterButton)
+        buttonStack.addArrangedSubview(addToQueueButton)
 
         view.addSubview(titleLabel)
         view.addSubview(closeButton)
@@ -178,9 +195,10 @@ final class ShareViewController: UIViewController {
             buttonStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
             openButton.heightAnchor.constraint(equalToConstant: 50),
             watchLaterButton.heightAnchor.constraint(equalToConstant: 50),
+            addToQueueButton.heightAnchor.constraint(equalToConstant: 50),
 
             // Log section divider
-            logDivider.topAnchor.constraint(equalTo: headerDivider.bottomAnchor, constant: 158),
+            logDivider.topAnchor.constraint(equalTo: headerDivider.bottomAnchor, constant: 220),
             logDivider.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             logDivider.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             logDivider.heightAnchor.constraint(equalToConstant: dividerH),
@@ -195,6 +213,7 @@ final class ShareViewController: UIViewController {
         spinner.startAnimating()
         openButton.addTarget(self, action: #selector(openButtonTapped), for: .touchUpInside)
         watchLaterButton.addTarget(self, action: #selector(watchLaterButtonTapped), for: .touchUpInside)
+        addToQueueButton.addTarget(self, action: #selector(addToQueueButtonTapped), for: .touchUpInside)
         closeButton.addTarget(self, action: #selector(closeButtonTapped), for: .touchUpInside)
     }
 
@@ -235,6 +254,26 @@ final class ShareViewController: UIViewController {
             var cfg = watchLaterButton.configuration
             cfg?.title = "Added to Watch Later"
             watchLaterButton.configuration = cfg
+        } else {
+            logEntry("❌ Could not write to shared storage")
+        }
+    }
+
+    // MARK: - Add to Queue
+
+    @objc private func addToQueueButtonTapped() {
+        guard let videoID = resolvedVideoID else {
+            logEntry("⚠️ no video ID — cannot add to queue")
+            return
+        }
+        if let defaults = UserDefaults(suiteName: Self.appGroup) {
+            defaults.set(videoID, forKey: Self.pendingQueueKey)
+            defaults.synchronize()
+            logEntry("✅ Added to Queue")
+            addToQueueButton.isEnabled = false
+            var cfg = addToQueueButton.configuration
+            cfg?.title = "Added to Queue"
+            addToQueueButton.configuration = cfg
         } else {
             logEntry("❌ Could not write to shared storage")
         }

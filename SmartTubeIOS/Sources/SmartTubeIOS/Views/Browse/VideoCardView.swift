@@ -104,6 +104,19 @@ public struct VideoCardView: View {
                     Label("Save to Watch Later", systemImage: AppSymbol.watchLater)
                 }
             }
+            Button {
+                Task { await CurrentQueueStore.shared.append(video) }
+            } label: {
+                Label("Add to Queue", systemImage: "text.badge.plus")
+            }
+            Button {
+                Task {
+                    let count = await CurrentQueueStore.shared.videos.count
+                    await CurrentQueueStore.shared.insertNext(video, afterIndex: count - 1)
+                }
+            } label: {
+                Label("Play Next", systemImage: "text.insert")
+            }
             #if !os(tvOS)
             Button {
                 downloadService.download(video: video)

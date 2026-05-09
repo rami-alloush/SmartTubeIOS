@@ -26,6 +26,22 @@ public final class PlaylistViewModel {
     }
 
     public func load(playlistId: String, refresh: Bool = false) {
+        // ── Queue short-circuit ────────────────────────────────────────────────
+        // Reads directly from CurrentQueueStore; never hits the YouTube API.
+        if playlistId == CurrentQueueStore.playlistID {
+            fetchTask?.cancel()
+            fetchTask = Task {
+                let queuedVideos = await CurrentQueueStore.shared.videos
+                self.videos = queuedVideos.enumerated().map { index, v in
+                    var copy           = v
+                    copy.playlistId    = CurrentQueueStore.playlistID
+                    copy.playlistIndex = index
+                    return copy
+                }
+            }
+            return
+        }
+        // ── Existing API path ──────────────────────────────────────────────────
         // If the same playlist is already loaded and no refresh was requested,
         // do nothing — this preserves scroll position when navigating back.
         if !refresh && self.playlistId == playlistId && !videos.isEmpty {

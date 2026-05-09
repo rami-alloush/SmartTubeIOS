@@ -18,6 +18,7 @@ public struct LibraryView: View {
     @State private var scrollStore = ScrollOffsetStore()
     @State private var savedScrollOffset: CGFloat? = nil
     @State private var restoreOffset: CGFloat? = nil
+    @State private var queueVideosCount: Int = 0
     #if os(iOS)
     @Environment(PlayerStateStore.self) private var playerState
     #endif
@@ -136,6 +137,9 @@ public struct LibraryView: View {
                         if browseVM.isLoading && videos.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding()
                         }
+                        if selectedSection == .playlists, queueVideosCount > 0 {
+                            currentQueueRow
+                        }
                         VideoGridSection(
                             videos: videos,
                             onSelect: { video in
@@ -206,6 +210,44 @@ public struct LibraryView: View {
                 type: selectedSection.browseSectionType
             ))
         }
+        .task(id: selectedSection) {
+            guard selectedSection == .playlists else { return }
+            queueVideosCount = await CurrentQueueStore.shared.videos.count
+        }
+    }
+
+    @ViewBuilder private var currentQueueRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "list.number")
+                .font(.title2)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Current Queue")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                Text("\(queueVideosCount) video\(queueVideosCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedPlaylist = Video(
+                id: CurrentQueueStore.playlistID,
+                title: "Current Queue",
+                channelTitle: ""
+            )
+        }
+        .accessibilityIdentifier("library.currentQueueRow")
+        Divider().padding(.horizontal)
     }
 
     @ViewBuilder private var emptyLibraryView: some View {

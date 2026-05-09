@@ -318,6 +318,16 @@
         }
       }
     },
+    "%lld video%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld video%2$@"
+          }
+        }
+      }
+    },
     "1s" : {
       "comment" : "SponsorBlock min-segment picker option — 1 second",
       "extractionState" : "manual",
@@ -1325,6 +1335,9 @@
           }
         }
       }
+    },
+    "Add to Queue" : {
+
     },
     "All" : {
       "comment" : "Channel content filter — show all videos",
@@ -2418,6 +2431,9 @@
         }
       }
     },
+    "Clear Queue" : {
+
+    },
     "Close" : {
       "comment" : "tvOS sheet dismiss button",
       "extractionState" : "manual",
@@ -3007,6 +3023,9 @@
       }
     },
     "Could Not Save" : {
+
+    },
+    "Current Queue" : {
 
     },
     "DeArrow" : {
@@ -8267,6 +8286,9 @@
       }
     },
     "Picture in Picture" : {
+
+    },
+    "Play Next" : {
 
     },
     "Playback Speed" : {
