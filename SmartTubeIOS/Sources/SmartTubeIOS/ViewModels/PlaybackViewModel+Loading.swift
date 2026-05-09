@@ -14,6 +14,14 @@ extension PlaybackViewModel {
 
     public func load(video: Video) {
         playerLog.notice("[load] load() called — id=\(video.id) currentVideo=\(self.currentVideo?.id ?? "nil") isLoading=\(self.isLoading)")
+        // If the exact same video is already being loaded, ignore the duplicate call.
+        // SwiftUI can trigger load() multiple times during a single navigation (e.g.
+        // selectedVideo binding re-evaluated while a queue autoplay is in flight).
+        // Each duplicate spawns its own loadAsync → its own Crashlytics event storm.
+        if currentVideo?.id == video.id, isLoading {
+            playerLog.notice("[load] already loading \(video.id) — ignoring duplicate call")
+            return
+        }
         CrashlyticsLogger.setVideoContext(id: video.id, title: video.title)
         // Cancel any previous in-flight load so we never have two concurrent API
         // fetches for the same (or different) video running at the same time.
@@ -66,6 +74,7 @@ extension PlaybackViewModel {
         currentVideo = video
         hasPrevious = !history.isEmpty
         hasRetriedPlayback = false
+        hasAppliedH264Cap = false
         qualityTask?.cancel()
         qualityTask = nil
         hlsVariantURLs = [:]
@@ -209,7 +218,18 @@ extension PlaybackViewModel {
                 } catch {
                     if case APIError.unavailable = error, hasAuthToken {
                         playerLog.notice("⚠️ iOS client returned unavailable — retrying with authenticated TV client")
-                        info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
+                        do {
+                            info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
+                        } catch {
+                            if case APIError.unavailable = error {
+                                // TV client also returned unavailable / cipher-protected formats.
+                                // Fall through to the Android client as a last resort.
+                                playerLog.notice("⚠️ TV client also unavailable — retrying with Android client")
+                                info = try await api.fetchPlayerInfoAndroid(videoId: video.id)
+                            } else {
+                                throw error
+                            }
+                        }
                     } else {
                         throw error
                     }

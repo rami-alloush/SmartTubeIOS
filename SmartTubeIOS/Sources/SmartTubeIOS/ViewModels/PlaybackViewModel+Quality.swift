@@ -68,13 +68,32 @@ extension PlaybackViewModel {
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
-                    if qualityCap != nil {
+                    let nsErr = item.error as? NSError
+                    let is403 = nsErr?.domain == NSURLErrorDomain && nsErr?.code == -1102
+                    if is403, let video = self.currentVideo {
+                        // The HLS URL (both variant and master) carries an expired IP binding.
+                        // Invalidate the cache and trigger the same 403 recovery as initial load.
+                        playerLog.notice("Quality-switch 403 — invalidating cache and re-fetching player info")
+                        await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                        self.selectedFormat = nil
+                        await self.retryWith403Recovery(video: video, originalError: item.error)
+                    } else if qualityCap != nil {
                         // The chosen quality variant cannot be decoded (e.g. VP9 on Simulator).
                         // Revert to the HLS master so ABR can pick a decodable tier automatically.
                         playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
                         self.selectedFormat = nil
                         self.toastMessage = "Quality unavailable — reverting to Auto"
                         await self.reloadHLSItem(seekTo: self.currentTime, qualityCap: nil)
+                    } else if !self.hasAppliedH264Cap,
+                              nsErr?.domain == AVFoundationErrorDomain,
+                              nsErr?.code == -11833 {
+                        // Auto HLS master also failed with Cannot Decode — ABR picked an
+                        // unsupported VP9/AV1 variant (Mac Catalyst / A12X iPads).
+                        // Retry with a hard H.264 bitrate cap before surfacing the error.
+                        playerLog.notice("Auto HLS Cannot Decode — retrying with H.264 bitrate cap")
+                        self.hasAppliedH264Cap = true
+                        self.toastMessage = "Adjusting quality for this device…"
+                        await self.reloadHLSItemH264Capped(seekTo: self.currentTime)
                     } else {
                         // Auto-quality HLS also failed — surface the error.
                         self.error = item.error
@@ -182,5 +201,46 @@ extension PlaybackViewModel {
             }
         }
         return result
+    }
+
+    /// Last-resort recovery for Cannot-Decode failures on the HLS Auto master.
+    /// Reloads the master URL with a hard 1080p size cap and an 8 Mbps peak bitrate
+    /// so AVPlayer's ABR stays within H.264 tier bitrates and avoids VP9/AV1 variants.
+    /// Used on Mac Catalyst and older iPads (pre-A15) that lack VP9/AV1 hardware decoders.
+    func reloadHLSItemH264Capped(seekTo time: TimeInterval) async {
+        guard let hlsURL = playerInfo?.hlsURL else { return }
+        guard !Task.isCancelled else { return }
+        let uaOpts: [String: Any] = [
+            "AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]
+        ]
+        let asset = AVURLAsset(url: hlsURL, options: uaOpts)
+        let item = AVPlayerItem(asset: asset)
+        // 1080p + 8 Mbps keeps ABR in the H.264 tier without needing manifest parsing.
+        item.preferredMaximumResolution = CGSize(width: 1920, height: 1080)
+        item.preferredPeakBitRate = 8_000_000
+        itemObserverTask?.cancel()
+        itemObserverTask = Task { [weak self] in
+            for await status in item.statusStream {
+                guard let self, !Task.isCancelled else { return }
+                switch status {
+                case .readyToPlay:
+                    if time > 0 { self.seek(to: time) }
+                    self.player.rate = Float(self.settings.playbackSpeed)
+                    self.isPlaying = true
+                    playerLog.notice("✅ H.264-capped AVPlayerItem readyToPlay")
+                case .failed:
+                    let err = item.error.map { "\($0)" } ?? "nil"
+                    playerLog.error("❌ H.264-capped AVPlayerItem also failed: \(err)")
+                    self.error = item.error
+                case .unknown:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+        }
+        isSwappingItem = true
+        player.replaceCurrentItem(with: item)
+        isSwappingItem = false
     }
 }

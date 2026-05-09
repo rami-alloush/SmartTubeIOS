@@ -56,6 +56,12 @@ public final class PlaybackViewModel {
             guard !(nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code)) else {
                 return
             }
+            // APIError.unavailable means YouTube's server returned a known-unplayable status
+            // (bot-detection, rate-limit, private/members-only, region block, cipher-protected
+            // URLs). These are never app bugs — log at notice level but don't inflate the
+            // Crashlytics non-fatal list. Pattern-match directly on the type rather than
+            // relying on NSError.code (which shifts when enum cases are reordered).
+            if let apiError = error as? APIError, case .unavailable = apiError { return }
             playerLog.recordNonFatal(error, userInfo: [
                 "video_id":          currentVideo?.id    ?? "unknown",
                 "video_title":       currentVideo?.title ?? "unknown",
@@ -146,6 +152,10 @@ public final class PlaybackViewModel {
     @ObservationIgnored nonisolated(unsafe) var rateObserver: NSKeyValueObservation?
     /// Prevents infinite retry loops: set once the first fallback attempt has been made.
     var hasRetriedPlayback: Bool = false
+    /// Set after a Cannot-Decode (AVFoundationErrorDomain -11833) failure on the Auto HLS
+    /// master to indicate that a H.264-capped recovery attempt is already in flight.
+    /// Guards against a second identical recovery on the same video.
+    var hasAppliedH264Cap: Bool = false
     /// True while a SponsorBlock auto-skip seek is in-flight. Guards against the periodic
     /// time observer re-triggering `checkSponsorSkip` before the seek completes, which
     /// causes the end-of-video twitch / audio loop.

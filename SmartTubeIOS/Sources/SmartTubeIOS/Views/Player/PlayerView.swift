@@ -181,7 +181,7 @@ public struct PlayerView: View {
                     },
                     onLongPressStart: { vm.beginHoldSpeed() },
                     onLongPressEnd:   { vm.endHoldSpeed() },
-                    onSwipeDown: { playerState.minimize() },
+                    onSwipeDown: { store.settings.miniPlayerEnabled ? playerState.minimize() : playerState.stop() },
                     // Disabled during scrubbing so the Slider can claim touches uncontested.
                     // Also disabled when controls are visible so SwiftUI buttons (Menu, etc.)
                     // receive touches directly without UIKit gesture interference.
@@ -227,9 +227,9 @@ public struct PlayerView: View {
                                     let dx = value.translation.width
                                     let dy = value.translation.height
                                     guard !isTransitioning, !vm.isScrubbing else { return }
-                                    // Swipe-down → minimize to mini-player
+                                    // Swipe-down → minimize to mini-player (or stop if disabled)
                                     if dy > 50, abs(dy) > abs(dx) {
-                                        playerState.minimize()
+                                        store.settings.miniPlayerEnabled ? playerState.minimize() : playerState.stop()
                                         return
                                     }
                                     guard abs(dx) > abs(dy) else { return }
@@ -504,9 +504,9 @@ public struct PlayerView: View {
             HStack(spacing: 0) {
                 Button {
                     #if os(iOS)
-                    swipeLog.notice("[PlayerView] backButton tapped — calling playerState.minimize(), presentation=\(String(describing: playerState.presentation))")
-                    playerState.minimize()
-                    swipeLog.notice("[PlayerView] backButton — minimize() returned, presentation=\(String(describing: playerState.presentation))")
+                    swipeLog.notice("[PlayerView] backButton tapped — miniPlayerEnabled=\(store.settings.miniPlayerEnabled) presentation=\(String(describing: playerState.presentation))")
+                    if store.settings.miniPlayerEnabled { playerState.minimize() } else { playerState.stop() }
+                    swipeLog.notice("[PlayerView] backButton — done, presentation=\(String(describing: playerState.presentation))")
                     #else
                     vm.stop(); withAnimation(.none) { dismiss() }
                     #endif
@@ -739,7 +739,7 @@ public struct PlayerView: View {
             HStack {
                 Button {
                     #if os(iOS)
-                    playerState.minimize()
+                    if store.settings.miniPlayerEnabled { playerState.minimize() } else { playerState.stop() }
                     #else
                     vm.stop(); withAnimation(.none) { dismiss() }
                     #endif

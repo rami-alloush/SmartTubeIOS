@@ -88,10 +88,41 @@ public final class HomeViewModel {
 
     private let api: any InnerTubeAPIProtocol
     private var loadTask: Task<Void, Never>?
+    private var hideObserverTasks: [Task<Void, Never>] = []
 
     public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
         self.sections = Self.shelfSections.map { SectionState(section: $0) }
+        observeFeedHideNotifications()
+    }
+
+    // MARK: - Feed hide handling
+
+    private func observeFeedHideNotifications() {
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideVideoFromFeed) {
+                guard let self, let videoId = note.userInfo?["videoId"] as? String else { continue }
+                self.removeVideo(id: videoId)
+            }
+        })
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideChannelFromFeed) {
+                guard let self, let channelId = note.userInfo?["channelId"] as? String else { continue }
+                self.removeChannel(id: channelId)
+            }
+        })
+    }
+
+    public func removeVideo(id: String) {
+        for i in sections.indices {
+            sections[i].videos.removeAll { $0.id == id }
+        }
+    }
+
+    public func removeChannel(id: String) {
+        for i in sections.indices {
+            sections[i].videos.removeAll { $0.channelId == id }
+        }
     }
 
     // MARK: - Public API

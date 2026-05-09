@@ -87,8 +87,12 @@ final class SettingsUITests: XCTestCase {
     func testSponsorBlockToggleEnablesSection() {
         openSettings()
         let form = app.collectionViews.firstMatch
-        let toggle = form.switches["settings.sponsorBlockToggle"]
-        UITestHelpers.scrollUntilVisible(toggle, in: form)
+        // Scroll using a form-scoped query, then switch to an app-scoped query for taps.
+        // After a Toggle state change SwiftUI re-renders the Form and the form-scoped
+        // XCUIElement reference becomes stale — the app-scoped query re-resolves each time.
+        let toggleForScrolling = form.switches["settings.sponsorBlockToggle"]
+        UITestHelpers.scrollUntilVisible(toggleForScrolling, in: form)
+        let toggle = app.switches["settings.sponsorBlockToggle"].firstMatch
         XCTAssertTrue(toggle.waitForExistence(timeout: 5),
                       "settings.sponsorBlockToggle must be present in the SponsorBlock section")
 

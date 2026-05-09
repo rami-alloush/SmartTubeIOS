@@ -199,6 +199,26 @@ struct CurrentQueueStoreTests {
         #expect(count == 0)
     }
 
+    // MARK: - Duplicate guard
+
+    @Test("Appending the same video ID twice keeps count at 1")
+    func appendDuplicateIgnored() async {
+        let store = makeStore()
+        await store.append(makeVideo(id: "aaa11111111"))
+        await store.append(makeVideo(id: "aaa11111111"))
+        let count = await store.videos.count
+        #expect(count == 1)
+    }
+
+    @Test("insertNext with duplicate ID is a no-op")
+    func insertNextDuplicateIgnored() async {
+        let store = makeStore()
+        await store.append(makeVideo(id: "aaa11111111"))
+        await store.insertNext(makeVideo(id: "aaa11111111"), afterIndex: 0)
+        let count = await store.videos.count
+        #expect(count == 1)
+    }
+
     // MARK: - Capacity
 
     @Test("Appending beyond maxCount is silently ignored")

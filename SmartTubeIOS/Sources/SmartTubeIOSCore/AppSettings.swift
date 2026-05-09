@@ -16,6 +16,10 @@ public struct AppSettings: Codable {
     public var landscapeAlwaysPlay: Bool
     /// When `true`, Picture-in-Picture is available and the PiP button is shown in the player.
     public var pipEnabled: Bool
+    /// When `true` (default), pressing back or swiping down minimizes the player to the
+    /// in-app mini-player bar instead of stopping playback. When `false`, the player is
+    /// dismissed and playback stops — mirrors the behaviour of a standalone player app.
+    public var miniPlayerEnabled: Bool
     /// Seconds to seek backward (configurable; default 10 mirrors Android's default).
     public var seekBackSeconds: Int
     /// Seconds to seek forward (configurable; default 30 mirrors Android's default).
@@ -162,6 +166,7 @@ public struct AppSettings: Codable {
         backgroundPlaybackEnabled = false
         landscapeAlwaysPlay  = false
         pipEnabled           = true
+        miniPlayerEnabled    = true
         seekBackSeconds      = 10
         seekForwardSeconds   = 30
         controlsHideTimeout  = 4

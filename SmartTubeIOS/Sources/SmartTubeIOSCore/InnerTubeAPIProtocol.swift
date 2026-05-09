@@ -45,6 +45,7 @@ public protocol InnerTubeAPIProtocol: AnyObject, Sendable {
 
     // MARK: Playlist editing
     func addToWatchLater(videoId: String) async throws
+    func sendFeedback(token: String) async throws
 }
 
 // MARK: - Default-parameter convenience wrappers

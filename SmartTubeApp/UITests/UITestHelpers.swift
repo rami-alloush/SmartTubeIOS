@@ -74,9 +74,13 @@ enum UITestHelpers {
 
     /// Swipes up in `scrollView` until `element` exists in the accessibility tree,
     /// or until `maxSwipes` attempts are exhausted.
+    /// Waits up to `scrollViewTimeout` seconds for `scrollView` itself to appear
+    /// before attempting any swipes — prevents "No matches found" on slow loads.
     static func scrollUntilVisible(_ element: XCUIElement,
                                    in scrollView: XCUIElement,
-                                   maxSwipes: Int = 8) {
+                                   maxSwipes: Int = 8,
+                                   scrollViewTimeout: TimeInterval = 5) {
+        guard scrollView.waitForExistence(timeout: scrollViewTimeout) else { return }
         var attempts = 0
         while !element.exists && attempts < maxSwipes {
             scrollView.swipeUp()

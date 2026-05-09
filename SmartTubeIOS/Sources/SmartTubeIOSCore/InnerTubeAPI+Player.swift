@@ -320,6 +320,15 @@ extension InnerTubeAPI {
         guard hlsURL != nil || !formats.isEmpty else {
             throw APIError.unavailable("This video is unavailable")
         }
+        // If streamingData is present but every format URL is nil, the server returned
+        // cipher-protected URLs that we cannot decode (signatureCipher / cipher fields).
+        // Treat this as unavailable so the caller's fallback chain (Android client) fires
+        // rather than surfacing a confusing "No stream URL" decoding error.
+        let hasAnyURL = hlsURL != nil || formats.contains { $0.url != nil }
+        if !hasAnyURL {
+            tubeLog.error("❌ parsePlayerInfo: streamingData present but all format URLs are nil (cipher-protected?)")
+            throw APIError.unavailable("Stream URLs require decryption — not supported by this client")
+        }
         let endCards = parseEndCards(from: json)
         tubeLog.notice("parsePlayerInfo: endCards=\(endCards.count, privacy: .public)")
         return PlayerInfo(video: video, formats: formats, hlsURL: hlsURL, dashURL: dashURL, captionTracks: captionTracks, trackingURLs: trackingURLs, endCards: endCards)

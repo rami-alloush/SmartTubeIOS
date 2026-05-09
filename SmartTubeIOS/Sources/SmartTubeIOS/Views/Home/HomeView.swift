@@ -29,6 +29,7 @@ public struct HomeView: View {
     @State private var shortsPresentation: ShortsPresentation?
     @State private var channelDestination: ChannelDestination?
     @State private var showSignIn = false
+    @State private var queueVideosCount: Int = 0
     #if os(tvOS)
     @FocusState private var focusedSection: BrowseSection?
     #endif
@@ -98,6 +99,10 @@ public struct HomeView: View {
         .task(id: auth.accessToken) {
             await homeVM.updateAuthToken(auth.accessToken)
             await sectionVM.updateAuthToken(auth.accessToken)
+        }
+        .task(id: selectedSection) {
+            guard selectedSection.type == .playlists else { return }
+            queueVideosCount = await CurrentQueueStore.shared.videos.count
         }
     }
 
@@ -293,6 +298,9 @@ public struct HomeView: View {
         // Row groups are few (typically ≤15 carousels) so eager rendering is fine.
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if selectedSection.type == .playlists, queueVideosCount > 0 {
+                    currentQueueRow
+                }
                 ForEach(rowGroups) { group in
                     if let title = group.title, !title.isEmpty {
                         Text(title)
@@ -320,6 +328,40 @@ public struct HomeView: View {
         #if os(tvOS)
         .focusSection()
         #endif
+    }
+
+    @ViewBuilder private var currentQueueRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "list.number")
+                .font(.title2)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Current Queue")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                Text("\(queueVideosCount) video\(queueVideosCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedPlaylist = Video(
+                id: CurrentQueueStore.playlistID,
+                title: "Current Queue",
+                channelTitle: ""
+            )
+        }
+        .accessibilityIdentifier("home.currentQueueRow")
+        Divider().padding(.horizontal)
     }
 
     private var feedEmptyState: some View {

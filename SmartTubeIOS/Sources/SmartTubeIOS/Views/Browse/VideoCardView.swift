@@ -9,6 +9,7 @@ extension Notification.Name {
     static let openChannel = Notification.Name("com.smarttube.openChannel")
     /// Posted when a feature requests navigation to the Search tab (e.g. empty-state CTA).
     static let navigateToSearch = Notification.Name("com.smarttube.navigateToSearch")
+    // hideVideoFromFeed and hideChannelFromFeed are defined in SmartTubeIOSCore/FeedFeedbackNotifications.swift
 }
 
 // MARK: - VideoCardView
@@ -116,6 +117,50 @@ public struct VideoCardView: View {
                 }
             } label: {
                 Label("Play Next", systemImage: "text.insert")
+            }
+            if authService.isSignedIn {
+                if let token = video.notInterestedToken {
+                    Button(role: .destructive) {
+                        Task {
+                            try? await api.sendFeedback(token: token)
+                            NotificationCenter.default.post(
+                                name: .hideVideoFromFeed,
+                                object: nil,
+                                userInfo: ["videoId": video.id]
+                            )
+                        }
+                    } label: {
+                        Label("Not Interested", systemImage: "hand.raised")
+                    }
+                }
+                if let token = video.dontLikeToken {
+                    Button(role: .destructive) {
+                        Task {
+                            try? await api.sendFeedback(token: token)
+                            NotificationCenter.default.post(
+                                name: .hideVideoFromFeed,
+                                object: nil,
+                                userInfo: ["videoId": video.id]
+                            )
+                        }
+                    } label: {
+                        Label("Don't Like This Video", systemImage: "hand.thumbsdown")
+                    }
+                }
+                if let token = video.hideChannelToken, let channelId = video.channelId, !channelId.isEmpty {
+                    Button(role: .destructive) {
+                        Task {
+                            try? await api.sendFeedback(token: token)
+                            NotificationCenter.default.post(
+                                name: .hideChannelFromFeed,
+                                object: nil,
+                                userInfo: ["channelId": channelId]
+                            )
+                        }
+                    } label: {
+                        Label("Don't Recommend Channel", systemImage: "person.slash")
+                    }
+                }
             }
             #if !os(tvOS)
             Button {

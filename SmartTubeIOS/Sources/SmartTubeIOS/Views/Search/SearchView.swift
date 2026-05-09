@@ -175,12 +175,57 @@ public struct SearchView: View {
         .accessibilityIdentifier("search.results")
     }
 
-    // MARK: - Suggestions list (recommended or live)
+    // MARK: - Suggestions list (history + recommended/live)
 
     private var suggestionsListView: some View {
-        let header = vm.query.isEmpty ? "Recommended" : "Suggestions"
+        let suggestionsHeader = vm.query.isEmpty ? "Recommended" : "Suggestions"
         return List {
-            Section(header: Text(header).font(.caption).foregroundStyle(.secondary)) {
+            // History section — only shown when there are matching entries
+            if !vm.filteredHistory.isEmpty {
+                Section(header: Text("Recent").font(.caption).foregroundStyle(.secondary)) {
+                    ForEach(vm.filteredHistory) { entry in
+                        Button {
+                            vm.query = entry.query
+                            vm.search()
+                            isSearchFocused = false
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "clock")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text(entry.query)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                #if os(iOS)
+                                Button {
+                                    vm.removeHistoryEntry(entry.query)
+                                } label: {
+                                    Image(systemName: AppSymbol.xmark)
+                                        .foregroundStyle(.secondary)
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove \(entry.query) from history")
+                                #endif
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("search.history.\(entry.query)")
+                    }
+                    Button(role: .destructive) {
+                        vm.clearHistory()
+                    } label: {
+                        Text("Clear History")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityIdentifier("search.history.clearAll")
+                }
+            }
+
+            // Suggestions / Recommended section (existing behaviour)
+            Section(header: Text(suggestionsHeader).font(.caption).foregroundStyle(.secondary)) {
                 ForEach(vm.suggestions, id: \.self) { suggestion in
                     Button {
                         vm.query = suggestion

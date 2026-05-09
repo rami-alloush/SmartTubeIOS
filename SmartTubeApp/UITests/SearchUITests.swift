@@ -197,4 +197,82 @@ final class SearchUITests: XCTestCase {
         XCTAssertTrue(UITestHelpers.openPlayer(from: firstCard, in: app),
                       "player.titleLabel should appear after tapping a search result")
     }
+
+    // MARK: - Search history
+
+    func testSubmittedQueryAppearsInHistory() throws {
+        search(for: "history test query")
+
+        // Re-focus the search bar to show the suggestions/history list.
+        let bar = searchBar
+        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        bar.tap()
+        // Clear the query so the full history list is shown.
+        app.buttons["search.clearButton"].firstMatch.tap()
+
+        let historyRow = app.buttons["search.history.history test query"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 5),
+                      "Submitted query should appear as a history row")
+    }
+
+    func testTappingHistoryRowTriggersSearch() throws {
+        search(for: "history tap test")
+
+        let bar = searchBar
+        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        bar.tap()
+        app.buttons["search.clearButton"].firstMatch.tap()
+
+        let historyRow = app.buttons["search.history.history tap test"]
+        guard historyRow.waitForExistence(timeout: 5) else {
+            throw XCTSkip("History row not found — previous search may not have persisted")
+        }
+        historyRow.tap()
+
+        // After tapping a history row the search results container should appear.
+        let results = app.scrollViews["search.results"]
+        XCTAssertTrue(results.waitForExistence(timeout: 10),
+                      "Tapping a history row should trigger the search and show results")
+    }
+
+    func testDeleteHistoryEntryRemovesRow() throws {
+        search(for: "entry to delete")
+
+        let bar = searchBar
+        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        bar.tap()
+        app.buttons["search.clearButton"].firstMatch.tap()
+
+        let deleteButton = app.buttons["Remove entry to delete from history"]
+        guard deleteButton.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Delete button for history entry not found")
+        }
+        deleteButton.tap()
+
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertFalse(app.buttons["search.history.entry to delete"].exists,
+                       "History entry should be removed after tapping its delete button")
+    }
+
+    func testClearAllHistoryRemovesAllEntries() throws {
+        search(for: "clear all test a")
+        search(for: "clear all test b")
+
+        let bar = searchBar
+        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        bar.tap()
+        app.buttons["search.clearButton"].firstMatch.tap()
+
+        let clearAll = app.buttons["search.history.clearAll"]
+        guard clearAll.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Clear History button not found")
+        }
+        clearAll.tap()
+
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertFalse(app.buttons["search.history.clear all test a"].exists,
+                       "All history entries should be removed after Clear History")
+        XCTAssertFalse(app.buttons["search.history.clear all test b"].exists,
+                       "All history entries should be removed after Clear History")
+    }
 }

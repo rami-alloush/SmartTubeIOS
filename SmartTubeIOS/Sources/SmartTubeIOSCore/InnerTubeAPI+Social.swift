@@ -45,6 +45,18 @@ extension InnerTubeAPI {
         tubeLog.notice("addToWatchLater videoId=\(videoId, privacy: .public)")
     }
 
+    /// Sends a feed feedback signal to YouTube.
+    /// Used for "Not interested", "Don't like this video", and "Don't recommend channel" —
+    /// all three actions share this endpoint and differ only in their `feedbackToken`.
+    /// Tokens are parsed from `videoRenderer.menu.menuRenderer.items` in the feed response.
+    /// Requires authentication.
+    public func sendFeedback(token: String) async throws {
+        var body = makeBody(client: tvClientContext)
+        body["feedbackTokens"] = [token]
+        _ = try await postTV(endpoint: "feedback", body: body)
+        tubeLog.notice("sendFeedback token=\(token.prefix(20), privacy: .public)…")
+    }
+
     // MARK: - Next (related videos / SuggestionsController equivalent)
 
     /// Fetches related/suggested videos and the current like status for a video.

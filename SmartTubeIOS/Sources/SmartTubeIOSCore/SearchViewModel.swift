@@ -13,10 +13,12 @@ public final class SearchViewModel {
     public var filter: SearchFilter = .default
     public private(set) var results: [Video] = []
     public private(set) var suggestions: [String] = []
+    public private(set) var history: [SearchHistoryEntry] = []
     public private(set) var isLoading: Bool = false
     public var error: Error?
 
     private let api: any InnerTubeAPIProtocol
+    private let historyStore: SearchHistoryStore
     private var nextPageToken: String?
     private var searchTask: Task<Void, Never>?
     private var suggestTask: Task<Void, Never>?
@@ -27,9 +29,18 @@ public final class SearchViewModel {
         "documentary", "gaming highlights"
     ]
 
-    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
+    /// History entries that match the current query (case-insensitive). Returns
+    /// the full history when the query is empty.
+    public var filteredHistory: [SearchHistoryEntry] {
+        guard !query.isEmpty else { return history }
+        return history.filter { $0.query.localizedCaseInsensitiveContains(query) }
+    }
+
+    public init(api: any InnerTubeAPIProtocol = InnerTubeAPI(), historyStore: SearchHistoryStore = .shared) {
         self.api = api
+        self.historyStore = historyStore
         suggestions = Self.recommendedTerms
+        Task { await loadHistory() }
     }
 
     /// Call from `.task(id: query)` in the view to debounce live suggestions.
@@ -50,11 +61,42 @@ public final class SearchViewModel {
     }
 
     public func search() {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
         results = []
         nextPageToken = nil
         searchTask?.cancel()
-        searchTask = Task { await performSearch(query: query, filter: filter) }
+        searchTask = Task { await performSearch(query: trimmed, filter: filter) }
+        Task { await recordSearch(trimmed) }
+    }
+
+    // MARK: - History management
+
+    /// Loads history from the store into the published `history` property.
+    public func loadHistory() async {
+        history = await historyStore.all
+    }
+
+    /// Saves `query` to history and refreshes the in-memory list.
+    private func recordSearch(_ query: String) async {
+        await historyStore.add(query)
+        history = await historyStore.all
+    }
+
+    /// Removes a single entry from history.
+    public func removeHistoryEntry(_ query: String) {
+        Task {
+            await historyStore.remove(query)
+            history = await historyStore.all
+        }
+    }
+
+    /// Clears all history entries.
+    public func clearHistory() {
+        Task {
+            await historyStore.clear()
+            history = await historyStore.all
+        }
     }
 
     /// Apply a new filter and re-run the current search immediately.

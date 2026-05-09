@@ -38,6 +38,7 @@ extension PlayerView {
                 }
 
             GeometryReader { geo in
+            ScrollView {
             VStack(spacing: 0) {
                 // Speed
                 Button {
@@ -303,9 +304,10 @@ extension PlayerView {
                 #endif
             }
             .frame(maxWidth: .infinity)
+            }
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .frame(maxHeight: geo.size.height * 0.75)
+            .frame(maxHeight: geo.size.height * 0.75 - geo.safeAreaInsets.top)
             #if os(tvOS)
             .onMoveCommand { direction in
                 let rows = moreMenuVisibleRows
@@ -340,7 +342,7 @@ extension PlayerView {
             }
             #endif
             .padding(.horizontal, 8)
-            .padding(.bottom, 8)
+            .padding(.bottom, geo.safeAreaInsets.bottom + 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
         }

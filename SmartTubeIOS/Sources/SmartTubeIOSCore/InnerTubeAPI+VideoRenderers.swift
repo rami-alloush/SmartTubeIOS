@@ -523,6 +523,25 @@ extension InnerTubeAPI {
                 .flatMap { $0["percentDurationWatched"] as? Double } }
             .first.map { $0 / 100.0 }
 
+        // Parse feed feedback tokens keyed by icon type from the video's menuRenderer.
+        // All three actions share the /feedback endpoint — only the token differs.
+        let feedbackTokens: [String: String] = {
+            guard let menu = r["menu"] as? [String: Any],
+                  let mr = menu["menuRenderer"] as? [String: Any],
+                  let items = mr["items"] as? [[String: Any]]
+            else { return [:] }
+            var result: [String: String] = [:]
+            for item in items {
+                guard let svc = item["menuServiceItemRenderer"] as? [String: Any],
+                      let endpoint = svc["serviceEndpoint"] as? [String: Any],
+                      let token = (endpoint["feedbackEndpoint"] as? [String: Any])?["feedbackToken"] as? String,
+                      let iconType = (svc["icon"] as? [String: Any])?["iconType"] as? String
+                else { continue }
+                result[iconType] = token
+            }
+            return result
+        }()
+
         return Video(
             id: videoId,
             title: title,
@@ -534,7 +553,10 @@ extension InnerTubeAPI {
             isLive: isLive,
             isShort: isShort,
             watchProgress: watchProgress,
-            badges: badges
+            badges: badges,
+            notInterestedToken: feedbackTokens["NOT_INTERESTED"],
+            dontLikeToken: feedbackTokens["DISLIKE"],
+            hideChannelToken: feedbackTokens["BLOCK_CHANNEL"]
         )
     }
 }

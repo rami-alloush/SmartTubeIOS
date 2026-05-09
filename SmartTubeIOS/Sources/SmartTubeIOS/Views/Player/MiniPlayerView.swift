@@ -26,6 +26,7 @@ struct MiniPlayerView: View {
                     .font(.caption.weight(.medium))
                     .lineLimit(1)
                     .foregroundStyle(.primary)
+                    .accessibilityIdentifier("miniPlayer.titleLabel")
                 Text(playerState.currentVideo?.channelTitle ?? "")
                     .font(.caption2)
                     .lineLimit(1)
@@ -62,6 +63,10 @@ struct MiniPlayerView: View {
         .background(.regularMaterial)
         .contentShape(Rectangle())
         .onTapGesture { playerState.expand() }
+        // Ensure child buttons remain individually discoverable by XCTest even though
+        // the enclosing HStack carries its own onTapGesture (which can cause SwiftUI
+        // to group all children into a single accessibility element).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("miniPlayer.bar")
         .overlay(alignment: .top) {
             Divider()

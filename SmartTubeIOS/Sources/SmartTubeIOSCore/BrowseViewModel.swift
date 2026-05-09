@@ -57,6 +57,7 @@ public final class BrowseViewModel {
     /// True when a non-nil auth token has been set via updateAuthToken(_:).
     /// Used to select between the authenticated YouTube endpoints and the local RSS feed path.
     private var hasAuthToken: Bool = false
+    private var hideObserverTasks: [Task<Void, Never>] = []
 
     public init(api: any InnerTubeAPIProtocol = InnerTubeAPI(), initialSection: BrowseSection? = nil) {
         self.api = api
@@ -66,6 +67,36 @@ public final class BrowseViewModel {
                 sections = [initial] + sections
             }
             currentSection = initial
+        }
+        observeFeedHideNotifications()
+    }
+
+    // MARK: - Feed hide handling
+
+    private func observeFeedHideNotifications() {
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideVideoFromFeed) {
+                guard let self, let videoId = note.userInfo?["videoId"] as? String else { continue }
+                self.removeVideo(id: videoId)
+            }
+        })
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideChannelFromFeed) {
+                guard let self, let channelId = note.userInfo?["channelId"] as? String else { continue }
+                self.removeChannel(id: channelId)
+            }
+        })
+    }
+
+    public func removeVideo(id: String) {
+        for i in videoGroups.indices {
+            videoGroups[i].videos.removeAll { $0.id == id }
+        }
+    }
+
+    public func removeChannel(id: String) {
+        for i in videoGroups.indices {
+            videoGroups[i].videos.removeAll { $0.channelId == id }
         }
     }
 

@@ -137,6 +137,8 @@ public struct SettingsView: View {
                 .accessibilityIdentifier("settings.landscapeAlwaysPlayToggle")
             Toggle("Picture in Picture", isOn: $store.settings.pipEnabled)
                 .accessibilityIdentifier("settings.pipToggle")
+            Toggle("In-App Mini Player", isOn: $store.settings.miniPlayerEnabled)
+                .accessibilityIdentifier("settings.miniPlayerToggle")
             #endif
         }
     }

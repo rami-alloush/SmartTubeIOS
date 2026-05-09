@@ -20,6 +20,10 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
     public var playlistId: String?
     public var playlistIndex: Int?
     public var badges: [String]
+    // Feed feedback tokens (session-scoped, from InnerTube menuRenderer)
+    public var notInterestedToken: String?  // "Not interested" — hide this video
+    public var dontLikeToken: String?       // "Don't like this video"
+    public var hideChannelToken: String?    // "Don't recommend channel"
 
     public init(
         id: String,
@@ -37,7 +41,10 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
         watchProgress: Double? = nil,
         playlistId: String? = nil,
         playlistIndex: Int? = nil,
-        badges: [String] = []
+        badges: [String] = [],
+        notInterestedToken: String? = nil,
+        dontLikeToken: String? = nil,
+        hideChannelToken: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -55,6 +62,9 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
         self.playlistId = playlistId
         self.playlistIndex = playlistIndex
         self.badges = badges
+        self.notInterestedToken = notInterestedToken
+        self.dontLikeToken = dontLikeToken
+        self.hideChannelToken = hideChannelToken
     }
 }
 

@@ -84,7 +84,11 @@ public final class WatchtimeTracker {
                 // Playback started but checkpoint was never reached — fire ping now.
                 await api.reportPlaybackStarted(videoId: oldVideoId, cpn: oldCPN, trackingURLs: oldURLs)
             }
-            let segStart = oldSegStart ?? flushPosition
+            // Use 0 when no prior checkpoint set a segment start so that the reported
+            // interval is [0, flushPosition] rather than [flushPosition, flushPosition].
+            // YouTube ignores zero-length watchtime segments (st == et), which would
+            // prevent cmt from being recorded and leave the watch-progress bar stale.
+            let segStart = oldSegStart ?? 0
             trackerLog.notice("transition flush: videoId=\(oldVideoId, privacy: .public) st=\(Int(segStart))s et=\(Int(flushPosition))s")
             await VideoStateStore.shared.save(videoId: oldVideoId, position: flushPosition, duration: flushDuration)
             await api.reportWatchtime(videoId: oldVideoId, cpn: oldCPN, trackingURLs: oldURLs,
@@ -116,12 +120,16 @@ public final class WatchtimeTracker {
         let localURLs = trackingURLs
 
         if segmentStart == nil {
-            segmentStart = position
+            // Use 0 as the segment start so the reported interval is [0, position]
+            // rather than [position, position]. YouTube ignores zero-length watchtime
+            // segments (st == et), which would prevent cmt from being recorded and
+            // leave the watch-progress bar stuck at a stale value.
+            segmentStart = 0
             trackerLog.notice("checkpoint (first): videoId=\(vid, privacy: .public) pos=\(Int(position))s — firing playbackStarted")
             await api.reportPlaybackStarted(videoId: vid, cpn: localCPN, trackingURLs: localURLs)
         }
 
-        let segStart = segmentStart ?? position
+        let segStart = segmentStart ?? 0
         trackerLog.notice("checkpoint: videoId=\(vid, privacy: .public) st=\(Int(segStart))s et=\(Int(position))s dur=\(Int(duration))s")
         await VideoStateStore.shared.save(videoId: vid, position: position, duration: duration)
         await api.reportWatchtime(videoId: vid, cpn: localCPN, trackingURLs: localURLs,

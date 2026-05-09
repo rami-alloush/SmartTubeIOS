@@ -203,6 +203,21 @@ public struct LibraryView: View {
                 savedScrollOffset = nil
             }
         }
+        #if os(iOS)
+        // On iOS, videos are opened via playerState.play(video:) rather than setting
+        // selectedVideo (which is tvOS-only). Mirror the selectedVideo scroll-save/restore
+        // logic by observing playerState.presentation transitions instead.
+        .onChange(of: playerState.presentation) { old, new in
+            if old == .hidden, new == .fullScreen {
+                // Player just launched from this tab — snapshot the scroll offset.
+                savedScrollOffset = scrollStore.scrollView?.contentOffset.y ?? 0
+            } else if old == .fullScreen, new != .fullScreen, let saved = savedScrollOffset {
+                // Player exited fullScreen (minimized or stopped) — schedule a restore.
+                restoreOffset = saved
+                savedScrollOffset = nil
+            }
+        }
+        #endif
         .onAppear {
             browseVM.select(section: BrowseSection(
                 id: selectedSection.id,
