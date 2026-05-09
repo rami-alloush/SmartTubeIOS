@@ -10,6 +10,17 @@ private let tubeLog = Logger(subsystem: appSubsystem, category: "InnerTube")
 
 extension InnerTubeAPI {
 
+    // MARK: - Visitor data helper
+
+    /// Extracts `responseContext.visitorData` from a browse response and stores it.
+    /// The stored token is included in subsequent home-feed requests so YouTube can
+    /// tailor recommendations to this specific device/session.
+    func updateVisitorData(from response: [String: Any]) {
+        guard let ctx = response["responseContext"] as? [String: Any],
+              let vd = ctx["visitorData"] as? String, !vd.isEmpty else { return }
+        visitorData = vd
+    }
+
     // MARK: - Home
 
     /// Fetches the home feed.
@@ -18,13 +29,15 @@ extension InnerTubeAPI {
     public func fetchHome(continuationToken: String? = nil) async throws -> VideoGroup {
         let isAuth = authToken != nil
         var body = makeBody(client: isAuth ? tvClientContext : webClientContext,
-                            continuationToken: continuationToken)
+                            continuationToken: continuationToken,
+                            includeVisitorData: true)
         if continuationToken == nil {
             body["browseId"] = "FEwhat_to_watch"
         }
         let data = isAuth
             ? try await postTV(endpoint: "browse", body: body)
             : try await post(endpoint: "browse", body: body)
+        updateVisitorData(from: data)
         return try parseVideoGroup(from: data, title: BrowseSection.SectionType.home.defaultTitle)
     }
 
@@ -34,13 +47,15 @@ extension InnerTubeAPI {
     public func fetchHomeRows(continuationToken: String? = nil) async throws -> [VideoGroup] {
         let isAuth = authToken != nil
         var body = makeBody(client: isAuth ? tvClientContext : webClientContext,
-                            continuationToken: continuationToken)
+                            continuationToken: continuationToken,
+                            includeVisitorData: true)
         if continuationToken == nil {
             body["browseId"] = "FEwhat_to_watch"
         }
         let data = isAuth
             ? try await postTV(endpoint: "browse", body: body)
             : try await post(endpoint: "browse", body: body)
+        updateVisitorData(from: data)
         let rows = parseVideoGroupRows(from: data)
         tubeLog.notice("fetchHomeRows → \(rows.count, privacy: .public) shelves")
         return rows

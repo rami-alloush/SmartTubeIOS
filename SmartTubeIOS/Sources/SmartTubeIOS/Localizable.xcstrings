@@ -2431,6 +2431,9 @@
         }
       }
     },
+    "Clear History" : {
+
+    },
     "Clear Queue" : {
 
     },
@@ -3573,6 +3576,12 @@
           }
         }
       }
+    },
+    "Don't Like This Video" : {
+
+    },
+    "Don't Recommend Channel" : {
+
     },
     "Download Failed" : {
       "comment" : "Download failure alert title",
@@ -7380,6 +7389,9 @@
         }
       }
     },
+    "Not Interested" : {
+
+    },
     "Nothing" : {
       "comment" : "SponsorBlock action option — play segment without action",
       "extractionState" : "manual",
@@ -8882,6 +8894,9 @@
         }
       }
     },
+    "Recent" : {
+
+    },
     "Recommended" : {
       "comment" : "Search suggestions section header when query is empty",
       "extractionState" : "manual",
@@ -9133,6 +9148,9 @@
           }
         }
       }
+    },
+    "Remove %@ from history" : {
+
     },
     "Remove SponsorBlock Exclusion" : {
       "comment" : "Channel toolbar button — removes channel from SponsorBlock exclusion list",

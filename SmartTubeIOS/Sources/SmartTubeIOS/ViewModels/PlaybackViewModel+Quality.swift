@@ -51,6 +51,7 @@ extension PlaybackViewModel {
         itemObserverTask?.cancel()
         let asset = AVURLAsset(url: streamURL, options: uaOpts)
         let item = AVPlayerItem(asset: asset)
+        item.audioTimePitchAlgorithm = .spectral
         if let cap = qualityCap, hlsVariantURLs[cap] == nil {
             // No direct variant URL — fall back to preferredMaximumResolution hint.
             let h = CGFloat(cap)
@@ -65,6 +66,11 @@ extension PlaybackViewModel {
                     // Resume playback at the same speed the user had before the switch.
                     self.player.rate = Float(self.settings.playbackSpeed)
                     self.isPlaying = true
+                    // Re-discover audio tracks on the new item so the audio selector
+                    // reflects the correct options and the active track is applied.
+                    // Without this, audioSelectionGroup/audioOptionsByID from the old
+                    // item remain stale, causing silent audio after a quality change.
+                    self.loadAudioTracks(from: item)
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
@@ -215,6 +221,7 @@ extension PlaybackViewModel {
         ]
         let asset = AVURLAsset(url: hlsURL, options: uaOpts)
         let item = AVPlayerItem(asset: asset)
+        item.audioTimePitchAlgorithm = .spectral
         // 1080p + 8 Mbps keeps ABR in the H.264 tier without needing manifest parsing.
         item.preferredMaximumResolution = CGSize(width: 1920, height: 1080)
         item.preferredPeakBitRate = 8_000_000
@@ -227,6 +234,7 @@ extension PlaybackViewModel {
                     if time > 0 { self.seek(to: time) }
                     self.player.rate = Float(self.settings.playbackSpeed)
                     self.isPlaying = true
+                    self.loadAudioTracks(from: item)
                     playerLog.notice("✅ H.264-capped AVPlayerItem readyToPlay")
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"

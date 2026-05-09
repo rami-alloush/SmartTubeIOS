@@ -2,9 +2,19 @@ import Foundation
 import Testing
 @testable import SmartTubeIOSCore
 
+// MARK: - Helpers
+
+/// Yields control enough times so internal @MainActor Tasks spawned by
+/// the ViewModel can complete against an immediately-returning mock API.
+private func waitForSubsTasks() async {
+    for _ in 0..<3 { await Task.yield() }
+    try? await Task.sleep(for: .milliseconds(50))
+}
+
 // MARK: - SubscriptionsSortTests
 
 @Suite("Subscriptions Sort Order")
+@MainActor
 struct SubscriptionsSortTests {
 
     /// Subscriptions videos must be sorted newest-first by publishedAt.
@@ -52,5 +62,59 @@ struct SubscriptionsSortTests {
         #expect(sorted[0].title == "alpha Channel")
         #expect(sorted[1].title == "Mango Talks")
         #expect(sorted[2].title == "Zebra Channel")
+    }
+
+    /// After paginating subscriptions, the merged feed must remain globally sorted
+    /// newest-first even when page 2 videos interleave with page 1 videos.
+    ///
+    /// Reproduces the bug: "today → 4 days ago → 2 days ago → 1 day ago" (wrong)
+    /// Expected:           "today → 2 days ago → 1 day ago → 4 days ago" (correct)
+    @Test func paginatedSubscriptionsRemainGloballySorted() async {
+        let now = Date()
+        let vidToday = Video(id: "today", title: "Today",   channelTitle: "Ch",
+                             publishedAt: now)
+        let vid4D    = Video(id: "4d",    title: "4 days",  channelTitle: "Ch",
+                             publishedAt: now.addingTimeInterval(-4 * 86_400))
+        let vid2D    = Video(id: "2d",    title: "2 days",  channelTitle: "Ch",
+                             publishedAt: now.addingTimeInterval(-2 * 86_400))
+        let vid1D    = Video(id: "1d",    title: "1 day",   channelTitle: "Ch",
+                             publishedAt: now.addingTimeInterval(-1 * 86_400))
+
+        // Page 1: today and 4 days ago (sorted newest-first as API returns them)
+        let mock = MockInnerTubeAPI()
+        mock.subscriptionsResult = VideoGroup(
+            title: "Subs",
+            videos: [vidToday, vid4D],
+            nextPageToken: "page2token"
+        )
+
+        let section = BrowseSection(id: "subscriptions", title: "Subscriptions", type: .subscriptions)
+        let vm = BrowseViewModel(api: mock, initialSection: section)
+        await vm.updateAuthToken("fake-token")
+        vm.loadContent(for: section, refresh: true, source: "test")
+        await waitForSubsTasks()
+
+        #expect(vm.videoGroups[0].videos.count == 2, "page 1 should load 2 videos")
+
+        // Page 2: 2 days ago and 1 day ago (sorted newest-first by fetchSubscriptions)
+        // These interleave with page 1 — 1d and 2d belong between "today" and "4d".
+        mock.subscriptionsResult = VideoGroup(
+            title: "Subs",
+            videos: [vid2D, vid1D],
+            nextPageToken: nil
+        )
+
+        // Trigger pagination using the last (oldest) video from page 1.
+        let lastOfPage1 = vm.videoGroups[0].videos.last!
+        vm.loadMoreIfNeeded(lastVideo: lastOfPage1)
+        await waitForSubsTasks()
+
+        let merged = vm.videoGroups[0].videos
+        #expect(merged.count == 4, "all 4 videos should be present after merge")
+        // Strict newest-first: today > 1d > 2d > 4d
+        #expect(merged[0].id == "today")
+        #expect(merged[1].id == "1d")
+        #expect(merged[2].id == "2d")
+        #expect(merged[3].id == "4d")
     }
 }

@@ -84,6 +84,14 @@ public final class HomeViewModel {
         return result
     }
 
+    /// Non-Short videos from the interleaved home feed.
+    /// Used by `homeShelves` to populate the main grid (Shorts are shown separately).
+    public var homeRegularVideos: [Video] { mergedVideos.filter { !$0.isShort } }
+
+    /// Short videos from the interleaved home feed.
+    /// Used by `homeShelves` to populate the dedicated Shorts row.
+    public var homeShortsVideos: [Video] { mergedVideos.filter { $0.isShort } }
+
     // MARK: - Dependencies
 
     private let api: any InnerTubeAPIProtocol
@@ -195,6 +203,11 @@ public final class HomeViewModel {
                 let existingIds = Set(sections[idx].videos.map(\.id))
                 let deduplicated = newVideos.filter { !existingIds.contains($0.id) }
                 sections[idx].videos.append(contentsOf: deduplicated)
+                // Re-sort after merging so videos from different pages remain in
+                // strict newest-first order across pagination boundaries.
+                if sections[idx].section.type == .subscriptions {
+                    sections[idx].videos.sort { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
+                }
                 sections[idx].nextPageToken = nextToken
                 sections[idx].isLoadingMore = false
             }

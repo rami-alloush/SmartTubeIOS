@@ -249,11 +249,26 @@ public struct HomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let hideShorts = store.settings.hideShorts
-                let videos = hideShorts ? homeVM.mergedVideos.filter { !$0.isShort } : homeVM.mergedVideos
+                let regularVideos = homeVM.homeRegularVideos
+                let shortsVideos = hideShorts ? [] : homeVM.homeShortsVideos
                 ScrollView {
+                    if !shortsVideos.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Shorts")
+                                .font(.headline)
+                                .padding(.horizontal)
+                                .padding(.top, 16)
+                                .padding(.bottom, 4)
+                            ShortsRowSection(
+                                videos: shortsVideos,
+                                onSelect: { selectVideo($0, from: shortsVideos) }
+                            )
+                        }
+                        .accessibilityIdentifier("home.shortsRow")
+                    }
                     VideoGridSection(
-                        videos: videos,
-                        onSelect: { selectVideo($0, from: videos) },
+                        videos: regularVideos,
+                        onSelect: { selectVideo($0, from: regularVideos) },
                         loadMore: { homeVM.loadMoreMerged() }
                     )
                     let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }

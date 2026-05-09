@@ -105,7 +105,16 @@ public actor InnerTubeAPI {
     public func setAuthToken(_ token: String?) {
         let msg = token != nil ? "token(\(token!.prefix(8))…)" : "nil"
         tubeLog.notice("setAuthToken: \(msg, privacy: .public)")
-
         self.authToken = token
+    }
+
+    // MARK: - Visitor data
+
+    /// Clears the stored per-device `visitorData` token.
+    /// Called when the user disables "Per-Device Recommendations" in Settings so
+    /// the next home-feed request uses YouTube's default shared recommendation algorithm.
+    public func resetVisitorData() {
+        visitorData = nil
+        tubeLog.notice("visitorData cleared (per-device recommendations disabled)")
     }
 }

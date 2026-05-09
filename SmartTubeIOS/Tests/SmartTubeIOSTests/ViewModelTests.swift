@@ -263,6 +263,24 @@ struct HomeViewModelTests {
         let recs = vm.sections.first { $0.section.type == .home }?.videos ?? []
         #expect(vm.mergedVideos == recs)
     }
+
+    @Test("homeRegularVideos excludes Shorts and homeShortsVideos contains only Shorts")
+    func homePartitionsShorts() async {
+        let mock = MockInnerTubeAPI()
+        let regularVideo = makeVideo("reg0_AAAA")
+        let shortVideo = Video(id: "srt0_BBBB", title: "A Short", channelTitle: "Channel", isShort: true)
+        mock.homeRowsResult = [VideoGroup(title: "Rec", videos: [regularVideo, shortVideo])]
+        mock.subscriptionsResult = VideoGroup(title: "Subs", videos: [])
+
+        let vm = HomeViewModel(api: mock)
+        vm.load()
+        await waitForTasks()
+
+        #expect(vm.homeRegularVideos.allSatisfy { !$0.isShort })
+        #expect(vm.homeShortsVideos.allSatisfy { $0.isShort })
+        #expect(vm.homeRegularVideos.map(\.id).contains("reg0_AAAA"))
+        #expect(vm.homeShortsVideos.map(\.id).contains("srt0_BBBB"))
+    }
 }
 
 // MARK: - BrowseViewModelTests

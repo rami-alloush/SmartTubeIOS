@@ -421,6 +421,11 @@ public final class BrowseViewModel {
                 } else {
                     browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
                     mergeIntoFirstGroup(group)
+                    // Re-sort globally after merging so videos from different pages
+                    // remain in strict newest-first order across pagination boundaries.
+                    if !videoGroups.isEmpty {
+                        videoGroups[0].videos.sort { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
+                    }
                 }
             case .history:
                 let group = try await api.fetchHistory(continuationToken: token)

@@ -397,3 +397,45 @@ struct VideoRowSection: View {
         #endif
     }
 }
+
+// MARK: - ShortsRowSection
+
+/// Horizontal scrolling row of portrait (9:16) Shorts cards.
+/// Used by HomeView to display Shorts separately from regular videos.
+struct ShortsRowSection: View {
+    let videos: [Video]
+    let onSelect: (Video) -> Void
+
+    /// Card width: ~120pt on iOS/iPadOS; ~200pt on tvOS.
+    #if os(tvOS)
+    private let cardWidth: CGFloat = 200
+    #else
+    private let cardWidth: CGFloat = 120
+    #endif
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: videoGridRowSpacing) {
+                ForEach(videos) { video in
+                    #if os(tvOS)
+                    Button { onSelect(video) } label: {
+                        ShortsCardView(video: video, onTap: { onSelect(video) })
+                            .frame(width: cardWidth, height: cardWidth * 16 / 9)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("shorts.card.\(video.id)")
+                    #else
+                    ShortsCardView(video: video, onTap: { onSelect(video) })
+                        .frame(width: cardWidth, height: cardWidth * 16 / 9)
+                        .accessibilityIdentifier("shorts.card.\(video.id)")
+                    #endif
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 4)
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+}

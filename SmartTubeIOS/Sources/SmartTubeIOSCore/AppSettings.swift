@@ -44,6 +44,10 @@ public struct AppSettings: Codable {
     public var defaultSection: String
     public var compactThumbnails: Bool
     public var hideShorts: Bool
+    /// When `true` (default), a per-device `visitorData` token is included in home-feed
+    /// requests so YouTube tailors recommendations to this device.
+    /// When `false`, the token is cleared and YouTube returns its default shared feed.
+    public var perDeviceRecommendationsEnabled: Bool
     public var themeName: ThemeName
     /// Ordered list of section types visible in the sidebar/tab bar.
     /// When empty, all default sections are shown.
@@ -176,6 +180,7 @@ public struct AppSettings: Codable {
         defaultSection       = BrowseSection.SectionType.home.rawValue
         compactThumbnails    = false
         hideShorts           = false
+        perDeviceRecommendationsEnabled = true
         themeName            = .system
         enabledSections      = BrowseSection.defaultSections.map(\.type)
         historyState         = .enabled

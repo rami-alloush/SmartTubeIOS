@@ -411,6 +411,10 @@ extension PlaybackViewModel {
                 options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]]
             )
             let item = AVPlayerItem(asset: playerAsset)
+            // .spectral gives the highest-quality pitch-preserving time-stretch at
+            // non-1× speeds, reducing the tinny/phase artefacts audible on AirPods
+            // compared to the default .timeDomain algorithm.
+            item.audioTimePitchAlgorithm = .spectral
             // Only use the preferredMaximumResolution hint when no direct variant URL was available.
             if settings.preferredQuality != .auto, let maxH = settings.preferredQuality.maxHeight,
                initialStreamURL == masterStreamURL {

@@ -80,6 +80,7 @@ struct AppSettingsTests {
         #expect(settings.sponsorBlockEnabled)
         #expect(!settings.deArrowEnabled)
         #expect(settings.themeName == .system)
+        #expect(settings.perDeviceRecommendationsEnabled == true)
     }
 
     @Test func settingsEncodeDecode() throws {

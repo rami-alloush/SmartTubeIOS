@@ -12,10 +12,13 @@ extension InnerTubeAPI {
 
     // MARK: - Body builders
 
-    func makeBody(client: [String: Any], continuationToken: String? = nil) -> [String: Any] {
+    func makeBody(client: [String: Any], continuationToken: String? = nil, includeVisitorData: Bool = false) -> [String: Any] {
         var body: [String: Any] = ["context": client]
         if let token = continuationToken {
             body["continuation"] = token
+        }
+        if includeVisitorData, let visitor = visitorData {
+            body["visitorData"] = visitor
         }
         return body
     }

@@ -90,6 +90,9 @@ struct AppEntry: App {
                 .onChange(of: settingsStore.settings.historyState, initial: true) { _, newState in
                     browseViewModel.updateHistoryEnabled(newState == .enabled)
                 }
+                .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
+                    if !enabled { Task { await api.resetVisitorData() } }
+                }
                 .onOpenURL { url in handleOpenURL(url) }
         }
         .defaultSize(width: 1280, height: 800)
@@ -122,6 +125,9 @@ struct AppEntry: App {
                 .onChange(of: settingsStore.settings.historyState, initial: true) { _, newState in
                     browseViewModel.updateHistoryEnabled(newState == .enabled)
                 }
+                .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
+                    if !enabled { Task { await api.resetVisitorData() } }
+                }
         }
         #else
         WindowGroup {
@@ -152,6 +158,9 @@ struct AppEntry: App {
                     }
                     .onChange(of: settingsStore.settings.historyState, initial: true) { _, newState in
                         browseViewModel.updateHistoryEnabled(newState == .enabled)
+                    }
+                    .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
+                        if !enabled { Task { await api.resetVisitorData() } }
                     }
                     .onOpenURL { url in handleOpenURL(url) }
                     .onChange(of: scenePhase, initial: true) { _, phase in

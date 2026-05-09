@@ -37,7 +37,6 @@ extension PlayerView {
                     showMoreMenu = false
                 }
 
-            GeometryReader { geo in
             ScrollView {
             VStack(spacing: 0) {
                 // Speed
@@ -202,6 +201,7 @@ extension PlayerView {
                 .buttonStyle(.plain)
                 .foregroundStyle(.primary)
                 .disabled(downloadService.state.isActive)
+                .accessibilityIdentifier("player.moreMenu.downloadButton")
                 Divider()
                 // Captions (only when tracks are available)
                 if !vm.availableCaptions.isEmpty {
@@ -307,7 +307,9 @@ extension PlayerView {
             }
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .frame(maxHeight: geo.size.height * 0.75 - geo.safeAreaInsets.top)
+            // Static max height avoids GeometryReader/containerRelativeFrame feedback
+            // loops that crash SwiftUI's AttributeGraph (SIGSEGV/SIGBUS recursion).
+            .frame(maxHeight: 520)
             #if os(tvOS)
             .onMoveCommand { direction in
                 let rows = moreMenuVisibleRows
@@ -342,9 +344,9 @@ extension PlayerView {
             }
             #endif
             .padding(.horizontal, 8)
-            .padding(.bottom, geo.safeAreaInsets.bottom + 8)
+            .safeAreaPadding(.bottom)
+            .padding(.bottom, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            }
         }
         .ignoresSafeArea()
     }
