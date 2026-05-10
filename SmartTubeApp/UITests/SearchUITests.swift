@@ -67,14 +67,16 @@ final class SearchUITests: XCTestCase {
         openSearch()
         let bar = searchBar
         guard bar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.bar not found")
+            XCTFail("search.bar not found")
+            return
         }
         bar.tap()
         bar.typeText("swift")
 
         let suggestions = app.tables["search.suggestionsContainer"]
         guard suggestions.waitForExistence(timeout: 10) else {
-            throw XCTSkip("search.suggestionsContainer did not appear within 10 s — network may be unavailable")
+            XCTFail("search.suggestionsContainer did not appear within 10 s — network may be unavailable")
+            return
         }
         XCTAssertGreaterThan(suggestions.cells.count, 0,
                              "At least one suggestion should appear after typing 'swift'")
@@ -86,7 +88,8 @@ final class SearchUITests: XCTestCase {
         openSearch()
         let bar = searchBar
         guard bar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.bar not found")
+            XCTFail("search.bar not found")
+            return
         }
         bar.tap()
         bar.typeText("swift")
@@ -109,10 +112,12 @@ final class SearchUITests: XCTestCase {
         search(for: "swift programming")
         let results = app.scrollViews["search.results"]
         guard results.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.results container did not appear — network may be unavailable")
+            XCTFail("search.results container did not appear — network may be unavailable")
+            return
         }
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards appeared in search results within 20 s")
+            XCTFail("No video cards appeared in search results within 20 s")
+            return
         }
     }
 
@@ -131,7 +136,8 @@ final class SearchUITests: XCTestCase {
 
         let filterButton = app.buttons["search.filterButton"]
         guard filterButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.filterButton not found")
+            XCTFail("search.filterButton not found")
+            return
         }
         filterButton.tap()
 
@@ -154,13 +160,15 @@ final class SearchUITests: XCTestCase {
 
         let filterButton = app.buttons["search.filterButton"]
         guard filterButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.filterButton not found")
+            XCTFail("search.filterButton not found")
+            return
         }
         filterButton.tap()
 
         let sheet = app.otherElements["search.filterSheet"]
         guard sheet.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.filterSheet did not appear")
+            XCTFail("search.filterSheet did not appear")
+            return
         }
 
         // Select "This week" in the Upload date section.
@@ -192,7 +200,8 @@ final class SearchUITests: XCTestCase {
     func testTappingResultOpensPlayer() throws {
         search(for: "swift programming")
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in search results — network may be unavailable")
+            XCTFail("No video cards in search results — network may be unavailable")
+            return
         }
         XCTAssertTrue(UITestHelpers.openPlayer(from: firstCard, in: app),
                       "player.titleLabel should appear after tapping a search result")
@@ -205,7 +214,7 @@ final class SearchUITests: XCTestCase {
 
         // Re-focus the search bar to show the suggestions/history list.
         let bar = searchBar
-        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        guard bar.waitForExistence(timeout: 5) else { XCTFail("search.bar not found"); return }
         bar.tap()
         // Clear the query so the full history list is shown.
         app.buttons["search.clearButton"].firstMatch.tap()
@@ -219,13 +228,14 @@ final class SearchUITests: XCTestCase {
         search(for: "history tap test")
 
         let bar = searchBar
-        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        guard bar.waitForExistence(timeout: 5) else { XCTFail("search.bar not found"); return }
         bar.tap()
         app.buttons["search.clearButton"].firstMatch.tap()
 
         let historyRow = app.buttons["search.history.history tap test"]
         guard historyRow.waitForExistence(timeout: 5) else {
-            throw XCTSkip("History row not found — previous search may not have persisted")
+            XCTFail("History row not found — previous search may not have persisted")
+            return
         }
         historyRow.tap()
 
@@ -239,13 +249,14 @@ final class SearchUITests: XCTestCase {
         search(for: "entry to delete")
 
         let bar = searchBar
-        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        guard bar.waitForExistence(timeout: 5) else { XCTFail("search.bar not found"); return }
         bar.tap()
         app.buttons["search.clearButton"].firstMatch.tap()
 
         let deleteButton = app.buttons["Remove entry to delete from history"]
         guard deleteButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Delete button for history entry not found")
+            XCTFail("Delete button for history entry not found")
+            return
         }
         deleteButton.tap()
 
@@ -259,13 +270,14 @@ final class SearchUITests: XCTestCase {
         search(for: "clear all test b")
 
         let bar = searchBar
-        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("search.bar not found") }
+        guard bar.waitForExistence(timeout: 5) else { XCTFail("search.bar not found"); return }
         bar.tap()
         app.buttons["search.clearButton"].firstMatch.tap()
 
         let clearAll = app.buttons["search.history.clearAll"]
         guard clearAll.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Clear History button not found")
+            XCTFail("Clear History button not found")
+            return
         }
         clearAll.tap()
 

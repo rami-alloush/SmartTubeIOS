@@ -33,11 +33,12 @@ final class WatchLaterContextMenuUITests: XCTestCase {
     // MARK: - Helpers
 
     /// Navigates to the Home tab and waits for at least one video card.
-    /// Returns the first card or throws XCTSkip when the feed is unavailable.
+    /// Calls XCTFail if the feed is unavailable (network is always up in CI).
     private func firstHomeCard() throws -> XCUIElement {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            XCTFail("No video cards on Home — network unavailable or feed empty")
+            return app.otherElements.firstMatch  // unreachable (continueAfterFailure = false)
         }
         return card
     }

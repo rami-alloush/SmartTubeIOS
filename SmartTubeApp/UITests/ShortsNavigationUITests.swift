@@ -367,13 +367,14 @@ final class ShortsLiveSwipeUITests: XCTestCase {
     }
 
     /// Scrolls the chip bar left until the Shorts chip is in view then taps it.
-    /// Throws XCTSkip if the Shorts chip is not present (section disabled in settings).
+    /// Fails the test (XCTFail) if the Shorts chip is not present.
     private func navigateToShortsChip() throws {
         tapTab(named: "Home")
 
         let shortsChip = app.buttons["Shorts"]
         guard shortsChip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Shorts chip not visible — --uitesting-enable-shorts may not have applied in time")
+            XCTFail("Shorts chip not visible — --uitesting-enable-shorts may not have applied in time")
+            return
         }
 
         // Scroll chip bar until Shorts is fully on-screen, then tap.
@@ -437,7 +438,8 @@ final class ShortsLiveSwipeUITests: XCTestCase {
 
         // Wait for real Shorts to load from the network.
         guard let firstCard = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No Shorts loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No Shorts loaded within 20 s — network unavailable or feed empty")
+            return
         }
 
         // Tap the first Short to open ShortsPlayerView.
@@ -465,7 +467,8 @@ final class ShortsLiveSwipeUITests: XCTestCase {
         try navigateToShortsChip()
 
         guard let firstCard = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No Shorts loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No Shorts loaded within 20 s — network unavailable or feed empty")
+            return
         }
         firstCard.tap()
 

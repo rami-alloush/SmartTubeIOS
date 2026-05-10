@@ -54,10 +54,12 @@ final class ChannelViewUITests: XCTestCase {
     private func openChannelFromPlayer() throws -> Bool {
         try searchAndWaitForCards(query: Self.searchQuery)
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No search results — network unavailable")
+            XCTFail("No search results — network unavailable")
+            return false
         }
         guard UITestHelpers.openPlayer(from: firstCard, in: app) else {
-            throw XCTSkip("Player did not open from search result")
+            XCTFail("Player did not open from search result")
+            return false
         }
 
         // Controls start hidden (controlsVisible = false on init).
@@ -96,14 +98,16 @@ final class ChannelViewUITests: XCTestCase {
         // otherwise open via player → channel navigation.
         try searchAndWaitForCards(query: Self.searchQuery)
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No search results — network unavailable")
+            XCTFail("No search results — network unavailable")
+            return
         }
         // Open the first result in the player.
         let firstCard = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH 'video.card.'"))
             .firstMatch
         guard UITestHelpers.openPlayer(from: firstCard, in: app) else {
-            throw XCTSkip("Player did not open")
+            XCTFail("Player did not open")
+            return
         }
         // Controls start hidden — tap left-center to show them (avoids interactive button areas).
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).tap()
@@ -147,7 +151,8 @@ final class ChannelViewUITests: XCTestCase {
             throw XCTSkip("Could not navigate to ChannelView from player")
         }
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards appeared in channel grid within 20 s")
+            XCTFail("No video cards appeared in channel grid within 20 s")
+            return
         }
     }
 

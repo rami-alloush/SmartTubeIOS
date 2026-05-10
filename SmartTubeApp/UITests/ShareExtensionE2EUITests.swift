@@ -80,10 +80,11 @@ final class ShareExtensionE2EUITests: XCTestCase {
         // 5. The video player must open.
         let titleLabel = smartTube.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip(
+            XCTFail(
                 "player.titleLabel did not appear within 20 s — " +
                 "SmartTube opened but InnerTube may not have resolved the video (network unavailable)"
             )
+            return
         }
 
         UITestHelpers.assertNoPlayerErrorBanner(in: smartTube)
@@ -104,11 +105,13 @@ final class ShareExtensionE2EUITests: XCTestCase {
         try tapExtension(named: kExtensionName)
 
         guard smartTube.wait(for: .runningForeground, timeout: 15) else {
-            throw XCTSkip("SmartTube did not open — skipping re-foreground check")
+            XCTFail("SmartTube did not open — skipping re-foreground check")
+            return
         }
 
         guard smartTube.staticTexts["player.titleLabel"].firstMatch.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Player did not appear — network unavailable")
+            XCTFail("Player did not appear — network unavailable")
+            return
         }
 
         // Dismiss the player.

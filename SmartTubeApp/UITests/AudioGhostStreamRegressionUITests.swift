@@ -55,15 +55,17 @@ final class PlayerGhostStreamRegressionUITests: XCTestCase {
     }
 
     /// Opens the player from the first Home video card.
-    /// Returns the video title or throws XCTSkip if the network is unavailable.
+    /// Calls XCTFail if the network is unavailable or the player does not open.
     @discardableResult
     private func openPlayerFromHome() throws -> String {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            XCTFail("No video cards on Home — network unavailable or feed empty")
+            return ""
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s")
+            XCTFail("Player did not open within 15 s")
+            return ""
         }
         return titleLabel.label
     }
@@ -91,7 +93,8 @@ final class PlayerGhostStreamRegressionUITests: XCTestCase {
             return cards.firstMatch
         }()
         guard UITestHelpers.openPlayer(from: secondCard, in: app) else {
-            throw XCTSkip("Second player did not open within 15 s")
+            XCTFail("Second player did not open within 15 s")
+            return
         }
 
         // Allow a few seconds for any ghost-stream audio conflict to manifest.
@@ -121,14 +124,16 @@ final class PlayerGhostStreamRegressionUITests: XCTestCase {
             }
         }
         guard nextEnabled else {
-            throw XCTSkip("player.nextBtn did not become enabled within 20 s")
+            XCTFail("player.nextBtn did not become enabled within 20 s")
+            return
         }
         nextButton.tap()
 
         // Wait for the second video to start loading.
         let secondTitle = app.staticTexts["player.titleLabel"].firstMatch
         guard secondTitle.waitForExistence(timeout: 15) else {
-            throw XCTSkip("Second video title did not appear after tapping next")
+            XCTFail("Second video title did not appear after tapping next")
+            return
         }
 
         Thread.sleep(forTimeInterval: 5)
@@ -183,7 +188,8 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         XCTAssertTrue(chipBar.waitForExistence(timeout: 10), "home.chipBar must appear")
         let shortsChip = chipBar.buttons["Shorts"]
         guard shortsChip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Shorts chip not found")
+            XCTFail("Shorts chip not found")
+            return
         }
         UITestHelpers.scrollChipIntoView(shortsChip, in: chipBar, app: app)
         shortsChip.tap()
@@ -192,7 +198,8 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         // the predicate matching stale Home-feed cards still in the tree.
         let sectionFeed = app.scrollViews["home.sectionFeed"]
         guard sectionFeed.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Shorts section feed did not appear within 20 s")
+            XCTFail("Shorts section feed did not appear within 20 s")
+            return
         }
 
         let feedPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -200,7 +207,8 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 10) == .completed else {
-            throw XCTSkip("Shorts feed did not load within 10 s")
+            XCTFail("Shorts feed did not load within 10 s")
+            return
         }
         cards.firstMatch.tap()
         XCTAssertTrue(indexLabel.waitForExistence(timeout: 15),
@@ -249,7 +257,8 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         let navBarPred = NSPredicate(format: "identifier CONTAINS 'Channel'")
         let channelNavBar = app.navigationBars.matching(navBarPred).firstMatch
         guard channelNavBar.waitForExistence(timeout: 15) else {
-            throw XCTSkip("ChannelView did not appear within 15 s")
+            XCTFail("ChannelView did not appear within 15 s")
+            return
         }
 
         // Navigate back via the system back button / swipe.

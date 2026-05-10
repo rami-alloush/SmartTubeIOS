@@ -29,6 +29,9 @@ public final class SettingsStore {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-reset-settings") {
             self.settings = AppSettings()
         }
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-disable-sponsorblock") {
+            self.settings.sponsorBlockEnabled = false
+        }
     }
 
     private func save() {

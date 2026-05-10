@@ -218,13 +218,14 @@ final class SettingsUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
-            // Network unavailable — skip but don't fail; toggle still exercised above.
+            // Network unavailable — fail; restore toggle state before returning.
             if !wasOn {
                 openSettings()
                 UITestHelpers.scrollUntilVisible(toggle, in: form)
                 toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).tap()
             }
-            throw XCTSkip("Home feed did not load within 20 s — network unavailable")
+            XCTFail("Home feed did not load within 20 s — network unavailable")
+            return
         }
         cards.firstMatch.tap()
 
@@ -302,7 +303,8 @@ final class SettingsUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
-            throw XCTSkip("Home feed did not load within 20 s — network unavailable")
+            XCTFail("Home feed did not load within 20 s — network unavailable")
+            return
         }
         cards.firstMatch.tap()
 

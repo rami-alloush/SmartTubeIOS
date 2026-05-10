@@ -501,7 +501,11 @@ extension PlaybackViewModel {
             UIApplication.shared.isIdleTimerDisabled = true
             updateNowPlayingInfo()
             #endif
-            scheduleControlsHide()
+            // Only reschedule the auto-hide timer when controls are already visible.
+            // Calling scheduleControlsHide() unconditionally cancels any timer that
+            // was started by a user tap during loading, extending the visible window
+            // unexpectedly and breaking UI tests that wait for the auto-hide.
+            if controlsVisible { scheduleControlsHide() }
         } catch {
             playerLog.error("❌ loadAsync error: \(String(describing: error))")
             self.error = error

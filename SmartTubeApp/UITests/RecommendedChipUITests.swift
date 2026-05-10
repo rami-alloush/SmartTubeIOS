@@ -64,7 +64,8 @@ final class RecommendedChipUITests: XCTestCase {
         // Wait for the section feed container to appear.
         let feedScrollView = app.scrollViews["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
-            throw XCTSkip("home.sectionFeed did not appear within 30 s — feed may not have loaded")
+            XCTFail("home.sectionFeed did not appear within 30 s — feed may not have loaded")
+            return
         }
 
         // At least one video card must appear.
@@ -73,7 +74,8 @@ final class RecommendedChipUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
-            throw XCTSkip("No video cards in Recommended feed within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards in Recommended feed within 20 s — network unavailable or feed empty")
+            return
         }
 
         // Assert no HTTP error alert appeared.
@@ -125,13 +127,15 @@ final class RecommendedChipUITests: XCTestCase {
 
         let feedScrollView = app.scrollViews["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
-            throw XCTSkip("home.sectionFeed did not appear within 30 s")
+            XCTFail("home.sectionFeed did not appear within 30 s")
+            return
         }
 
         let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
         let firstCard = feedScrollView.descendants(matching: .any).matching(cardPredicate).firstMatch
         guard firstCard.waitForExistence(timeout: 20) else {
-            throw XCTSkip("No video cards in Recommended feed within 20 s")
+            XCTFail("No video cards in Recommended feed within 20 s")
+            return
         }
 
         firstCard.tap()
@@ -195,7 +199,8 @@ final class RecommendedChipUITests: XCTestCase {
 
         let feedScrollView = app.scrollViews["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
-            throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
+            XCTFail("home.sectionFeed did not appear within 65 s — network unavailable")
+            return
         }
 
         let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -203,7 +208,8 @@ final class RecommendedChipUITests: XCTestCase {
         let initialLoad = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                     object: cards)
         guard XCTWaiter().wait(for: [initialLoad], timeout: 20) == .completed else {
-            throw XCTSkip("No video cards appeared within 20 s — network unavailable")
+            XCTFail("No video cards appeared within 20 s — network unavailable")
+            return
         }
 
         let countBefore = cards.count
@@ -220,7 +226,8 @@ final class RecommendedChipUITests: XCTestCase {
         let result = XCTWaiter().wait(for: [moreLoaded], timeout: 20)
 
         guard result == .completed else {
-            throw XCTSkip("No additional cards loaded within 20 s after scrolling — server may not have returned a continuation token")
+            XCTFail("No additional cards loaded within 20 s after scrolling — server may not have returned a continuation token")
+            return
         }
 
         XCTAssertGreaterThan(cards.count, countBefore,
@@ -248,7 +255,8 @@ final class RecommendedChipUITests: XCTestCase {
 
         let feedScrollView = app.scrollViews["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
-            throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
+            XCTFail("home.sectionFeed did not appear within 65 s — network unavailable")
+            return
         }
 
         let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -256,7 +264,8 @@ final class RecommendedChipUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
-            throw XCTSkip("No video cards appeared within 20 s — network unavailable")
+            XCTFail("No video cards appeared within 20 s — network unavailable")
+            return
         }
 
         // Check up to the first 6 visible cards so the test finishes quickly.

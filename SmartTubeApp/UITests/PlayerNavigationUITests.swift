@@ -97,7 +97,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
 
         card.tap()
@@ -110,7 +111,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let nonEmptyPred = NSPredicate(format: "label != ''")
         let titleHasText = XCTNSPredicateExpectation(predicate: nonEmptyPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText], timeout: 10) == .completed else {
-            throw XCTSkip("player.titleLabel exists but label stayed empty — playerInfo may not have loaded")
+            XCTFail("player.titleLabel exists but label stayed empty — playerInfo may not have loaded")
+            return
         }
         let initialTitle = titleLabel.label
 
@@ -128,7 +130,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred = NSPredicate(format: "label != '' AND label != %@", initialTitle)
         let titleChanged = XCTNSPredicateExpectation(predicate: titleChangedPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left within 5s; swipe navigation may not have fired")
+            XCTFail("Title did not change after swipe left within 5s; swipe navigation may not have fired")
+            return
         }
 
         let afterSwipeLeft = titleLabel.label
@@ -145,7 +148,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
             XCTAssertEqual(afterSwipeRight, initialTitle,
                            "Swipe right should return to the original video")
         } else {
-            throw XCTSkip("Title did not revert after swipe right within 5s; back-navigation timing may vary")
+            XCTFail("Title did not revert after swipe right within 5s; back-navigation timing may vary")
         }
     }
 
@@ -154,7 +157,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
         card.tap()
 
@@ -174,7 +178,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
         card.tap()
 
@@ -236,7 +241,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
         card.tap()
 
@@ -245,13 +251,15 @@ final class PlayerLiveSwipeUITests: XCTestCase {
 
         // Keep tapping to maintain controls visibility while waiting for hasNext.
         guard waitForControlsWithNextEnabled(timeout: 20) else {
-            throw XCTSkip("Related videos did not load within 20 s — network unavailable")
+            XCTFail("Related videos did not load within 20 s — network unavailable")
+            return
         }
         // By now playerInfo has had time to load; wait for non-empty title.
         let nonEmptyPred = NSPredicate(format: "label != ''")
         let titleHasText = XCTNSPredicateExpectation(predicate: nonEmptyPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText], timeout: 5) == .completed else {
-            throw XCTSkip("Title label stayed empty after controls loaded — playerInfo unavailable")
+            XCTFail("Title label stayed empty after controls loaded — playerInfo unavailable")
+            return
         }
         let initialTitle = titleLabel.label
 
@@ -261,7 +269,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred = NSPredicate(format: "label != '' AND label != %@", initialTitle)
         let titleChanged = XCTNSPredicateExpectation(predicate: titleChangedPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left within 5s")
+            XCTFail("Title did not change after swipe left within 5s")
+            return
         }
 
         XCTAssertNotEqual(titleLabel.label, initialTitle,
@@ -280,7 +289,8 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
         card.tap()
 
@@ -289,13 +299,15 @@ final class PlayerLiveSwipeUITests: XCTestCase {
 
         // Wait for related videos (controls not shown, just using time).
         guard waitForControlsWithNextEnabled(timeout: 20) else {
-            throw XCTSkip("Related videos did not load within 20 s — network unavailable")
+            XCTFail("Related videos did not load within 20 s — network unavailable")
+            return
         }
         // By now playerInfo has had time to load; wait for non-empty title.
         let nonEmptyPred2 = NSPredicate(format: "label != ''")
         let titleHasText2 = XCTNSPredicateExpectation(predicate: nonEmptyPred2, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText2], timeout: 5) == .completed else {
-            throw XCTSkip("Title label stayed empty after controls loaded — playerInfo unavailable")
+            XCTFail("Title label stayed empty after controls loaded — playerInfo unavailable")
+            return
         }
         let firstTitle = titleLabel.label
 
@@ -305,11 +317,13 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred2 = NSPredicate(format: "label != '' AND label != %@", firstTitle)
         let titleChanged2 = XCTNSPredicateExpectation(predicate: titleChangedPred2, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged2], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left — swipe may not have fired")
+            XCTFail("Title did not change after swipe left — swipe may not have fired")
+            return
         }
         let secondTitle = titleLabel.label
         guard secondTitle != firstTitle else {
-            throw XCTSkip("Must be on a second video before testing controls")
+            XCTFail("Must be on a second video before testing controls")
+            return
         }
 
         // Tap to reveal the controls overlay again.
@@ -323,7 +337,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
             XCTAssertEqual(titleLabel.label, firstTitle,
                            "Swipe right should return to the previous video even when controls are visible")
         } else {
-            throw XCTSkip("Title did not revert after swipe right within 5s")
+            XCTFail("Title did not revert after swipe right within 5s")
         }
     }
 }

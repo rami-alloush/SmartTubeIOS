@@ -144,7 +144,8 @@ final class VideoDownloadUITests: XCTestCase {
         launch(extraArgs: ["--uitesting-deeplink-video=\(kDownloadVideoID)"])
 
         guard waitForPlayer() else {
-            throw XCTSkip("Player did not open within 20 s — network unavailable or video inaccessible")
+            XCTFail("Player did not open within 20 s — network unavailable or video inaccessible")
+            return
         }
         UITestHelpers.assertNoPlayerErrorBanner(in: app)
 
@@ -154,7 +155,8 @@ final class VideoDownloadUITests: XCTestCase {
         showControls()
 
         guard openMoreMenu() else {
-            throw XCTSkip("player.moreButton not found — controls may not have appeared")
+            XCTFail("player.moreButton not found — controls may not have appeared")
+            return
         }
 
         // The download button may be below the fold in the scrollable menu sheet.
@@ -162,7 +164,8 @@ final class VideoDownloadUITests: XCTestCase {
 
         let downloadButton = app.buttons["player.moreMenu.downloadButton"].firstMatch
         guard downloadButton.waitForExistence(timeout: 10) else {
-            throw XCTSkip("'Download to Gallery' button not found in more menu")
+            XCTFail("'Download to Gallery' button not found in more menu")
+            return
         }
 
         // Button should be enabled (no download in flight).
@@ -173,7 +176,8 @@ final class VideoDownloadUITests: XCTestCase {
         // Wait for the completion alert — allow up to 90 s for real CDN download.
         // The interruption monitor handles the Photos permission dialog mid-wait.
         guard let alert = waitForDownloadAlert(timeout: 90) else {
-            throw XCTSkip("No download completion alert within 90 s — network or CDN unavailable in this environment")
+            XCTFail("No download completion alert within 90 s — network or CDN unavailable in this environment")
+            return
         }
 
         // Alert must indicate success ("Saved to Gallery") not failure.
@@ -196,7 +200,8 @@ final class VideoDownloadUITests: XCTestCase {
         UITestHelpers.tapTab(named: "Home", in: app)
 
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            XCTFail("No video cards on Home — network unavailable or feed empty")
+            return
         }
 
         // Long-press to show the context menu.
@@ -215,7 +220,8 @@ final class VideoDownloadUITests: XCTestCase {
         // Wait for the completion alert.
         // The interruption monitor handles the Photos permission dialog mid-wait.
         guard let alert = waitForDownloadAlert(timeout: 90) else {
-            throw XCTSkip("No download completion alert within 90 s — network or CDN unavailable in this environment")
+            XCTFail("No download completion alert within 90 s — network or CDN unavailable in this environment")
+            return
         }
 
         XCTAssertTrue(

@@ -109,7 +109,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
             "home.chipBar must appear — app failed to launch or content did not load"
         )
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            XCTFail("No video cards loaded within 20 s — network unavailable or feed empty")
+            return
         }
         remote.press(.down)
         Thread.sleep(forTimeInterval: 0.6)
@@ -127,7 +128,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
     /// so no D-pad navigation is required.
     private func openMoreMenu() throws {
         guard moreMenuSpeedRow.waitForExistence(timeout: 10) else {
-            throw XCTSkip("More menu did not open — network unavailable or player failed to appear")
+            XCTFail("More menu did not open — network unavailable or player failed to appear")
+            return
         }
         // Short pause to let the focus engine settle on the speed row.
         Thread.sleep(forTimeInterval: 0.4)
@@ -187,7 +189,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
 
         guard speedPicker.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Speed picker did not open — prerequisite failed")
+            XCTFail("Speed picker did not open — prerequisite failed")
+            return
         }
 
         // Menu / back dismisses the speed picker via .onExitCommand
@@ -236,7 +239,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
         // Navigate to the player (same as other tests).
         XCTAssertTrue(chipBar.waitForExistence(timeout: 15), "home.chipBar must appear")
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable")
+            XCTFail("No video cards loaded within 20 s — network unavailable")
+            return
         }
         remote.press(.down); Thread.sleep(forTimeInterval: 0.6)
         remote.press(.down); Thread.sleep(forTimeInterval: 0.6)
@@ -245,7 +249,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
 
         // Sleep timer picker opens automatically via the launch arg.
         guard sleepTimerPicker.waitForExistence(timeout: 10) else {
-            throw XCTSkip("Sleep timer picker did not open — network or player issue")
+            XCTFail("Sleep timer picker did not open — network or player issue")
+            return
         }
         Thread.sleep(forTimeInterval: 0.4) // let focus settle
 
@@ -305,7 +310,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
             // Didn't open sleep timer — a different row activated. Dismiss and re-open.
             remote.press(.menu); Thread.sleep(forTimeInterval: 0.5)
             guard moreMenuSpeedRow.waitForExistence(timeout: 3) else {
-                throw XCTSkip("Could not re-open more menu between attempts")
+                XCTFail("Could not re-open more menu between attempts")
+                return
             }
             Thread.sleep(forTimeInterval: 0.4)
         }

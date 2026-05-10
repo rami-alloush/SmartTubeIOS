@@ -29,15 +29,17 @@ final class PlayerControlsUITests: XCTestCase {
     // MARK: - Helpers
 
     /// Opens the Home tab, waits for the first video card, and opens the player.
-    /// Returns the video title if the player opened, or throws XCTSkip otherwise.
+    /// Returns the video title if the player opened, or fails (XCTFail) otherwise.
     @discardableResult
     private func openPlayerFromHome() throws -> String {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            XCTFail("No video cards on Home — network unavailable or feed empty")
+            return ""
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s")
+            XCTFail("Player did not open within 15 s")
+            return ""
         }
         return app.staticTexts["player.titleLabel"].firstMatch.label
     }
@@ -158,7 +160,8 @@ final class PlayerControlsUITests: XCTestCase {
             }
         }
         guard nextEnabled else {
-            throw XCTSkip("player.nextBtn did not become enabled within 20 s — related videos may not have loaded")
+            XCTFail("player.nextBtn did not become enabled within 20 s — related videos may not have loaded")
+            return
         }
 
         nextButton.tap()
@@ -172,7 +175,8 @@ final class PlayerControlsUITests: XCTestCase {
             newTitle = titleLabel.label
         }
         guard newTitle != initialTitle else {
-            throw XCTSkip("Title did not change within 30s; the next video may share the same title or playerInfo is still loading")
+            XCTFail("Title did not change within 30s; the next video may share the same title or playerInfo is still loading")
+            return
         }
     }
 

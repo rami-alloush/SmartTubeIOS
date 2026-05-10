@@ -8,9 +8,9 @@ import XCTest
 //   • Network access is required (uses live Home feed).
 //   • Run on an iOS 17+ device or simulator with the SmartTubeApp scheme.
 //
-// All tests use XCTSkip (not XCTFail) when:
-//   • No video cards found (network unavailable / feed empty)
-//   • Player did not open within the timeout
+// Tests use XCTFail (not XCTSkip) for timeout/network failures — network is
+// always available in CI. XCTSkip is reserved for genuinely unavailable features
+// (e.g. signed-in account required).
 
 final class MiniPlayerUITests: XCTestCase {
 
@@ -60,10 +60,12 @@ final class MiniPlayerUITests: XCTestCase {
     private func openPlayerFromHome() throws -> String {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            XCTFail("No video cards on Home — network unavailable or feed empty")
+            return ""
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s")
+            XCTFail("Player did not open within 15 s")
+            return ""
         }
         return playerTitle.label
     }
@@ -95,7 +97,8 @@ final class MiniPlayerUITests: XCTestCase {
         let title = try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         XCTAssertEqual(miniPlayerTitle.label, title,
                        "miniPlayer.titleLabel should match the video that was playing")
@@ -105,7 +108,8 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         miniPlayerPlayPause.tap()
         Thread.sleep(forTimeInterval: 0.5)
@@ -121,7 +125,8 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         miniPlayerClose.tap()
         let miniGone = NSPredicate(format: "exists == false")
@@ -137,7 +142,8 @@ final class MiniPlayerUITests: XCTestCase {
         let title = try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         // Tap the bar area (avoid the buttons by targeting the title area)
         miniPlayerBar.tap()
@@ -151,7 +157,8 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         for tab in ["Search", "Library", "Settings", "Home"] {
             UITestHelpers.tapTab(named: tab, in: app)
@@ -201,7 +208,8 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found")
+            XCTFail("miniPlayer.bar not found")
+            return
         }
         miniPlayerClose.tap()
         Thread.sleep(forTimeInterval: 1.0)
@@ -210,10 +218,12 @@ final class MiniPlayerUITests: XCTestCase {
         // Open the player again — must open cleanly with no crash.
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards for second open attempt")
+            XCTFail("No video cards for second open attempt")
+            return
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not reopen within 15 s")
+            XCTFail("Player did not reopen within 15 s")
+            return
         }
         XCTAssertEqual(app.state, .runningForeground,
                        "App must be running after re-opening the player")

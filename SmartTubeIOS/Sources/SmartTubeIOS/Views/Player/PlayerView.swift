@@ -165,6 +165,7 @@ public struct PlayerView: View {
                                 store.settings.videoGravityMode == .fit ? .fill : .fit
                             store.settings.videoGravityMode = newMode
                             scaleToast = newMode == .fill ? "Fill" : "Fit"
+                            seekToastMessage = newMode == .fill ? "Fill" : "Fit"  // diagnostic: also set seekToast
                         }
                     },
                     onTwoFingerTap: { vm.toggleStatsForNerds() },

@@ -88,7 +88,8 @@ final class ShareExtensionUITests: XCTestCase {
 
         let titleLabel = app.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear within 20 s — network may be unavailable")
+            XCTFail("player.titleLabel did not appear within 20 s — network may be unavailable")
+            return
         }
 
         // Give InnerTube time to resolve the title (initial stub is "").
@@ -97,7 +98,8 @@ final class ShareExtensionUITests: XCTestCase {
             object: titleLabel
         )
         guard XCTWaiter().wait(for: [titlePopulated], timeout: 15) == .completed else {
-            throw XCTSkip("Title did not populate within 15 s — network may be unavailable")
+            XCTFail("Title did not populate within 15 s — network may be unavailable")
+            return
         }
 
         XCTAssertFalse(titleLabel.label.isEmpty, "player.titleLabel is empty after deeplink open")
@@ -117,7 +119,8 @@ final class ShareExtensionUITests: XCTestCase {
         launch(extraArgs: ["--uitesting-deeplink-video=\(kTestVideoID)"])
 
         guard waitForPlayer() else {
-            throw XCTSkip("player.titleLabel did not appear — network may be unavailable")
+            XCTFail("player.titleLabel did not appear — network may be unavailable")
+            return
         }
 
         // Dismiss the player so the home screen is visible again.
