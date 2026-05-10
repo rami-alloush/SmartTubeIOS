@@ -81,7 +81,10 @@ public final class HomeViewModel {
         if subIndex < uniqueSubs.count {
             result.append(contentsOf: uniqueSubs[subIndex...])
         }
-        return result
+        // Final safety-net dedup: prevents any remaining duplicate IDs from
+        // reaching ForEach, which would cause SwiftUI to render blank cells.
+        var seen = Set<String>()
+        return result.filter { seen.insert($0.id).inserted }
     }
 
     /// Non-Short videos from the interleaved home feed.
@@ -200,8 +203,11 @@ public final class HomeViewModel {
         Task {
             let (newVideos, nextToken) = await HomeViewModel.fetchMoreVideos(type: type, token: token, api: api)
             if let idx = sections.firstIndex(where: { $0.id == sectionId }) {
-                let existingIds = Set(sections[idx].videos.map(\.id))
-                let deduplicated = newVideos.filter { !existingIds.contains($0.id) }
+                // Use a growing set so IDs that appear multiple times within
+                // newVideos itself (same page returning the same video twice)
+                // are also caught — not just duplicates against existing videos.
+                var seenIds = Set(sections[idx].videos.map(\.id))
+                let deduplicated = newVideos.filter { seenIds.insert($0.id).inserted }
                 sections[idx].videos.append(contentsOf: deduplicated)
                 // Re-sort after merging so videos from different pages remain in
                 // strict newest-first order across pagination boundaries.
@@ -262,7 +268,11 @@ public final class HomeViewModel {
             case .home:
                 let rows = try await api.fetchHomeRows(continuationToken: token)
                 let nextToken = rows.last(where: { $0.nextPageToken != nil })?.nextPageToken
-                return (rows.flatMap(\.videos), nextToken)
+                // Dedup within the page — YouTube can return the same video ID
+                // in multiple shelves of the same continuation response.
+                var seen = Set<String>()
+                let deduped = rows.flatMap(\.videos).filter { seen.insert($0.id).inserted }
+                return (deduped, nextToken)
             default:
                 return ([], nil)
             }

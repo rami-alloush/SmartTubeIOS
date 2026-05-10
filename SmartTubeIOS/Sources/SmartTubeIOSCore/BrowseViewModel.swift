@@ -256,7 +256,15 @@ public final class BrowseViewModel {
                         videoGroups = [deduped]
                     } else {
                         isAuthRequired = false
-                        videoGroups = rows
+                        // Dedup within each row — YouTube can return the same video ID
+                        // in multiple shelves of the initial home response.
+                        var seen = Set<String>()
+                        let dedupedRows = rows.map { row -> VideoGroup in
+                            var copy = row
+                            copy.videos = row.videos.filter { seen.insert($0.id).inserted }
+                            return copy
+                        }.filter { !$0.videos.isEmpty }
+                        videoGroups = dedupedRows
                     }
                 }
 
@@ -285,13 +293,16 @@ public final class BrowseViewModel {
                     let group = try await api.fetchSubscriptions()
                     if !Task.isCancelled {
                         isAuthRequired = group.videos.isEmpty
-                        videoGroups = group.videos.isEmpty ? [] : [group]
+                        var deduped = group
+                        deduped.videos = deduplicated(group.videos)
+                        videoGroups = deduped.videos.isEmpty ? [] : [deduped]
                     }
                 } else {
                     let videos = await LocalSubscriptionFeedService.shared.fetchFeed(api: api)
                     if !Task.isCancelled {
                         isAuthRequired = false
-                        videoGroups = videos.isEmpty ? [] : [VideoGroup(title: "Subscriptions", videos: videos)]
+                        let deduped = deduplicated(videos)
+                        videoGroups = deduped.isEmpty ? [] : [VideoGroup(title: "Subscriptions", videos: deduped)]
                     }
                 }
 
@@ -391,9 +402,19 @@ public final class BrowseViewModel {
                 if Task.isCancelled {
                     browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
                 } else {
-                    let count = newRows.flatMap(\..videos).count
+                    // Deduplicate new rows against all videos already in the feed.
+                    // YouTube continuation responses occasionally re-include videos
+                    // from earlier pages, causing blank cells in the grid.
+                    let existingIds = Set(videoGroups.flatMap(\.videos).map(\.id))
+                    var seenInPage = existingIds
+                    let filteredRows = newRows.map { row -> VideoGroup in
+                        var copy = row
+                        copy.videos = row.videos.filter { seenInPage.insert($0.id).inserted }
+                        return copy
+                    }.filter { !$0.videos.isEmpty }
+                    let count = filteredRows.flatMap(\.videos).count
                     browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(count) nextToken=\(newRows.last?.nextPageToken != nil)")
-                    videoGroups.append(contentsOf: newRows)
+                    videoGroups.append(contentsOf: filteredRows)
                 }
             case .recommended:
                 if recommendedUsesSearchFallback {
@@ -502,8 +523,10 @@ public final class BrowseViewModel {
         if videoGroups.isEmpty {
             videoGroups.append(group)
         } else {
-            let existingIDs = Set(videoGroups[0].videos.map(\.id))
-            let newVideos = group.videos.filter { !existingIDs.contains($0.id) }
+            // Use a growing set so duplicate IDs within group.videos itself
+            // (same video appearing twice in one page) are also caught.
+            var seenIds = Set(videoGroups[0].videos.map(\.id))
+            let newVideos = group.videos.filter { seenIds.insert($0.id).inserted }
             videoGroups[0].videos.append(contentsOf: newVideos)
             videoGroups[0].nextPageToken = group.nextPageToken
         }

@@ -41,11 +41,23 @@ final class PlayerDoubleTapUITests: XCTestCase {
     // MARK: - Helpers
 
     /// Waits for the player to open via the deep-link launch argument.
+    /// Fails immediately if a playback error banner is already visible, so callers
+    /// get a clear "video failed to load" failure rather than a confusing
+    /// toast-not-found failure later when the gesture fires on an errored player.
     private func openPlayer() {
         let title = app.staticTexts["player.titleLabel"].firstMatch
         guard title.waitForExistence(timeout: 15) else {
             XCTFail("player.titleLabel did not appear — deep-link did not open player")
             return
+        }
+        // Instant check: if the error banner is already present right after the
+        // title appeared the stream URL was rejected immediately (CDN/network issue).
+        // No wait here — if the error appears later it will be caught by
+        // waitForControlsToHide after the settle window.
+        let errorBanner = app.staticTexts["player.errorBanner"].firstMatch
+        if errorBanner.exists {
+            XCTFail("Video playback error appeared after player opened — network/CDN issue, not a gesture bug. "
+                + "Error: '\(errorBanner.label)'")
         }
     }
 
@@ -75,6 +87,11 @@ final class PlayerDoubleTapUITests: XCTestCase {
         // double-tap would arrive with the gesture overlay disabled and be swallowed.
         if playPause.exists {
             XCTFail("Controls reappeared during the settle window — isLoading may still be true, disabling the gesture overlay. Wait longer or ensure the video is buffered before tapping.")
+        }
+        // Also verify no error banner is active — an errored player has no gesture overlay.
+        let errorBanner = app.staticTexts["player.errorBanner"].firstMatch
+        if errorBanner.exists {
+            XCTFail("Error banner is visible after controls hid — gesture overlay will be inactive. Error: '\(errorBanner.label)'")
         }
     }
 
@@ -125,6 +142,9 @@ final class PlayerDoubleTapUITests: XCTestCase {
     }
 
     /// Double-tapping the centre third must show a Fit or Fill video-gravity toast.
+    ///
+    /// Uses the `test_ZZ` prefix so it runs last alphabetically, after the two
+    /// warm-launch tests — reducing the chance of a cold-launch controls-hide race.
     func test_ZZDoubleTapCentreZoneTogglesFitFill() throws {
         print("▶ [step] openPlayer")
         openPlayer()
