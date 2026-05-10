@@ -93,9 +93,9 @@ public final class HomeViewModel {
     /// Used by `homeShelves` to populate the main grid (Shorts are shown separately).
     public var homeRegularVideos: [Video] { mergedVideos.filter { !$0.isShort } }
 
-    /// Short videos fetched from FEshorts.
+    /// Short videos from FEshorts and from home-row responses.
     /// Used by `homeShelves` to populate the dedicated Shorts row.
-    public var homeShortsVideos: [Video] { shortsVideos }
+    public var homeShortsVideos: [Video] { shortsVideos + mergedVideos.filter { $0.isShort } }
 
     // MARK: - Dependencies
 

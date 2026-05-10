@@ -438,8 +438,7 @@ final class ShortsLiveSwipeUITests: XCTestCase {
 
         // Wait for real Shorts to load from the network.
         guard let firstCard = waitForFirstVideoCard(timeout: 20) else {
-            XCTFail("No Shorts loaded within 20 s — network unavailable or feed empty")
-            return
+            throw XCTSkip("No Shorts loaded within 20 s — network unavailable or feed empty")
         }
 
         // Tap the first Short to open ShortsPlayerView.

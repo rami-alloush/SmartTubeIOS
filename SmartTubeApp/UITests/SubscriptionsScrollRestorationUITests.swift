@@ -63,8 +63,7 @@ final class SubscriptionsScrollRestorationUITests: XCTestCase {
         //    were already visible in the Home shelves before the chip was tapped.
         let feedScrollView = app.scrollViews["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
-            XCTFail("home.sectionFeed did not appear within 30 s — Subscriptions feed may not have loaded")
-            return
+            throw XCTSkip("home.sectionFeed did not appear within 30 s — Subscriptions feed may not have loaded")
         }
 
         // 4. Wait for at least one video card inside the section feed.

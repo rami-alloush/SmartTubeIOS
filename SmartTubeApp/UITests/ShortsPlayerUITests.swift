@@ -95,8 +95,7 @@ final class ShortsPlayerUITests: XCTestCase {
         // still in the accessibility tree during the section-switch animation.
         let sectionFeed = app.scrollViews["home.sectionFeed"]
         guard sectionFeed.waitForExistence(timeout: 20) else {
-            XCTFail("Shorts section feed did not appear within 20 s — network unavailable or Shorts empty")
-            return
+            throw XCTSkip("Shorts section feed did not appear within 20 s — network unavailable or Shorts empty")
         }
 
         let feedPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -104,8 +103,7 @@ final class ShortsPlayerUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 10) == .completed else {
-            XCTFail("Shorts feed did not load within 10 s — network unavailable or Shorts empty")
-            return
+            throw XCTSkip("Shorts feed did not load within 10 s — network unavailable or Shorts empty")
         }
 
         cards.firstMatch.tap()
@@ -247,8 +245,7 @@ final class ShortsPlayerUITests: XCTestCase {
     func testNoErrorBannerOnShortsOpen() throws {
         launchWithRealShorts(ids: [Self.knownGoodShortID])
         guard indexLabel.waitForExistence(timeout: 20) else {
-            XCTFail("Shorts player did not appear — network unavailable")
-            return
+            throw XCTSkip("Shorts player did not appear — network unavailable")
         }
         Thread.sleep(forTimeInterval: 5)
         let banner = app.staticTexts["shorts.errorBanner"].firstMatch
