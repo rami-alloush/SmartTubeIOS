@@ -150,6 +150,9 @@ public final class PlaybackViewModel {
     @ObservationIgnored nonisolated(unsafe) var timeObserver: Any?
     @ObservationIgnored nonisolated(unsafe) var audioSessionObserver: Any?
     @ObservationIgnored nonisolated(unsafe) var rateObserver: NSKeyValueObservation?
+    /// True while the video is being routed to an external display via AirPlay.
+    public internal(set) var isAirPlaying: Bool = false
+    @ObservationIgnored nonisolated(unsafe) var airPlayObserver: NSKeyValueObservation?
     /// Prevents infinite retry loops: set once the first fallback attempt has been made.
     var hasRetriedPlayback: Bool = false
     /// Set after a Cannot-Decode (AVFoundationErrorDomain -11833) failure on the Auto HLS
@@ -225,6 +228,7 @@ public final class PlaybackViewModel {
         self.sponsorBlock = sponsorBlock
         self.deArrow = deArrow
         self.settings = settings
+        player.allowsExternalPlayback = true
         #if canImport(UIKit)
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -238,12 +242,14 @@ public final class PlaybackViewModel {
         #if canImport(UIKit)
         setupRemoteCommandCenter()
         setupAudioSessionObserver()
+        setupAirPlayObserver()
         #endif
     }
 
     deinit {
         if let obs = timeObserver { player.removeTimeObserver(obs) }
         rateObserver?.invalidate()
+        airPlayObserver?.invalidate()
         if let obs = audioSessionObserver { NotificationCenter.default.removeObserver(obs) }
         #if canImport(UIKit)
         let center = MPRemoteCommandCenter.shared()

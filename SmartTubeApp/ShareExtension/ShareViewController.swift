@@ -114,20 +114,23 @@ final class ShareViewController: UIViewController {
     private let titleLabel: UILabel = {
         let l = UILabel()
         l.text = "SmartTube"
-        l.font = .systemFont(ofSize: 15, weight: .semibold)
+        l.font = .systemFont(ofSize: 17, weight: .semibold)
         l.textColor = .label
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }()
 
     private let closeButton: UIButton = {
-        let sym = UIImage(
-            systemName: "xmark.circle.fill",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
-        )
+        // Apple-style close button: black SF xmark on a white filled circle
+        // with a subtle border — matches the system share sheet dismiss button.
+        let symCfg = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        let xmark = UIImage(systemName: "xmark", withConfiguration: symCfg)
         var cfg = UIButton.Configuration.plain()
-        cfg.image = sym
-        cfg.baseForegroundColor = .tertiaryLabel
+        cfg.image = xmark
+        cfg.baseForegroundColor = UIColor(white: 0.40, alpha: 1)
+        cfg.background.backgroundColor = UIColor(white: 0.92, alpha: 1)
+        cfg.background.cornerRadius = 15          // half of the 30 pt button size → perfect circle
+        cfg.contentInsets = .zero
         let b = UIButton(configuration: cfg)
         b.accessibilityLabel = "Close"
         b.translatesAutoresizingMaskIntoConstraints = false
@@ -186,10 +189,10 @@ final class ShareViewController: UIViewController {
             titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 14),
             titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
-            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             closeButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
-            closeButton.widthAnchor.constraint(equalToConstant: 44),
-            closeButton.heightAnchor.constraint(equalToConstant: 44),
+            closeButton.widthAnchor.constraint(equalToConstant: 30),
+            closeButton.heightAnchor.constraint(equalToConstant: 30),
 
             // Header divider
             headerDivider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),

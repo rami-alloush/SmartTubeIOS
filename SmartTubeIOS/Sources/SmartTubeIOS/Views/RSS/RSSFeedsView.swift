@@ -20,30 +20,39 @@ struct RSSFeedsView: View {
     @Environment(\.innerTubeAPI) private var api
 
     var body: some View {
-        Group {
-            if vm.isLoading && vm.videos.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if vm.videos.isEmpty {
-                emptyState
-            } else {
-                videoList
-            }
-        }
-        .toolbar {
+        VStack(spacing: 0) {
             #if os(iOS)
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
+            // Inline header — shown because LibraryView hides the navigation bar globally.
+            HStack {
+                Text("RSS Feeds")
+                    .font(.headline)
+                Spacer()
                 Button { showManageFeeds = true } label: {
                     Image(systemName: "list.bullet.indent")
                 }
                 .accessibilityLabel("Manage RSS Feeds")
+                .accessibilityIdentifier("rss.manageFeedsButton")
                 Button { showAddFeed = true } label: {
                     Image(systemName: "plus")
                 }
                 .accessibilityLabel("Add RSS Feed")
                 .accessibilityIdentifier("rss.addFeedButton")
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            Divider()
             #endif
+
+            Group {
+                if vm.isLoading && vm.videos.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if vm.videos.isEmpty {
+                    emptyState
+                } else {
+                    videoList
+                }
+            }
         }
         .sheet(isPresented: $showAddFeed, onDismiss: { vm.load() }) {
             AddRSSFeedView()

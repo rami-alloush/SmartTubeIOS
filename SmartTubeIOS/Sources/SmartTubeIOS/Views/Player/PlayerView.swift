@@ -805,6 +805,10 @@ public struct PlayerView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("player.pipButton")
                 }
+                // AirPlay route picker
+                AirPlayRoutePickerView()
+                    .frame(width: 40, height: 40)
+                    .accessibilityIdentifier("player.airPlayButton")
                 #endif
                 // Share / Download menu
                 Button {

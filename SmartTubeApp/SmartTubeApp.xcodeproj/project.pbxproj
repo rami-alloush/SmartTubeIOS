@@ -36,6 +36,7 @@
 		AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000CA1 /* RecommendedChipUITests.swift */; };
 		AA1100000000000000000DA2 /* TVPlayerSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */; };
 		AB01CD23EF456789AB01CD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB01CD23EF456789AB01CD24 /* AppDelegate.swift */; };
+		AP000000000000000000001B /* AirPlayUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AP000000000000000000001A /* AirPlayUITests.swift */; };
 		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
 		C1D2E3F4A5B6C7D8E9F0A1B2 /* PlayerNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */; };
 		CD550C82FB83F1B06A867F3F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 161D597B9340722805A04592 /* Foundation.framework */; };
@@ -48,6 +49,7 @@
 		F1A2B3C4D5E6F7A8B9C0D1E2 /* HomeShortsRowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F3A4B5C6D7E8F9A0B1C2D3 /* HomeShortsRowUITests.swift */; };
 		F1CDC40190BFE18C52E5AD1B /* SmartTubeIOSCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4D96747315A9E066D09F1F4E /* SmartTubeIOSCore */; };
 		FB01000000000000000000A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = FA01000000000000000000A1 /* GoogleService-Info.plist */; };
+		RS000000000000000000001B /* RSSFeedsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RS000000000000000000001A /* RSSFeedsUITests.swift */; };
 		SE000000000000000000001B /* ShareExtensionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE000000000000000000001A /* ShareExtensionUITests.swift */; };
 		SE000000000000000000002B /* ShareExtensionE2EUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE000000000000000000002A /* ShareExtensionE2EUITests.swift */; };
 /* End PBXBuildFile section */
@@ -136,6 +138,7 @@
 		AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerSettingsUITests.swift; sourceTree = "<group>"; };
 		AB01CD23EF456789AB01CD24 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AP000000000000000000001A /* AirPlayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayUITests.swift; sourceTree = "<group>"; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlayerNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerNavigationUITests.swift; sourceTree = "<group>"; };
 		B7482B081D440A26079AA9BC /* SmartTubeIOS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SmartTubeIOS; path = ../SmartTubeIOS; sourceTree = SOURCE_ROOT; };
 		C3E4F5A6B7C8D9E0F1A2B3C4 /* SubscriptionsPlaybackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsPlaybackUITests.swift; sourceTree = "<group>"; };
@@ -145,6 +148,7 @@
 		E2F3A4B5C6D7E8F9A0B1C2D3 /* HomeShortsRowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeShortsRowUITests.swift; sourceTree = "<group>"; };
 		F4A5B6C7D8E9F0A1B2C3D4E5 /* CategoryChipHTTP400UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChipHTTP400UITests.swift; sourceTree = "<group>"; };
 		FA01000000000000000000A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		RS000000000000000000001A /* RSSFeedsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSSFeedsUITests.swift; sourceTree = "<group>"; };
 		SE000000000000000000001A /* ShareExtensionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionUITests.swift; sourceTree = "<group>"; };
 		SE000000000000000000002A /* ShareExtensionE2EUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionE2EUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -239,6 +243,8 @@
 				67E2B0B12FADFE59005F70E6 /* PlayerDoubleTapUITests.swift */,
 				SE000000000000000000001A /* ShareExtensionUITests.swift */,
 				SE000000000000000000002A /* ShareExtensionE2EUITests.swift */,
+				AP000000000000000000001A /* AirPlayUITests.swift */,
+				RS000000000000000000001A /* RSSFeedsUITests.swift */,
 				67AEAB0E2FAF96BC00820F4D /* VideoDownloadUITests.swift */,
 			);
 			path = UITests;
@@ -625,6 +631,8 @@
 				AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */,
 				SE000000000000000000001B /* ShareExtensionUITests.swift in Sources */,
 				SE000000000000000000002B /* ShareExtensionE2EUITests.swift in Sources */,
+				AP000000000000000000001B /* AirPlayUITests.swift in Sources */,
+				RS000000000000000000001B /* RSSFeedsUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -787,7 +795,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 12;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1129,7 +1137,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 12;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;

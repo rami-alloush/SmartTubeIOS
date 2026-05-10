@@ -16,11 +16,16 @@ struct ShortsCardView: View {
         // a landscape hqdefault into the 9:16 frame.
         let url = video.portraitThumbnailURL ?? video.thumbnailURL ?? video.highQualityThumbnailURL
         ZStack(alignment: .bottom) {
-            // Portrait thumbnail — scaledToFill so landscape thumbs fill the frame.
+            // Dark background so letterboxed landscape thumbs look intentional.
+            Rectangle().fill(Color.black)
+
+            // Portrait thumbnail — scaledToFit keeps the full image visible
+            // regardless of the source aspect ratio (portrait oardefault.jpg
+            // fills perfectly; landscape hqdefault letterboxes top/bottom).
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let img):
-                    img.resizable().scaledToFill()
+                    img.resizable().scaledToFit()
                 case .failure:
                     Rectangle().fill(Color.secondary.opacity(0.2))
                 default:
@@ -28,7 +33,6 @@ struct ShortsCardView: View {
                         .overlay { ProgressView() }
                 }
             }
-            .clipped()
 
             // Dark gradient + title overlay at the bottom.
             LinearGradient(

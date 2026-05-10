@@ -201,3 +201,27 @@ extension AppSettings.VideoGravityMode {
         self == .fill ? .resizeAspectFill : .resizeAspect
     }
 }
+
+// MARK: - AirPlayRoutePickerView
+
+#if canImport(UIKit)
+import UIKit
+import AVKit
+
+/// Wraps `AVRoutePickerView` (the iOS AirPlay button) in a SwiftUI-compatible view.
+struct AirPlayRoutePickerView: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.tintColor = .white
+        picker.activeTintColor = UIColor.systemBlue
+        // Set the identifier directly on the UIKit view so XCUITest can find it.
+        // The SwiftUI `.accessibilityIdentifier()` modifier applies to the hosting
+        // wrapper view, not to AVRoutePickerView itself.
+        picker.accessibilityIdentifier = "player.airPlayButton"
+        picker.isAccessibilityElement = true
+        picker.accessibilityTraits = [.button]
+        return picker
+    }
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+#endif

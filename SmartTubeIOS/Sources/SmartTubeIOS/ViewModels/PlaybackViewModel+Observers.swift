@@ -57,4 +57,15 @@ extension PlaybackViewModel {
             }
         }
     }
+
+    #if canImport(UIKit)
+    func setupAirPlayObserver() {
+        airPlayObserver = player.observe(\.isExternalPlaybackActive, options: [.new]) { [weak self] _, change in
+            guard let self, let active = change.newValue else { return }
+            Task { @MainActor [weak self] in
+                self?.isAirPlaying = active
+            }
+        }
+    }
+    #endif
 }
