@@ -7,6 +7,11 @@ struct SmartTubeApp: App {
     @State private var authService: AuthService
     @State private var browseViewModel: BrowseViewModel
     @State private var settingsStore: SettingsStore
+    /// Shared download service used by video cards. Lives at the app scope so
+    /// the download task is not orphaned when a card view leaves the hierarchy
+    /// (e.g. after a context menu dismiss). PlayerView creates its own isolated
+    /// service instance and is unaffected.
+    @State private var cardDownloadService: VideoDownloadService
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -15,6 +20,7 @@ struct SmartTubeApp: App {
         _authService = State(initialValue: AuthService())
         _browseViewModel = State(initialValue: BrowseViewModel(api: api))
         _settingsStore = State(initialValue: SettingsStore())
+        _cardDownloadService = State(initialValue: VideoDownloadService(api: api))
     }
 
     var body: some Scene {
@@ -24,6 +30,7 @@ struct SmartTubeApp: App {
                 .environment(browseViewModel)
                 .environment(settingsStore)
                 .environment(\.innerTubeAPI, api)
+                .environment(cardDownloadService)
                 .onChange(of: authService.accessToken, initial: true) { _, newToken in
                     Task {
                         await api.setAuthToken(newToken)

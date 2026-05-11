@@ -22,6 +22,8 @@ struct AppEntry: App {
     #endif
     @State private var deepLinkLaunchArgConsumed = false
     @State private var pendingVideoArgConsumed = false
+    /// Shared download service for video cards. See SmartTubeIOS/RootView.swift.
+    @State private var cardDownloadService: VideoDownloadService
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @State private var watchLaterAlert: WatchLaterAlert?
@@ -48,6 +50,7 @@ struct AppEntry: App {
         #if os(iOS)
         _playerStateStore = State(initialValue: PlayerStateStore(api: api))
         #endif
+        _cardDownloadService = State(initialValue: VideoDownloadService(api: api))
     }
 
     /// When launched with `--uitesting-shorts` the app skips the full navigation
@@ -79,6 +82,7 @@ struct AppEntry: App {
                 .environment(browseViewModel)
                 .environment(settingsStore)
                 .environment(\.innerTubeAPI, api)
+                .environment(cardDownloadService)
                 .onChange(of: authService.accessToken, initial: true) { _, newToken in
                     Task {
                         await api.setAuthToken(newToken)
@@ -114,6 +118,7 @@ struct AppEntry: App {
                 .environment(browseViewModel)
                 .environment(settingsStore)
                 .environment(\.innerTubeAPI, api)
+                .environment(cardDownloadService)
                 .onChange(of: authService.accessToken, initial: true) { _, newToken in
                     Task {
                         await api.setAuthToken(newToken)
@@ -142,6 +147,7 @@ struct AppEntry: App {
                     .environment(browseViewModel)
                     .environment(settingsStore)
                     .environment(\.innerTubeAPI, api)
+                    .environment(cardDownloadService)
                     #if os(iOS)
                     .environment(playerStateStore)
                     #endif

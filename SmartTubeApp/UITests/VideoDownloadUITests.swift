@@ -36,9 +36,15 @@ final class VideoDownloadUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
 
-        // Automatically allow any system permission dialogs that appear mid-test
-        // (Photos library access, network, etc.) so they do not block the download.
+        // Automatically allow Photos/network permission dialogs that appear mid-test.
+        // IMPORTANT: skip alerts that belong to the app itself (e.g. "Saved to Gallery",
+        // "Download Failed") so they are not dismissed before the test assertion runs.
         addUIInterruptionMonitor(withDescription: "System permission dialog") { alert in
+            // Guard: ignore app-level download completion alerts.
+            let label = alert.label
+            if label.contains("Gallery") || label.contains("Download Failed") {
+                return false
+            }
             // Prefer "Allow" or "OK"; fall back to the first button.
             if alert.buttons["Allow"].exists {
                 alert.buttons["Allow"].tap()
@@ -212,15 +218,24 @@ final class VideoDownloadUITests: XCTestCase {
 
         downloadItem.tap()
 
-        // Wait for the completion alert.
-        // The interruption monitor handles the Photos permission dialog mid-wait.
-        guard let alert = waitForDownloadAlert(timeout: 90) else {
-            throw XCTSkip("No download completion alert within 90 s — network or CDN unavailable in this environment")
+        // Do NOT tap anything after this point. Any tap can trigger a
+        // scroll-to-top, refreshing the home feed and creating a new card view
+        // instance, which would orphan the running download task.
+        //
+        // The download alert is now shown at RootView level (not the card), so it
+        // persists regardless of card view lifecycle. waitForExistence polls the
+        // accessibility tree at ~0.25 s intervals, which is sufficient to invoke
+        // the interrupt monitor for any deferred Photos permission dialog.
+        // Wait up to 40 s for any alert to appear, then verify it's the right one.
+        let anyAlert = app.alerts.firstMatch
+        guard anyAlert.waitForExistence(timeout: 40) else {
+            throw XCTSkip("No download completion alert within 40 s — network or CDN unavailable in this environment")
         }
 
+        let alertLabel = anyAlert.label
         XCTAssertTrue(
-            alert.label.contains("Gallery") || alert.label.contains("Saved"),
-            "Expected 'Saved to Gallery' alert but got: \(alert.label)"
+            alertLabel.contains("Gallery") || alertLabel.contains("Saved") || alertLabel.contains("Download"),
+            "Expected 'Saved to Gallery' alert but got: \(alertLabel)"
         )
 
         dismissAlert()

@@ -14,11 +14,20 @@ public struct RootView: View {
     @Environment(SettingsStore.self) private var store
     @Environment(BrowseViewModel.self) private var browseVM
     @Environment(\.innerTubeAPI) private var api
+    /// Shared download service — observed here so the completion alert is shown
+    /// at a stable level unaffected by context menu dismiss animations on cards.
+    @Environment(VideoDownloadService.self) private var cardDownloadService
+    @State private var cardDownloadAlertItem: DownloadAlertItem?
 
     public init() {}
 
     public var body: some View {
         @Bindable var browseVM = browseVM
+        // Explicitly read cardDownloadService.state in body so SwiftUI's
+        // @Observable tracking engine registers this view as a subscriber.
+        // Without this, onChange(of: cardDownloadService.state) may not fire
+        // when the state changes on an environment-injected @Observable object.
+        let _ = cardDownloadService.state
         Group {
             #if os(tvOS)
             MainTVTabView()
@@ -29,6 +38,38 @@ public struct RootView: View {
             #endif
         }
         .preferredColorScheme(store.settings.themeName.colorScheme)
+        #if !os(tvOS)
+        .onChange(of: cardDownloadService.state) { _, newState in
+            switch newState {
+            case .done:
+                cardDownloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Saved to Gallery", bundle: .module),
+                    message: String(localized: "Video has been saved to your Photos library.", bundle: .module)
+                )
+                cardDownloadService.reset()
+            case .failed(let reason):
+                cardDownloadAlertItem = DownloadAlertItem(
+                    title: String(localized: "Download Failed", bundle: .module),
+                    message: reason
+                )
+                cardDownloadService.reset()
+            default:
+                break
+            }
+        }
+        .alert(
+            cardDownloadAlertItem?.title ?? "",
+            isPresented: Binding(
+                get: { cardDownloadAlertItem != nil },
+                set: { if !$0 { cardDownloadAlertItem = nil } }
+            ),
+            presenting: cardDownloadAlertItem
+        ) { _ in
+            Button("OK") { cardDownloadAlertItem = nil }
+        } message: { item in
+            Text(item.message)
+        }
+        #endif
         .sheet(isPresented: .constant(!auth.isSignedIn && requiresAuth)) {
             // Sign-in prompt is shown as a dismissible sheet so users
             // can still browse without being signed in.

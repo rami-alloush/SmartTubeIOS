@@ -29,8 +29,7 @@ public struct VideoCardView: View {
     /// Index into `video.thumbnailFallbackURLs`. -1 = use primary `thumbnailURL`.
     @State private var thumbnailFallbackIndex: Int = -1
     #if !os(tvOS)
-    @State private var downloadService = VideoDownloadService()
-    @State private var downloadAlertItem: DownloadAlertItem?
+    @Environment(VideoDownloadService.self) private var downloadService
     #endif
     #if os(tvOS)
     @FocusState private var isFocused: Bool
@@ -190,27 +189,10 @@ public struct VideoCardView: View {
             .background(.background)
         }
         #if !os(tvOS)
-        .onChange(of: downloadService.state) { _, newState in
-            switch newState {
-            case .done:
-                downloadAlertItem = DownloadAlertItem(
-                    title: String(localized: "Saved to Gallery", bundle: .module),
-                    message: String(localized: "\"\(video.title)\" has been saved to your Photos library.", bundle: .module)
-                )
-                downloadService.reset()
-            case .failed(let reason):
-                downloadAlertItem = DownloadAlertItem(
-                    title: String(localized: "Download Failed", bundle: .module),
-                    message: reason
-                )
-                downloadService.reset()
-            default:
-                break
-            }
-        }
-        .alert(item: $downloadAlertItem) { item in
-            Alert(title: Text(item.title), message: Text(item.message), dismissButton: .default(Text("OK")))
-        }
+        // Download state is observed at app-root level (RootView) so the alert
+        // survives context menu dismiss animations that would otherwise reset
+        // the card-level @State. Only the button label/disabled state is read here.
+        .padding(0)  // zero-effect modifier to keep the view chain well-typed
         #else
         .focused($isFocused)
         .shadow(color: isFocused ? .white.opacity(0.9) : .clear, radius: 18, x: 0, y: 0)
