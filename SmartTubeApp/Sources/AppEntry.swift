@@ -418,7 +418,8 @@ struct AppEntry: App {
         let ids = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
         guard !ids.isEmpty else { return stubShorts }
         return ids.enumerated().map { idx, id in
-            Video(id: id, title: "Short \(idx + 1)", channelTitle: "Test Channel", isShort: true)
+            Video(id: id, title: "Short \(idx + 1)", channelTitle: "Test Channel",
+                  channelId: "UCBcRF18a7Qf58cCRy5xuWwQ", isShort: true)
         }
     }
 

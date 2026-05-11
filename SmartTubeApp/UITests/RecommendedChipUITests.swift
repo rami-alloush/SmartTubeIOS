@@ -77,7 +77,7 @@ final class RecommendedChipUITests: XCTestCase {
         chip.tap()
 
         // Wait for the section feed container to appear.
-        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        let feedScrollView = app.descendants(matching: .any)["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
             throw XCTSkip("home.sectionFeed did not appear within 30 s — feed may not have loaded")
         }
@@ -137,7 +137,7 @@ final class RecommendedChipUITests: XCTestCase {
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
-        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        let feedScrollView = app.descendants(matching: .any)["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
             throw XCTSkip("home.sectionFeed did not appear within 30 s — network unavailable")
         }
@@ -206,7 +206,7 @@ final class RecommendedChipUITests: XCTestCase {
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
-        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        let feedScrollView = app.descendants(matching: .any)["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
             throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
         }
@@ -260,7 +260,7 @@ final class RecommendedChipUITests: XCTestCase {
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
-        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        let feedScrollView = app.descendants(matching: .any)["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
             throw XCTSkip("home.sectionFeed did not appear within 65 s — network unavailable")
         }

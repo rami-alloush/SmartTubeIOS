@@ -30,7 +30,7 @@ final class SubscriptionsScrollRestorationUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments += ["--uitesting"]
+        app.launchArguments += ["--uitesting", "--uitesting-inject-recommended-ids=dQw4w9WgXcQ,9bZkp7q19f0,MCv4EyEFgVg,pPvd8UxmCGY,fKopy74weus,jNQXAC9IVRw,kJQP7kiw5Fk,OPf0YbXqDm0,RgKAFK5djSk,2vjPBrBU-HM"]
         app.launch()
     }
 
@@ -49,19 +49,19 @@ final class SubscriptionsScrollRestorationUITests: XCTestCase {
         let chipBar = app.scrollViews["home.chipBar"]
         XCTAssertTrue(chipBar.waitForExistence(timeout: 10), "Chip bar must appear")
 
-        // 2. Tap the Home chip — loads with visitor data without requiring a signed-in account,
-        //    avoiding failures on unauthenticated parallel clone simulators.
-        //    The scroll restoration mechanism under test is section-agnostic, so Home works as well.
-        let chip = chipBar.buttons["Home"]
+        // 2. Tap the Recommended chip — uses BrowseViewModel with injected test data,
+        //    so it loads without requiring a signed-in account or visitor session.
+        //    The scroll restoration mechanism under test is section-agnostic.
+        let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Home chip not found — section may be disabled in settings")
+            throw XCTSkip("Recommended chip not found — section may be disabled in settings")
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
         // 3. Wait for home.sectionFeed to appear — this confirms the section switch
         //    has occurred and the Home feed is rendering.
-        let feedScrollView = app.scrollViews["home.sectionFeed"]
+        let feedScrollView = app.descendants(matching: .any)["home.sectionFeed"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
             throw XCTSkip("home.sectionFeed did not appear within 30 s — Home feed may not have loaded")
         }

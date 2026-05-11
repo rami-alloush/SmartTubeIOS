@@ -98,7 +98,7 @@ final class ShortsPlayerUITests: XCTestCase {
         // Wait for the Shorts section feed ScrollView before querying cards.
         // Without this guard the predicate below can match stale Home-feed cards
         // still in the accessibility tree during the section-switch animation.
-        let sectionFeed = app.scrollViews["home.sectionFeed"]
+        let sectionFeed = app.descendants(matching: .any)["home.sectionFeed"]
         guard sectionFeed.waitForExistence(timeout: 20) else {
             throw XCTSkip("Shorts section feed did not appear within 20 s — network unavailable or Shorts empty")
         }
@@ -164,7 +164,7 @@ final class ShortsPlayerUITests: XCTestCase {
     /// Uses direct-launch with real Short IDs to avoid auth dependency on parallel clone simulators.
     func testBackButtonDismissesShortsPlayer() throws {
         launchWithRealShorts(ids: Self.knownGoodShortIDs)
-        guard indexLabel.waitForExistence(timeout: 20) else {
+        guard indexLabel.waitForExistence(timeout: 40) else {
             throw XCTSkip("Shorts player did not appear — network unavailable or Short IDs may be stale")
         }
         showShortsControls()

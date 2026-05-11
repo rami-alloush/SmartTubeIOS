@@ -140,6 +140,26 @@ public final class BrowseViewModel {
             enrichTask?.cancel()
             enrichTask = nil
         }
+        // UI-testing synchronous inject: when `--uitesting-inject-recommended-ids=<ids>`
+        // is present and the target section is `.recommended`, populate videoGroups
+        // immediately on the main actor without an async fetch. This avoids race
+        // conditions between the Task scheduling / cancellation and the view update.
+        if target.type == .recommended,
+           let arg = ProcessInfo.processInfo.arguments.first(where: {
+               $0.hasPrefix("--uitesting-inject-recommended-ids=")
+           }) {
+            let raw = String(arg.dropFirst("--uitesting-inject-recommended-ids=".count))
+            let ids = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+            if !ids.isEmpty {
+                let videos = ids.map { Video(id: $0, title: $0, channelTitle: "Test Channel") }
+                isAuthRequired = false
+                recommendedUsesSearchFallback = false
+                isLoading = false
+                videoGroups = [VideoGroup(title: "Recommended", videos: videos)]
+                browseLog.notice("UI-testing inject: populated \(ids.count) recommended videos synchronously")
+                return
+            }
+        }
         fetchTask?.cancel()
         fetchTask = Task { await fetchSection(target) }
     }
