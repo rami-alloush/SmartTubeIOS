@@ -169,10 +169,14 @@ extension PlayerView {
         }
     }
 
+}
+
+extension PlayerControlsOverlay {
+
     // MARK: - tvOS progress bar
 
     /// Custom progress bar for tvOS: larger thumb, wider padding, bigger time labels.
-    /// The iOS variant (`iosProgressBar`) lives in PlayerView.swift.
+    /// The iOS variant (`iosProgressBar`) lives in PlayerView+ControlElements.swift.
     var tvProgressBar: some View {
         VStack(spacing: 6) {
             // Scrub time tooltip

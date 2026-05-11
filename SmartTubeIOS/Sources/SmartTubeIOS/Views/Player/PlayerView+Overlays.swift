@@ -21,6 +21,56 @@ private let menuLog = CrashlyticsLogger(category: "PlayerMenu")
 
 extension PlayerView {
 
+    // MARK: - Overlay stack
+
+    /// All picker / sheet overlays rendered inside the player ZStack.
+    /// Consolidating them here caps the 8-branch ModifiedContent type tree in a single
+    /// compiled function, reducing __swift5_typeref size in the binary.
+    @ViewBuilder var overlayStack: some View {
+        if showMoreMenu {
+            moreMenuOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showMoreMenu)
+        }
+        if showSpeedPicker {
+            speedPickerOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showSpeedPicker)
+        }
+        if showQualityPicker {
+            qualityPickerOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showQualityPicker)
+        }
+        #if !os(tvOS)
+        if showCaptionPicker {
+            captionPickerOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showCaptionPicker)
+        }
+        if showAudioTrackPicker {
+            audioTrackPickerOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showAudioTrackPicker)
+        }
+        #endif
+        if showSleepTimerPicker {
+            sleepTimerPickerOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showSleepTimerPicker)
+        }
+        if showDescriptionSheet {
+            descriptionOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showDescriptionSheet)
+        }
+        if showCommentsSheet {
+            commentsOverlay
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: showCommentsSheet)
+        }
+    }
+
     // MARK: - More menu overlay
 
     /// Pure-SwiftUI bottom sheet combining all top-bar controls + Share/Download.
@@ -38,273 +88,20 @@ extension PlayerView {
                 }
 
             ScrollView {
-            VStack(spacing: 0) {
-                // Speed
-                Button {
-                    menuLog.notice("[moreMenu] Speed row tapped — closing moreMenu, opening speedPicker")
-                    showMoreMenu = false
-                    showSpeedPicker = true
-                } label: {
-                    HStack {
-                        Label("Playback Speed", systemImage: "speedometer")
-                        Spacer()
-                        Text(store.settings.playbackSpeed == 1.0 ? "Normal"
-                             : "\(store.settings.playbackSpeed, specifier: "%.2g")×")
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .contentShape(Rectangle())
+                VStack(spacing: 0) {
+                    moreMenuSpeedRow
+                    moreMenuQualityRow
+                    moreMenuLikeDislikeRow
+                    moreMenuShareRow
+                    moreMenuSleepTimerRow
+                    moreMenuDownloadRow
+                    moreMenuCaptionsRow
+                    moreMenuAudioTrackRow
+                    moreMenuDescriptionRow
+                    moreMenuCommentsRow
+                    moreMenuCancelRow
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("player.moreMenu.speedRow")
-                #if os(tvOS)
-                .background(moreMenuFocusedRow == .speed ? Color.white.opacity(0.15) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .focused($moreMenuFocusedRow, equals: .speed)
-                .prefersDefaultFocus(in: moreMenuNamespace)
-                #endif
-                Divider()
-                // Quality (only when formats are available)
-                if !vm.availableFormats.isEmpty {
-                    Button {
-                        showMoreMenu = false
-                        showQualityPicker = true
-                    } label: {
-                        HStack {
-                            Label("Quality", systemImage: "4k.tv")
-                            Spacer()
-                            Text(vm.selectedFormat?.qualityLabel ?? "Auto")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    #if os(tvOS)
-                    .background(moreMenuFocusedRow == .quality ? Color.white.opacity(0.15) : .clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .focused($moreMenuFocusedRow, equals: .quality)
-                    #endif
-                    Divider()
-                }
-                // Like / Dislike (requires sign-in)
-                if authService.isSignedIn {
-                    HStack(spacing: 0) {
-                        Button {
-                            vm.like()
-                            showMoreMenu = false
-                        } label: {
-                            Label(
-                                vm.likeStatus == .like ? "Liked" : "Like",
-                                systemImage: vm.likeStatus == .like
-                                    ? "\(AppSymbol.thumbsUp).fill" : AppSymbol.thumbsUp
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .foregroundStyle(vm.likeStatus == .like ? Color.accentColor : .primary)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        #if os(tvOS)
-                        .background(moreMenuFocusedRow == .like ? Color.white.opacity(0.15) : .clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .focused($moreMenuFocusedRow, equals: .like)
-                        #endif
-                        Divider().frame(height: 44)
-                        Button {
-                            vm.dislike()
-                            showMoreMenu = false
-                        } label: {
-                            Label(
-                                vm.likeStatus == .dislike ? "Disliked" : "Dislike",
-                                systemImage: vm.likeStatus == .dislike
-                                    ? "\(AppSymbol.thumbsDown).fill" : AppSymbol.thumbsDown
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .foregroundStyle(vm.likeStatus == .dislike ? Color.accentColor : .primary)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        #if os(tvOS)
-                        .background(moreMenuFocusedRow == .dislike ? Color.white.opacity(0.15) : .clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .focused($moreMenuFocusedRow, equals: .dislike)
-                        #endif
-                    }
-                    Divider()
-                }
-                // Share
-                #if os(iOS)
-                Button {
-                    showMoreMenu = false
-                    if let url = URL(string: "https://www.youtube.com/watch?v=\(currentVideo.id)") {
-                        presentShareSheet(url: url)
-                    }
-                } label: {
-                    Label("Share", systemImage: AppSymbol.share)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                Divider()
-                #endif
-                // Sleep timer
-                Button {
-                    menuLog.notice("[moreMenu] Sleep Timer row tapped — closing moreMenu, opening sleepTimerPicker")
-                    showMoreMenu = false
-                    showSleepTimerPicker = true
-                } label: {
-                    HStack {
-                        Label("Sleep Timer", systemImage: "moon.zzz")
-                        Spacer()
-                        if let mins = vm.sleepTimerMinutes {
-                            Text("\(mins) min")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Off")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding()
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("player.moreMenu.sleepTimerRow")
-                #if os(tvOS)
-                .background(moreMenuFocusedRow == .sleepTimer ? Color.white.opacity(0.15) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .focused($moreMenuFocusedRow, equals: .sleepTimer)
-                #endif
-                Divider()
-                #if !os(tvOS)
-                // Download
-                Button {
-                    showMoreMenu = false
-                    downloadService.download(video: currentVideo)
-                } label: {
-                    Group {
-                        if downloadService.state.isActive {
-                            Label("Downloading…", systemImage: AppSymbol.download)
-                        } else {
-                            Label("Download to Gallery", systemImage: AppSymbol.download)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .disabled(downloadService.state.isActive)
-                .accessibilityIdentifier("player.moreMenu.downloadButton")
-                Divider()
-                // Captions (only when tracks are available)
-                if !vm.availableCaptions.isEmpty {
-                    Button {
-                        showMoreMenu = false
-                        showCaptionPicker = true
-                    } label: {
-                        HStack {
-                            Label("Captions", systemImage: "captions.bubble")
-                            Spacer()
-                            Text(vm.selectedCaption.map {
-                                $0.isAutoGenerated ? "\($0.name) (auto)" : $0.name
-                            } ?? "Off")
-                            .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    Divider()
-                }
-                // Audio track (only when multiple tracks are available)
-                if vm.availableAudioTracks.count > 1 {
-                    Button {
-                        showMoreMenu = false
-                        showAudioTrackPicker = true
-                    } label: {
-                        HStack {
-                            Label("Audio Track", systemImage: "waveform")
-                            Spacer()
-                            Text(vm.selectedAudioTrack.map {
-                                $0.isOriginal ? "\($0.name) (Original)" : $0.name
-                            } ?? "Auto")
-                            .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    .accessibilityIdentifier("player.moreMenu.audioTrackRow")
-                    Divider()
-                }
-                #endif
-                // Description
-                let descriptionText = currentVideo.description ?? ""
-                if !descriptionText.isEmpty {
-                    Button {
-                        showMoreMenu = false
-                        showDescriptionSheet = true
-                    } label: {
-                        Label("Description", systemImage: "text.alignleft")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-                    #if os(tvOS)
-                    .background(moreMenuFocusedRow == .description ? Color.white.opacity(0.15) : .clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .focused($moreMenuFocusedRow, equals: .description)
-                    #endif
-                    Divider()
-                }
-                Button {
-                    showMoreMenu = false
-                    showCommentsSheet = true
-                    if videoComments.isEmpty && !isLoadingComments {
-                        loadComments()
-                    }
-                } label: {
-                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                #if os(tvOS)
-                .background(moreMenuFocusedRow == .comments ? Color.white.opacity(0.15) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .focused($moreMenuFocusedRow, equals: .comments)
-                #endif
-                Divider()
-                Button { showMoreMenu = false } label: {                    Text("Cancel")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .fontWeight(.semibold)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("player.moreMenu.cancel")
-                #if os(tvOS)
-                .background(moreMenuFocusedRow == .cancel ? Color.white.opacity(0.15) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .focused($moreMenuFocusedRow, equals: .cancel)
-                #endif
-            }
-            .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity)
             }
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -493,5 +290,303 @@ extension PlayerView {
             }
             isLoadingComments = false
         }
+    }
+
+    // MARK: - More menu rows
+    //
+    // Each row is a @ViewBuilder var so its type tree is a separate compiled function,
+    // reducing moreMenuOverlay from one ~10.5 KB symbol to many ~1 KB symbols.
+
+    @ViewBuilder private var moreMenuSpeedRow: some View {
+        Button {
+            menuLog.notice("[moreMenu] Speed row tapped — closing moreMenu, opening speedPicker")
+            showMoreMenu = false
+            showSpeedPicker = true
+        } label: {
+            HStack {
+                Label("Playback Speed", systemImage: "speedometer")
+                Spacer()
+                Text(store.settings.playbackSpeed == 1.0 ? "Normal"
+                     : "\(store.settings.playbackSpeed, specifier: "%.2g")×")
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("player.moreMenu.speedRow")
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .speed ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .focused($moreMenuFocusedRow, equals: .speed)
+        .prefersDefaultFocus(in: moreMenuNamespace)
+        #endif
+        Divider()
+    }
+
+    @ViewBuilder private var moreMenuQualityRow: some View {
+        if !vm.availableFormats.isEmpty {
+            Button {
+                showMoreMenu = false
+                showQualityPicker = true
+            } label: {
+                HStack {
+                    Label("Quality", systemImage: "4k.tv")
+                    Spacer()
+                    Text(vm.selectedFormat?.qualityLabel ?? "Auto")
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            #if os(tvOS)
+            .background(moreMenuFocusedRow == .quality ? Color.white.opacity(0.15) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .focused($moreMenuFocusedRow, equals: .quality)
+            #endif
+            Divider()
+        }
+    }
+
+    @ViewBuilder private var moreMenuLikeDislikeRow: some View {
+        if authService.isSignedIn {
+            HStack(spacing: 0) {
+                Button {
+                    vm.like()
+                    showMoreMenu = false
+                } label: {
+                    Label(
+                        vm.likeStatus == .like ? "Liked" : "Like",
+                        systemImage: vm.likeStatus == .like
+                            ? "\(AppSymbol.thumbsUp).fill" : AppSymbol.thumbsUp
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .foregroundStyle(vm.likeStatus == .like ? Color.accentColor : .primary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                #if os(tvOS)
+                .background(moreMenuFocusedRow == .like ? Color.white.opacity(0.15) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .focused($moreMenuFocusedRow, equals: .like)
+                #endif
+                Divider().frame(height: 44)
+                Button {
+                    vm.dislike()
+                    showMoreMenu = false
+                } label: {
+                    Label(
+                        vm.likeStatus == .dislike ? "Disliked" : "Dislike",
+                        systemImage: vm.likeStatus == .dislike
+                            ? "\(AppSymbol.thumbsDown).fill" : AppSymbol.thumbsDown
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .foregroundStyle(vm.likeStatus == .dislike ? Color.accentColor : .primary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                #if os(tvOS)
+                .background(moreMenuFocusedRow == .dislike ? Color.white.opacity(0.15) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .focused($moreMenuFocusedRow, equals: .dislike)
+                #endif
+            }
+            Divider()
+        }
+    }
+
+    @ViewBuilder private var moreMenuShareRow: some View {
+        #if os(iOS)
+        Button {
+            showMoreMenu = false
+            if let url = URL(string: "https://www.youtube.com/watch?v=\((vm.playerInfo?.video ?? video).id)") {
+                presentShareSheet(url: url)
+            }
+        } label: {
+            Label("Share", systemImage: AppSymbol.share)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        Divider()
+        #endif
+    }
+
+    @ViewBuilder private var moreMenuSleepTimerRow: some View {
+        Button {
+            menuLog.notice("[moreMenu] Sleep Timer row tapped — closing moreMenu, opening sleepTimerPicker")
+            showMoreMenu = false
+            showSleepTimerPicker = true
+        } label: {
+            HStack {
+                Label("Sleep Timer", systemImage: "moon.zzz")
+                Spacer()
+                if let mins = vm.sleepTimerMinutes {
+                    Text("\(mins) min")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Off")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("player.moreMenu.sleepTimerRow")
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .sleepTimer ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .focused($moreMenuFocusedRow, equals: .sleepTimer)
+        #endif
+        Divider()
+    }
+
+    @ViewBuilder private var moreMenuDownloadRow: some View {
+        #if !os(tvOS)
+        Button {
+            showMoreMenu = false
+            downloadService.download(video: vm.playerInfo?.video ?? video)
+        } label: {
+            Group {
+                if downloadService.state.isActive {
+                    Label("Downloading…", systemImage: AppSymbol.download)
+                } else {
+                    Label("Download to Gallery", systemImage: AppSymbol.download)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .disabled(downloadService.state.isActive)
+        .accessibilityIdentifier("player.moreMenu.downloadButton")
+        Divider()
+        #endif
+    }
+
+    @ViewBuilder private var moreMenuCaptionsRow: some View {
+        #if !os(tvOS)
+        if !vm.availableCaptions.isEmpty {
+            Button {
+                showMoreMenu = false
+                showCaptionPicker = true
+            } label: {
+                HStack {
+                    Label("Captions", systemImage: "captions.bubble")
+                    Spacer()
+                    Text(vm.selectedCaption.map {
+                        $0.isAutoGenerated ? "\($0.name) (auto)" : $0.name
+                    } ?? "Off")
+                    .foregroundStyle(.secondary)
+                }
+                .padding()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            Divider()
+        }
+        #endif
+    }
+
+    @ViewBuilder private var moreMenuAudioTrackRow: some View {
+        #if !os(tvOS)
+        if vm.availableAudioTracks.count > 1 {
+            Button {
+                showMoreMenu = false
+                showAudioTrackPicker = true
+            } label: {
+                HStack {
+                    Label("Audio Track", systemImage: "waveform")
+                    Spacer()
+                    Text(vm.selectedAudioTrack.map {
+                        $0.isOriginal ? "\($0.name) (Original)" : $0.name
+                    } ?? "Auto")
+                    .foregroundStyle(.secondary)
+                }
+                .padding()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .accessibilityIdentifier("player.moreMenu.audioTrackRow")
+            Divider()
+        }
+        #endif
+    }
+
+    @ViewBuilder private var moreMenuDescriptionRow: some View {
+        let currentVideo = vm.playerInfo?.video ?? video
+        if !(currentVideo.description ?? "").isEmpty {
+            Button {
+                showMoreMenu = false
+                showDescriptionSheet = true
+            } label: {
+                Label("Description", systemImage: "text.alignleft")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            #if os(tvOS)
+            .background(moreMenuFocusedRow == .description ? Color.white.opacity(0.15) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .focused($moreMenuFocusedRow, equals: .description)
+            #endif
+            Divider()
+        }
+    }
+
+    @ViewBuilder private var moreMenuCommentsRow: some View {
+        Button {
+            showMoreMenu = false
+            showCommentsSheet = true
+            if videoComments.isEmpty && !isLoadingComments {
+                loadComments()
+            }
+        } label: {
+            Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .comments ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .focused($moreMenuFocusedRow, equals: .comments)
+        #endif
+        Divider()
+    }
+
+    @ViewBuilder private var moreMenuCancelRow: some View {
+        Button { showMoreMenu = false } label: {
+            Text("Cancel")
+                .frame(maxWidth: .infinity)
+                .padding()
+                .fontWeight(.semibold)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("player.moreMenu.cancel")
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .cancel ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .focused($moreMenuFocusedRow, equals: .cancel)
+        #endif
     }
 }
