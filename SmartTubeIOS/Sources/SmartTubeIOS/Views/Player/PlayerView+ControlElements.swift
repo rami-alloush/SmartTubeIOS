@@ -283,7 +283,8 @@ struct PlayerControlsOverlay: View {
 
                     // Audio-only button
                     Button {
-                        store.settings.audioOnlyMode.toggle()
+                        vm.toggleAudioOnlyLive()
+                        store.settings.audioOnlyMode = vm.isAudioOnlyMode
                     } label: {
                         Image(systemName: store.settings.audioOnlyMode ? AppSymbol.audioOnly : "video")
                             .font(.system(size: 18 * controlScale))

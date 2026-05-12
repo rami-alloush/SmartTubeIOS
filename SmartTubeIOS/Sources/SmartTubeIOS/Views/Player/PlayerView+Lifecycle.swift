@@ -666,5 +666,6 @@ extension PlayerView {
         }
         .ignoresSafeArea()
         .accessibilityLabel("Audio only — thumbnail")
+        .accessibilityIdentifier("player.audioOnlyOverlay")
     }
 }

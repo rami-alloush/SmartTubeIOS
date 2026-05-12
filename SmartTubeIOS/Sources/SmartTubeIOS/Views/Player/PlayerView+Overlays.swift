@@ -475,7 +475,8 @@ extension PlayerView {
     @ViewBuilder private var moreMenuAudioOnlyRow: some View {
         Button {
             menuLog.notice("[moreMenu] Audio-Only row tapped — toggling audioOnlyMode: \(store.settings.audioOnlyMode) → \(!store.settings.audioOnlyMode)")
-            store.settings.audioOnlyMode.toggle()
+            vm.toggleAudioOnlyLive()
+            store.settings.audioOnlyMode = vm.isAudioOnlyMode
             showMoreMenu = false
         } label: {
             HStack {

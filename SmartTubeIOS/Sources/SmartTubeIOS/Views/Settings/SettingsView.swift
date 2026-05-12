@@ -13,7 +13,6 @@ public struct SettingsView: View {
     @State private var showSignIn = false
     @State private var reportSent = false
     #if os(tvOS)
-    @State private var showKofiQR = false
     @State private var showGithubQR = false
     #endif
 
@@ -36,9 +35,6 @@ public struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
         #endif
         #if os(tvOS)
-        .sheet(isPresented: $showKofiQR) {
-            KofiQRView()
-        }
         .sheet(isPresented: $showGithubQR) {
             GitHubQRView()
         }
@@ -267,19 +263,11 @@ public struct SettingsView: View {
             LabeledContent("Version", value: appVersion)
             #if os(tvOS)
             Button {
-                showKofiQR = true
-            } label: {
-                Label("Support on Ko-fi", systemImage: "cup.and.saucer.fill")
-            }
-            Button {
                 showGithubQR = true
             } label: {
                 Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
             }
             #else
-            Link(destination: URL(string: "https://ko-fi.com/milikadelic")!) {
-                Label("Support on Ko-fi", systemImage: "cup.and.saucer.fill")
-            }
             Link(destination: URL(string: "https://github.com/milika/SmartTubeIOS")!) {
                 Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
             }
@@ -314,58 +302,6 @@ public struct SettingsView: View {
         return "\(v) (\(b))"
     }
 }
-
-// MARK: - KofiQRView (tvOS)
-
-#if os(tvOS)
-private struct KofiQRView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    private let kofiURL = "https://ko-fi.com/milikadelic"
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black.opacity(0.85).ignoresSafeArea()
-
-            VStack(spacing: 32) {
-                VStack(spacing: 12) {
-                    Image(systemName: "cup.and.saucer.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(.yellow)
-
-                    Text("Support SmartTube on Ko-fi")
-                        .font(.largeTitle).fontWeight(.bold)
-
-                    Text("Scan the QR code with your phone to support development.")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                QRCodeView(content: kofiURL)
-                    .frame(width: 280, height: 280)
-                    .padding(16)
-                    .background(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-
-                Text(kofiURL)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(60)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Button {
-                dismiss()
-            } label: {
-                Label("Close", systemImage: "xmark")
-                    .font(.headline)
-            }
-            .padding(40)
-        }
-    }
-}
-#endif
 
 // MARK: - GitHubQRView (tvOS)
 
