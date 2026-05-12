@@ -114,7 +114,6 @@
 		67B1B1722FA5384E0059D847 /* VideoPlaybackRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlaybackRegressionUITests.swift; sourceTree = "<group>"; };
 		67E2B0732FAD1BBE005F70E6 /* MiniPlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerUITests.swift; sourceTree = "<group>"; };
 		67E2B0B12FADFE59005F70E6 /* PlayerDoubleTapUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerDoubleTapUITests.swift; sourceTree = "<group>"; };
-		AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerMoreMenuLayoutUITests.swift; sourceTree = "<group>"; };
 		67E6B67B2F9535CD00CD372F /* Smart Tube.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Smart Tube.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6ACA5CEA633CF065619F786C /* SmartTube.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SmartTube.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		79E77E6DD18B12CA7A5341D0 /* SmartTubeDownloadWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SmartTubeDownloadWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -140,6 +139,7 @@
 		AA1100000000000000000CA1 /* RecommendedChipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedChipUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerSettingsUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOnlyModeUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerMoreMenuLayoutUITests.swift; sourceTree = "<group>"; };
 		AB01CD23EF456789AB01CD24 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AP000000000000000000001A /* AirPlayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayUITests.swift; sourceTree = "<group>"; };
@@ -803,7 +803,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1145,7 +1145,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;

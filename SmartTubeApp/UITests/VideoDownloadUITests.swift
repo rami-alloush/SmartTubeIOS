@@ -64,6 +64,25 @@ final class VideoDownloadUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app = nil
+        // Delete any video files saved to the simulator Photos library during the test.
+        // This prevents meadianalysisd from accumulating a multi-GB analysis backlog across runs.
+        // SIMULATOR_DEVICE_UDID is injected automatically by xcodebuild into the test runner env.
+        if let udid = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_UDID"] {
+            let base = URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Developer/CoreSimulator/Devices/\(udid)/data/Media")
+            let dcim = base.appendingPathComponent("DCIM/100APPLE")
+            let photoData = base.appendingPathComponent("PhotoData")
+            let fm = FileManager.default
+            // Remove individual video files rather than the whole directory
+            // so the directory structure the simulator expects stays intact.
+            for dir in [dcim, photoData] {
+                if let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                    for item in items where ["mp4", "mov", "m4v"].contains(item.pathExtension.lowercased()) {
+                        try? fm.removeItem(at: item)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Helpers

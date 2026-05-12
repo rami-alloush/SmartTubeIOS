@@ -1867,6 +1867,12 @@
         }
       }
     },
+    "Audio-Only" : {
+
+    },
+    "Audio-Only (On)" : {
+
+    },
     "Auto" : {
       "comment" : "Quality / audio picker automatic option",
       "extractionState" : "manual",
@@ -5814,9 +5820,6 @@
 
     },
     "Korean" : {
-
-    },
-    "Landscape Always Play" : {
 
     },
     "Last hour" : {
