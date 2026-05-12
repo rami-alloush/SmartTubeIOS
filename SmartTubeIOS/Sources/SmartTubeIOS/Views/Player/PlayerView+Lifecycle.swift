@@ -530,24 +530,36 @@ extension PlayerView {
             }
             let alwaysLandscape = store.settings.landscapeAlwaysPlay
             let physicalLandscape = orientation.isLandscape
-            let newIsLandscape = alwaysLandscape || physicalLandscape
+            let newIsLandscape = isLandscapeLocked || alwaysLandscape || physicalLandscape
             let prevIsLandscape = vm.isLandscape
             let prevPlayerIsActive = OrientationManager.shared.playerIsActive
             vm.isLandscape = newIsLandscape
             OrientationManager.shared.playerIsActive = newIsLandscape
-            swipeLog.notice("[orientation] orientationDidChange — landscapeAlwaysPlay=\(alwaysLandscape) physicalLandscape=\(physicalLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(newIsLandscape)")
+            swipeLog.notice("[orientation] orientationDidChange — landscapeLocked=\(isLandscapeLocked) landscapeAlwaysPlay=\(alwaysLandscape) physicalLandscape=\(physicalLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(newIsLandscape)")
         }
         // Keep isLandscape in sync when the user toggles "Landscape Always Play" while
         // the player is on screen.
         .onChange(of: store.settings.landscapeAlwaysPlay) { oldValue, alwaysLandscape in
             let rawOrientation = UIDevice.current.orientation
             let physicallyLandscape = rawOrientation.isLandscape
-            let newIsLandscape = alwaysLandscape || physicallyLandscape
+            let newIsLandscape = isLandscapeLocked || alwaysLandscape || physicallyLandscape
             let prevIsLandscape = vm.isLandscape
             let prevPlayerIsActive = OrientationManager.shared.playerIsActive
             vm.isLandscape = newIsLandscape
-            OrientationManager.shared.playerIsActive = alwaysLandscape
-            swipeLog.notice("[orientation] landscapeAlwaysPlay: \(oldValue) → \(alwaysLandscape) rawOrientation=\(rawOrientation.rawValue) physicallyLandscape=\(physicallyLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(alwaysLandscape)")
+            OrientationManager.shared.playerIsActive = isLandscapeLocked || alwaysLandscape
+            swipeLog.notice("[orientation] landscapeAlwaysPlay: \(oldValue) → \(alwaysLandscape) landscapeLocked=\(isLandscapeLocked) rawOrientation=\(rawOrientation.rawValue) physicallyLandscape=\(physicallyLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(isLandscapeLocked || alwaysLandscape)")
+        }
+        // Apply orientation immediately when the lock button is tapped.
+        .onChange(of: isLandscapeLocked) { oldValue, isLocked in
+            let rawOrientation = UIDevice.current.orientation
+            let physicallyLandscape = rawOrientation.isLandscape
+            let alwaysLandscape = store.settings.landscapeAlwaysPlay
+            let newIsLandscape = isLocked || alwaysLandscape || physicallyLandscape
+            let prevIsLandscape = vm.isLandscape
+            let prevPlayerIsActive = OrientationManager.shared.playerIsActive
+            vm.isLandscape = newIsLandscape
+            OrientationManager.shared.playerIsActive = isLocked || alwaysLandscape
+            swipeLog.notice("[orientation] landscapeLocked: \(oldValue) → \(isLocked) alwaysLandscape=\(alwaysLandscape) physicallyLandscape=\(physicallyLandscape) isLandscape: \(prevIsLandscape) → \(newIsLandscape) playerIsActive: \(prevPlayerIsActive) → \(isLocked || alwaysLandscape)")
         }
         #endif
         .navigationDestination(item: $channelDestination) { dest in
@@ -593,7 +605,8 @@ extension PlayerView {
             showMoreMenu: $showMoreMenu,
             channelDestination: $channelDestination,
             pipController: $pipController,
-            isPiPActive: $isPiPActive
+            isPiPActive: $isPiPActive,
+            isLandscapeLocked: $isLandscapeLocked
         )
         #elseif os(tvOS)
         PlayerControlsOverlay(

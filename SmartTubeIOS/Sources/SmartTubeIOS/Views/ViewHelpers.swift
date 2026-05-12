@@ -82,6 +82,7 @@ enum AppSymbol {
     static let copyDoc         = "doc.on.doc"
     static let download        = "arrow.down.to.line"
     static let watchLater      = "clock.badge"
+    static let audioOnly       = "waveform.circle"
 
     // MARK: - Status / info
     static let warning         = "exclamationmark.triangle.fill"

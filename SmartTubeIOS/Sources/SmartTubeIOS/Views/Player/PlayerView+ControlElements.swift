@@ -25,6 +25,7 @@ struct PlayerControlsOverlay: View {
     #if os(iOS)
     @Binding var pipController: AVPictureInPictureController?
     @Binding var isPiPActive: Bool
+    @Binding var isLandscapeLocked: Bool
     @Environment(PlayerStateStore.self) private var playerState
     var vm: PlaybackViewModel { playerState.vm }
     #else
@@ -123,6 +124,19 @@ struct PlayerControlsOverlay: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("player.pipButton")
                 }
+                // Landscape lock button — tap to lock/unlock landscape orientation
+                Button {
+                    isLandscapeLocked.toggle()
+                } label: {
+                    Image(systemName: isLandscapeLocked ? "lock.rotation" : "lock.rotation.open")
+                        .font(.system(size: 18 * controlScale))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.4))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("player.landscapeLockButton")
                 // AirPlay route picker
                 AirPlayRoutePickerView()
                     .frame(width: 40, height: 40)

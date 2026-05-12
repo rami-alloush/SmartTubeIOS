@@ -94,6 +94,7 @@ extension PlayerView {
                     moreMenuLikeDislikeRow
                     moreMenuShareRow
                     moreMenuSleepTimerRow
+                    moreMenuAudioOnlyRow
                     moreMenuDownloadRow
                     moreMenuCaptionsRow
                     moreMenuAudioTrackRow
@@ -465,6 +466,39 @@ extension PlayerView {
         .background(moreMenuFocusedRow == .sleepTimer ? Color.white.opacity(0.15) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .focused($moreMenuFocusedRow, equals: .sleepTimer)
+        #endif
+        Divider()
+    }
+
+    @ViewBuilder private var moreMenuAudioOnlyRow: some View {
+        Button {
+            menuLog.notice("[moreMenu] Audio-Only row tapped — toggling audioOnlyMode: \(store.settings.audioOnlyMode) → \(!store.settings.audioOnlyMode)")
+            store.settings.audioOnlyMode.toggle()
+            showMoreMenu = false
+        } label: {
+            HStack {
+                Label(
+                    store.settings.audioOnlyMode
+                        ? String(localized: "Audio-Only (On)", bundle: .module)
+                        : String(localized: "Audio-Only", bundle: .module),
+                    systemImage: AppSymbol.audioOnly
+                )
+                Spacer()
+                if store.settings.audioOnlyMode {
+                    Image(systemName: AppSymbol.checkmark)
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("player.moreMenu.audioOnlyRow")
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .audioOnly ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .focused($moreMenuFocusedRow, equals: .audioOnly)
         #endif
         Divider()
     }
