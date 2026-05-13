@@ -82,6 +82,17 @@ final class VideoDownloadUITests: XCTestCase {
                     }
                 }
             }
+            // Also reset the Photos SQLite databases so meadianalysisd's analysis
+            // queue is cleared — without this the daemon keeps burning CPU on
+            // queued-but-deleted assets.
+            let photosSqlite = base.appendingPathComponent("PhotoData/Photos.sqlite")
+            let syndLib = base.appendingPathComponent("../Library/Photos/Libraries/Syndication.photoslibrary/database/Photos.sqlite")
+            for db in [photosSqlite, syndLib] {
+                for suffix in ["", "-wal", "-shm"] {
+                    let f = db.deletingPathExtension().appendingPathExtension("sqlite\(suffix)")
+                    try? fm.removeItem(at: f)
+                }
+            }
         }
     }
 
