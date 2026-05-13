@@ -55,7 +55,14 @@ extension PlaybackViewModel {
             isPlaying = true
         } catch {
             playerLog.error("❌ Fallback player fetch failed: \(String(describing: error))")
-            self.error = originalError
+            // IP-block errors from the Android fallback are more actionable than the upstream
+            // AVFoundation -11828 "Cannot Open". Surface ipBlocked so the user sees the
+            // "YouTube is temporarily blocking this network…" banner instead of "Cannot Open".
+            if case APIError.ipBlocked = error {
+                self.error = error
+            } else {
+                self.error = originalError
+            }
         }
     }
 

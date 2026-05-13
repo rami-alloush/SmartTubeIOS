@@ -1870,6 +1870,9 @@
     "Audio-Only (On)" : {
 
     },
+    "Audio-Only Mode" : {
+
+    },
     "Auto" : {
       "comment" : "Quality / audio picker automatic option",
       "extractionState" : "manual",
@@ -14791,6 +14794,9 @@
       }
     },
     "Video has been saved to your Photos library." : {
+
+    },
+    "Video Mode" : {
 
     },
     "View count" : {
