@@ -42,7 +42,11 @@ extension InnerTubeAPI {
             return str.count > 2000 ? String(str.prefix(2000)) + "\n...(truncated)" : str
         }
 
-        func walkShelfContents(_ obj: Any) -> [Video] {
+        func walkShelfContents(_ obj: Any, depth: Int = 0) -> [Video] {
+            guard depth < 50 else {
+                tubeLog.warning("walkShelfContents: depth limit (50) reached — skipping subtree")
+                return []
+            }
             var videos: [Video] = []
             if let dict = obj as? [String: Any] {
                 if let vr = dict["videoRenderer"] as? [String: Any], let v = parseVideoRenderer(vr) {
@@ -62,7 +66,7 @@ extension InnerTubeAPI {
                             tubeLog.debug("walkShelfContents: skipping ad richItemRenderer keys=\(contentKeys, privacy: .public)")
                         } else {
                             tubeLog.notice("walkShelfContents: unrecognised richItemRenderer — add key to adRendererKeys if it is an ad\nkeys=\(contentKeys, privacy: .public)\nJSON=\(dumpJSON(content), privacy: .public)")
-                            for value in content.values { videos += walkShelfContents(value) }
+                            for value in content.values { videos += walkShelfContents(value, depth: depth + 1) }
                         }
                     }
                 } else {
@@ -71,11 +75,11 @@ extension InnerTubeAPI {
                     if isAd {
                         tubeLog.debug("walkShelfContents: skipping ad renderer keys=\(dictKeys, privacy: .public)")
                     } else {
-                        for value in dict.values { videos += walkShelfContents(value) }
+                        for value in dict.values { videos += walkShelfContents(value, depth: depth + 1) }
                     }
                 }
             } else if let arr = obj as? [Any] {
-                for item in arr { videos += walkShelfContents(item) }
+                for item in arr { videos += walkShelfContents(item, depth: depth + 1) }
             }
             return videos
         }

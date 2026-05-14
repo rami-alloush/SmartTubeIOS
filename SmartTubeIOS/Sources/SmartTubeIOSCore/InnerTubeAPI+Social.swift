@@ -122,8 +122,9 @@ extension InnerTubeAPI {
     /// - TV/WEB client: `segmentedLikeDislikeButtonRenderer.{like,dislike}Button.toggleButtonRenderer.isToggled`
     private func parseLikeStatus(from json: [String: Any]) -> LikeStatus {
         var found: LikeStatus? = nil
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
             guard found == nil else { return }
+            guard depth < 50 else { return }
             if let dict = obj as? [String: Any] {
                 // Strategy 1: direct likeStatus string (videoPrimaryInfoRenderer on WEB)
                 if let statusStr = dict["likeStatus"] as? String {
@@ -145,9 +146,9 @@ extension InnerTubeAPI {
                     found = liked ? .like : disliked ? .dislike : LikeStatus.none
                     return
                 }
-                for value in dict.values { walk(value) }
+                for value in dict.values { walk(value, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
         walk(json)
@@ -159,16 +160,17 @@ extension InnerTubeAPI {
     /// Related videos appear as `compactVideoRenderer` in `secondaryResults`.
     private func parseRelatedVideos(from json: [String: Any]) -> [Video] {
         var videos: [Video] = []
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else { return }
             if let dict = obj as? [String: Any] {
                 if let r = dict["compactVideoRenderer"] as? [String: Any],
                    let v = parseVideoRenderer(r) {
                     videos.append(v)
                 } else {
-                    for value in dict.values { walk(value) }
+                    for value in dict.values { walk(value, depth: depth + 1) }
                 }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
         walk(json)
@@ -183,7 +185,8 @@ extension InnerTubeAPI {
     ///   - `timeDescription` text object — fallback (parsed via `parseDuration`).
     private func parseChapters(from json: [String: Any]) -> [Chapter] {
         var chapters: [Chapter] = []
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else { return }
             if let dict = obj as? [String: Any] {
                 if let renderer = dict["macroMarkersListItemRenderer"] as? [String: Any] {
                     let title = (renderer["title"] as? [String: Any]).flatMap { extractText($0) } ?? ""
@@ -208,9 +211,9 @@ extension InnerTubeAPI {
                     }
                     return
                 }
-                for value in dict.values { walk(value) }
+                for value in dict.values { walk(value, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
         walk(json)
@@ -234,8 +237,9 @@ extension InnerTubeAPI {
                 continue
             }
             var found: String? = nil
-            func findToken(_ obj: Any) {
+            func findToken(_ obj: Any, depth: Int = 0) {
                 guard found == nil else { return }
+                guard depth < 50 else { return }
                 if let dict = obj as? [String: Any] {
                     if let contItem = dict["continuationItemRenderer"] as? [String: Any],
                        let endpoint = contItem["continuationEndpoint"] as? [String: Any],
@@ -244,9 +248,9 @@ extension InnerTubeAPI {
                         found = t
                         return
                     }
-                    for v in dict.values { findToken(v) }
+                    for v in dict.values { findToken(v, depth: depth + 1) }
                 } else if let arr = obj as? [Any] {
-                    for item in arr { findToken(item) }
+                    for item in arr { findToken(item, depth: depth + 1) }
                 }
             }
             findToken(pslr["content"] as Any)
@@ -297,7 +301,8 @@ extension InnerTubeAPI {
         }
 
         // Legacy format: commentRenderer nested in the response tree.
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else { return }
             if let dict = obj as? [String: Any] {
                 if let cr = dict["commentRenderer"] as? [String: Any] {
                     let id = cr["commentId"] as? String ?? UUID().uuidString
@@ -319,9 +324,9 @@ extension InnerTubeAPI {
                     ))
                     return
                 }
-                for v in dict.values { walk(v) }
+                for v in dict.values { walk(v, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
         walk(json)

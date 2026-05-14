@@ -140,7 +140,11 @@ extension InnerTubeAPI {
         var seen = Set<String>()
         var firstEntryDumped = false
 
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else {
+                tubeLog.warning("parseGuideChannels: walk depth limit (50) reached — skipping subtree")
+                return
+            }
             if let dict = obj as? [String: Any] {
                 if let entry = dict["guideEntryRenderer"] as? [String: Any] {
                     let browseEndpoint = (entry["navigationEndpoint"] as? [String: Any])?["browseEndpoint"] as? [String: Any]
@@ -188,9 +192,9 @@ extension InnerTubeAPI {
                     }
                     return
                 }
-                for value in dict.values { walk(value) }
+                for value in dict.values { walk(value, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
 
@@ -262,7 +266,11 @@ extension InnerTubeAPI {
         var avatarLockupDumped = false
         var notificationDumped = false
 
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else {
+                tubeLog.warning("parseChannelRenderers: walk depth limit (50) reached — skipping subtree")
+                return
+            }
             if let dict = obj as? [String: Any] {
                 // Track all "xxxRenderer" keys at this level for diagnostics
                 for k in dict.keys where k.hasSuffix("Renderer") || k.hasSuffix("ViewModel") {
@@ -299,9 +307,9 @@ extension InnerTubeAPI {
                     if seen.insert(channel.id).inserted { channels.append(channel) }
                     return
                 }
-                for value in dict.values { walk(value) }
+                for value in dict.values { walk(value, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
 
@@ -362,7 +370,11 @@ extension InnerTubeAPI {
         }
 
         var tileDumped = false
-        func walk(_ obj: Any) {
+        func walk(_ obj: Any, depth: Int = 0) {
+            guard depth < 50 else {
+                tubeLog.warning("parseSubscribedChannels: walk depth limit (50) reached — skipping subtree")
+                return
+            }
             if let dict = obj as? [String: Any] {
                 if let tile = dict["tileRenderer"] as? [String: Any] {
                     // Dump the first tile to reveal its full structure
@@ -380,9 +392,9 @@ extension InnerTubeAPI {
                     }
                     return
                 }
-                for value in dict.values { walk(value) }
+                for value in dict.values { walk(value, depth: depth + 1) }
             } else if let arr = obj as? [Any] {
-                for item in arr { walk(item) }
+                for item in arr { walk(item, depth: depth + 1) }
             }
         }
 
