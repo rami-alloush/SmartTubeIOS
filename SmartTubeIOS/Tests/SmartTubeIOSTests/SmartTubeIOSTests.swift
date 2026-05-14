@@ -673,6 +673,49 @@ struct InnerTubeAPIParsingGapsTests {
         #expect(video.isShort, "videoRenderer with reelWatchEndpoint must be tagged isShort = true")
     }
 
+    @Test("videoRenderer with thumbnailOverlayTimeStatusRenderer SHORTS style is tagged isShort = true")
+    func videoRendererShortsOverlayStyleTaggedShort() async throws {
+        // Subscriptions feed omits reelWatchEndpoint; uses thumbnailOverlayTimeStatusRenderer.style == "SHORTS"
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [[
+                        "itemSectionRenderer": [
+                            "contents": [[
+                                "shelfRenderer": [
+                                    "content": [
+                                        "horizontalListRenderer": [
+                                            "items": [[
+                                                "gridVideoRenderer": [
+                                                    "videoId": "subsShort123",
+                                                    "title": ["runs": [["text": "A Subs Short"]]],
+                                                    "shortBylineText": ["runs": [["text": "Fly-N"]]],
+                                                    "thumbnail": ["thumbnails": [["url": "https://i.ytimg.com/vi/subsShort123/hqdefault.jpg"]]],
+                                                    "navigationEndpoint": ["watchEndpoint": ["videoId": "subsShort123"]],
+                                                    "thumbnailOverlays": [[
+                                                        "thumbnailOverlayTimeStatusRenderer": [
+                                                            "text": ["simpleText": "0:22"],
+                                                            "style": "SHORTS"
+                                                        ]
+                                                    ]]
+                                                ]
+                                            ]]
+                                        ]
+                                    ]
+                                ]
+                            ]]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Subscriptions")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "subsShort123")
+        #expect(video.isShort, "videoRenderer with thumbnailOverlayTimeStatusRenderer.style == SHORTS must be tagged isShort = true even without reelWatchEndpoint")
+    }
+
     // MARK: - Empty response
 
     @Test("Empty JSON response produces an empty VideoGroup")

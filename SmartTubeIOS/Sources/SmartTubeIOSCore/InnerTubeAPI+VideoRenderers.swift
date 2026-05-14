@@ -528,8 +528,15 @@ extension InnerTubeAPI {
         } ?? false
 
         let isShort: Bool = {
-            guard let nav = r["navigationEndpoint"] as? [String: Any] else { return false }
-            return nav["reelWatchEndpoint"] != nil
+            // Primary signal: reelWatchEndpoint in navigationEndpoint (home, search, most feeds)
+            if let nav = r["navigationEndpoint"] as? [String: Any], nav["reelWatchEndpoint"] != nil {
+                return true
+            }
+            // Secondary signal: thumbnailOverlayTimeStatusRenderer.style == "SHORTS"
+            // (subscriptions feed often omits reelWatchEndpoint and uses this style instead)
+            return (r["thumbnailOverlays"] as? [[String: Any]])?.contains {
+                ($0["thumbnailOverlayTimeStatusRenderer"] as? [String: Any])?["style"] as? String == "SHORTS"
+            } ?? false
         }()
 
         let badges = (r["badges"] as? [[String: Any]])?.compactMap {
