@@ -181,14 +181,18 @@ public final class BrowseViewModel {
     }
 
     public func loadMoreIfNeeded(lastVideo: Video) {
+        // Use `contains` instead of `==` on the raw last video: when "Hide Shorts" is on,
+        // the caller's last visible video may not be the raw last video (the raw last video
+        // might be a Short that was filtered out). The user has reached the end of filtered
+        // content as long as their last visible video appears anywhere in the last raw group.
         guard let lastGroup = videoGroups.last,
-              let lastInGroup = lastGroup.videos.last,
-              lastInGroup.id == lastVideo.id,
+              lastGroup.videos.contains(where: { $0.id == lastVideo.id }),
               lastGroup.nextPageToken != nil,
               !isLoadingMore
         else {
             let hasToken = videoGroups.last?.nextPageToken != nil
-            browseLog.notice("loadMore skipped: section=\(currentSection.title) isLoading=\(isLoading) isLoadingMore=\(isLoadingMore) hasToken=\(hasToken) lastVideoMatch=\(videoGroups.last?.videos.last?.id == lastVideo.id)")
+            let lastVideoInGroup = videoGroups.last?.videos.contains(where: { $0.id == lastVideo.id }) == true
+            browseLog.notice("loadMore skipped: section=\(currentSection.title) isLoading=\(isLoading) isLoadingMore=\(isLoadingMore) hasToken=\(hasToken) lastVideoMatch=\(lastVideoInGroup)")
             return
         }
         browseLog.notice("loadMore triggered: section=\(currentSection.title) currentCount=\(videoGroups.first?.videos.count ?? 0)")
@@ -439,7 +443,7 @@ public final class BrowseViewModel {
             if !Task.isCancelled { loadedAt = Date() }
     }
 
-    private func fetchNextPage(for section: BrowseSection) async {
+    private func fetchNextPage(for section: BrowseSection, autoChainDepth: Int = 0) async {
         guard let token = videoGroups.last?.nextPageToken else {
             browseLog.notice("fetchNextPage: no token for section=\(section.title) — skipping")
             return
@@ -517,6 +521,15 @@ public final class BrowseViewModel {
                 } else {
                     browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
                     mergeIntoFirstGroup(group)
+                    // Auto-chain: when every video on this page is a Short, the view's
+                    // .onAppear sentinel won't re-fire (the visible filtered list doesn't
+                    // grow). Immediately fetch the next page so history keeps loading.
+                    if autoChainDepth < 5,
+                       group.videos.allSatisfy(\.isShort),
+                       group.nextPageToken != nil {
+                        browseLog.notice("fetchNextPage auto-chain (all-Shorts page): section=\(section.title) depth=\(autoChainDepth)")
+                        await fetchNextPage(for: section, autoChainDepth: autoChainDepth + 1)
+                    }
                 }
             case .channels:
                 break  // channel list doesn't paginate via videoGroups

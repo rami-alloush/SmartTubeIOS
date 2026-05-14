@@ -632,6 +632,86 @@ struct InnerTubeAPIParsingGapsTests {
         #expect(video.isShort, "TILE_STYLE_YTLR_SHORTS tile must be tagged isShort = true")
     }
 
+    @Test("tileRenderer with reelWatchEndpoint on onSelectCommand is tagged isShort = true")
+    func tileRendererReelWatchEndpointTaggedShort() async throws {
+        // TVHTML5 subscriptions feed: Shorts tiles carry reelWatchEndpoint instead of
+        // TILE_STYLE_YTLR_SHORTS style or overlay SHORTS style.
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [
+                        [
+                            "itemSectionRenderer": [
+                                "contents": [
+                                    [
+                                        "tileRenderer": [
+                                            "contentType": "TILE_CONTENT_TYPE_VIDEO",
+                                            "contentId": "reelShort1234",
+                                            "metadata": [
+                                                "tileMetadataRenderer": [
+                                                    "title": ["simpleText": "A Reel Short"]
+                                                ]
+                                            ],
+                                            "onSelectCommand": [
+                                                "reelWatchEndpoint": ["videoId": "reelShort1234"]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Subscriptions")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "reelShort1234")
+        #expect(video.isShort, "tileRenderer with reelWatchEndpoint must be tagged isShort = true")
+    }
+
+    @Test("tileRenderer with reelWatchEndpoint nested under navigationEndpoint.innertubeCommand is tagged isShort = true")
+    func tileRendererNavEndpointInnertubeCommandReelEndpointTaggedShort() async throws {
+        // Some TV-client subs tiles carry the reelWatchEndpoint inside
+        // navigationEndpoint.innertubeCommand rather than directly on navigationEndpoint.
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [
+                        [
+                            "itemSectionRenderer": [
+                                "contents": [
+                                    [
+                                        "tileRenderer": [
+                                            "contentType": "TILE_CONTENT_TYPE_VIDEO",
+                                            "contentId": "navInnerShort1",
+                                            "metadata": [
+                                                "tileMetadataRenderer": [
+                                                    "title": ["simpleText": "Nav Inner Short"]
+                                                ]
+                                            ],
+                                            "navigationEndpoint": [
+                                                "innertubeCommand": [
+                                                    "reelWatchEndpoint": ["videoId": "navInnerShort1"]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Subscriptions")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "navInnerShort1")
+        #expect(video.isShort, "tileRenderer with navigationEndpoint.innertubeCommand.reelWatchEndpoint must be tagged isShort = true")
+    }
+
     @Test("videoRenderer with reelWatchEndpoint is tagged isShort = true")
     func videoRendererReelEndpointTaggedShort() async throws {
         let mockResponse: [String: Any] = [

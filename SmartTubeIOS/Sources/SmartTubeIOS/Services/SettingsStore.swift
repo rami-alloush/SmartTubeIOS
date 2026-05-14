@@ -43,6 +43,9 @@ public final class SettingsStore {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-audio-only-mode") {
             self.settings.audioOnlyMode = true
         }
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-hide-shorts") {
+            self.settings.hideShorts = true
+        }
     }
 
     private func save() {

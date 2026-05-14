@@ -269,10 +269,22 @@ extension InnerTubeAPI {
         let navigationEndpoint = tile["navigationEndpoint"] as? [String: Any]
         // videoId resolution order (most to least common in TVHTML5 history/subs responses):
         // 1. onSelectCommand.watchEndpoint.videoId              — classic path
-        // 2. onSelectCommand.innertubeCommand.watchEndpoint.videoId — newer TV variant
-        // 3. navigationEndpoint.watchEndpoint.videoId           — another TV variant
-        // 4. tile.contentId                                     — confirmed by live log: TVHTML5
+        // 2. onSelectCommand.reelWatchEndpoint.videoId          — Shorts in TV subs/history feed
+        // 3. onSelectCommand.innertubeCommand.watchEndpoint.videoId — newer TV variant
+        // 4. onSelectCommand.innertubeCommand.reelWatchEndpoint.videoId — nested Shorts variant
+        // 5. navigationEndpoint.watchEndpoint.videoId           — another TV variant
+        // 6. navigationEndpoint.reelWatchEndpoint.videoId       — nav-level Shorts variant
+        // 7. tile.contentId                                     — confirmed by live log: TVHTML5
         //    history tiles with commandExecutorCommand store the id directly here
+        let reelWatchEndpoint: [String: Any]? = {
+            if let ep = onSelectCommand?["reelWatchEndpoint"] as? [String: Any] { return ep }
+            if let inner = onSelectCommand?["innertubeCommand"] as? [String: Any],
+               let ep = inner["reelWatchEndpoint"] as? [String: Any] { return ep }
+            if let ep = navigationEndpoint?["reelWatchEndpoint"] as? [String: Any] { return ep }
+            if let inner = navigationEndpoint?["innertubeCommand"] as? [String: Any],
+               let ep = inner["reelWatchEndpoint"] as? [String: Any] { return ep }
+            return nil
+        }()
         let watchEndpoint: [String: Any]? = {
             if let ep = onSelectCommand?["watchEndpoint"] as? [String: Any] { return ep }
             if let inner = onSelectCommand?["innertubeCommand"] as? [String: Any],
@@ -280,7 +292,9 @@ extension InnerTubeAPI {
             if let ep = navigationEndpoint?["watchEndpoint"] as? [String: Any] { return ep }
             return nil
         }()
-        guard let videoId = watchEndpoint?["videoId"] as? String ?? (tile["contentId"] as? String) else {
+        guard let videoId = reelWatchEndpoint?["videoId"] as? String
+                         ?? watchEndpoint?["videoId"] as? String
+                         ?? (tile["contentId"] as? String) else {
             return nil
         }
 
@@ -347,7 +361,49 @@ extension InnerTubeAPI {
         } ?? false
 
         // isShorts: style == "TILE_STYLE_YTLR_SHORTS" — Android: TileItem.isShorts()
+        // Secondary signals (in priority order):
+        //  • reelWatchEndpoint present on onSelectCommand/navigationEndpoint — definitive for Shorts
+        //    tiles that carry neither TILE_STYLE_YTLR_SHORTS nor the overlay SHORTS style.
+        //  • thumbnailOverlayTimeStatusRenderer.style == "SHORTS" — older TV subs feed fallback.
+        //  • ustreamerConfig == "GgIIBQ==" — encodes proto(field3{field1:5}); value 5 is YouTube's
+        //    CONTENT_TYPE_SHORTS hint embedded in the watchEndpoint. Observed on Shorts tiles that
+        //    carry none of the other signals (TILE_STYLE_YTLR_DEFAULT, watchEndpoint not reel,
+        //    landscape thumbnail). Regular videos carry value 1 ("GgIIAQ==") or omit the field.
+        //  • Portrait thumbnail (height > width) — Shorts have 9:16 thumbnails; news/sports clips
+        //    are always landscape 16:9, so this signal has zero false-positive risk for those.
+        let isVerticalThumbnail = thumbnails?.contains {
+            let w = ($0["width"] as? Int) ?? 0
+            let h = ($0["height"] as? Int) ?? 0
+            return h > w && w > 0
+        } ?? false
+
+        let ustreamerConfig = watchEndpoint?["ustreamerConfig"] as? String
+        // GgIIBQ== encodes CONTENT_TYPE_SHORTS, but YouTube also attaches it to long-form
+        // videos that appear in Shorts-adjacent shelves (subscription Shorts shelf, history,
+        // home recommendations). Guard with a 180 s ceiling — the maximum YouTube Shorts
+        // length — so only genuine Shorts are matched. When duration is unknown (nil),
+        // default to trusting the signal.
+        let isUstreamerShorts = ustreamerConfig == "GgIIBQ==" && (duration.map { $0 <= 180 } ?? true)
+
         let isShort = (tile["style"] as? String) == "TILE_STYLE_YTLR_SHORTS"
+            || reelWatchEndpoint != nil
+            || overlays?.contains {
+                ($0["thumbnailOverlayTimeStatusRenderer"] as? [String: Any])?["style"] as? String == "SHORTS"
+            } ?? false
+            || isUstreamerShorts
+            || isVerticalThumbnail
+
+        if isUstreamerShorts {
+            tubeLog.debug("tileRenderer isShort=true id=\(videoId, privacy: .public) signal=ustreamerConfig(\(ustreamerConfig ?? "", privacy: .public))")
+        }
+
+        // Diagnostic: log every TV-feed tile's Short signals so Console shows exactly
+        // which signals are (or aren't) present, even for non-Short tiles.
+        let overlayStyle = overlays?.compactMap {
+            ($0["thumbnailOverlayTimeStatusRenderer"] as? [String: Any])?["style"] as? String
+        }.first ?? "nil"
+        let durationStr = duration.map { Int($0).description } ?? "nil"
+        tubeLog.debug("tileRenderer id=\(videoId, privacy: .public) tileStyle=\(tile["style"] as? String ?? "nil", privacy: .public) reelEp=\(reelWatchEndpoint != nil, privacy: .public) overlayStyle=\(overlayStyle, privacy: .public) dur=\(durationStr, privacy: .public) vertThumb=\(isVerticalThumbnail, privacy: .public) ustreamerShorts=\(isUstreamerShorts, privacy: .public) → isShort=\(isShort, privacy: .public)")
 
         // publishedAt: best-effort from tileMetadata lines (second line may contain "2 years ago")
         let publishedAt: Date? = {
@@ -395,6 +451,9 @@ extension InnerTubeAPI {
         guard let videoId = reelEndpoint?["videoId"] as? String
                           ?? watchEndpoint?["videoId"] as? String else { return nil }
         let isShort = reelEndpoint != nil
+        if isShort {
+            tubeLog.debug("lockupViewModel isShort=true id=\(videoId, privacy: .public) signal=reelWatchEndpoint")
+        }
 
         // title: metadata.lockupMetadataViewModel.title
         // The field may be a TextViewModel ({"content": "…"}) in newer API responses,
@@ -538,6 +597,10 @@ extension InnerTubeAPI {
                 ($0["thumbnailOverlayTimeStatusRenderer"] as? [String: Any])?["style"] as? String == "SHORTS"
             } ?? false
         }()
+        if isShort {
+            let signal = ((r["navigationEndpoint"] as? [String: Any])?["reelWatchEndpoint"] != nil) ? "reelWatchEndpoint" : "overlayStyle"
+            tubeLog.debug("videoRenderer isShort=true id=\(videoId, privacy: .public) signal=\(signal, privacy: .public)")
+        }
 
         let badges = (r["badges"] as? [[String: Any]])?.compactMap {
             ($0["metadataBadgeRenderer"] as? [String: Any])?["label"] as? String

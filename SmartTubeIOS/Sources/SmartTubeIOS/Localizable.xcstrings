@@ -11183,6 +11183,9 @@
         }
       }
     },
+    "short" : {
+
+    },
     "Shorts" : {
       "comment" : "Channel content filter — show only Shorts",
       "extractionState" : "manual",

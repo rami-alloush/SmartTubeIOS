@@ -4,7 +4,7 @@ All notable changes to SmartTube are documented here.
 
 ---
 
-## [Unreleased] – 2026-05-12
+## [2.6] – 2026-05-14
 
 ### Added
 - **Safari Web Extension** — new `SafariExtension` target (`manifest.json` + `content.js`) intercepts YouTube watch, Shorts, youtu.be, and Music URLs in Safari and redirects them to `smarttube://video/<id>` without any user tap; `YouTubeLinkHandler` extended to recognise `music.youtube.com/watch?v=` URLs so the extension and the app URL handler stay in sync; `SafariExtensionURLCoverageTests` (7 tests) verify every manifest match pattern

@@ -304,6 +304,7 @@ struct VideoGridSection: View {
                         .padding(.horizontal)
                         .padding(.vertical, 6)
                         .accessibilityIdentifier("video.card.\(video.id)")
+                        .accessibilityValue(video.isShort ? "short" : "")
                         .onTapGesture { onSelect(video) }
                         .onAppear {
                             if video.id == videos.last?.id { loadMore?() }
@@ -350,6 +351,7 @@ struct VideoGridSection: View {
                 ForEach(videos) { video in
                     VideoCardView(video: video, compact: false)
                         .accessibilityIdentifier("video.card.\(video.id)")
+                        .accessibilityValue(video.isShort ? "short" : "")
                         .onTapGesture { onSelect(video) }
                         .onAppear {
                             if video.id == videos.last?.id { loadMore?() }

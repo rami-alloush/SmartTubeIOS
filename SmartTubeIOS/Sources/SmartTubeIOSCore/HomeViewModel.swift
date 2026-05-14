@@ -62,7 +62,14 @@ public final class HomeViewModel {
         let subs  = subState?.videos  ?? []
 
         guard !subs.isEmpty else { return recs }
-        guard !recs.isEmpty else { return subs }
+        guard !recs.isEmpty else {
+            var seen = Set<String>()
+            let deduped = subs.filter { seen.insert($0.id).inserted }
+            if deduped.count != subs.count {
+                homeLog.notice("mergedVideos: subs-only dedup removed \(subs.count - deduped.count) duplicate(s) (raw=\(subs.count))")
+            }
+            return deduped
+        }
 
         let recIds = Set(recs.map(\.id))
         let uniqueSubs = subs.filter { !recIds.contains($0.id) }
@@ -86,7 +93,11 @@ public final class HomeViewModel {
         // Final safety-net dedup: prevents any remaining duplicate IDs from
         // reaching ForEach, which would cause SwiftUI to render blank cells.
         var seen = Set<String>()
-        return result.filter { seen.insert($0.id).inserted }
+        let deduped = result.filter { seen.insert($0.id).inserted }
+        if deduped.count != result.count {
+            homeLog.notice("mergedVideos: final dedup removed \(result.count - deduped.count) duplicate(s) (subs+recs raw=\(result.count))")
+        }
+        return deduped
     }
 
     /// Non-Short videos from the interleaved home feed.
@@ -185,7 +196,8 @@ public final class HomeViewModel {
             isRefreshing = false
             loadedAt = Date()
             let merged = self.mergedVideos
-            homeLog.notice("load complete: merged=\(merged.count) regular=\(merged.count) shorts=\(shortsVideos.count)")
+            let mergedShorts = merged.filter { $0.isShort }.count
+            homeLog.notice("load complete: merged=\(merged.count) regular=\(merged.count - mergedShorts) mergedShorts=\(mergedShorts) shortsSection=\(shortsVideos.count)")
         }
     }
 
