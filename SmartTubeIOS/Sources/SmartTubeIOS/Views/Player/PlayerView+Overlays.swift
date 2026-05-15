@@ -175,7 +175,7 @@ extension PlayerView {
         #endif
     }
 
-    private var moreMenuPortraitWidth: CGFloat {
+    var moreMenuPortraitWidth: CGFloat {
         #if os(iOS)
         min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * 0.8
         #else
@@ -373,6 +373,7 @@ extension PlayerView {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
+            .accessibilityIdentifier("player.moreMenu.qualityRow")
             #if os(tvOS)
             .background(moreMenuFocusedRow == .quality ? Color.white.opacity(0.15) : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 10))

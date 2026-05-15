@@ -92,6 +92,7 @@ extension PlayerView {
                 }
                 .frame(maxHeight: 320)
             }
+            .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier("player.qualityPicker")
@@ -154,6 +155,7 @@ extension PlayerView {
                 .focused($speedPickerFocused)
                 #endif
             }
+            .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier("player.speedPicker")
@@ -236,6 +238,7 @@ extension PlayerView {
                 }
                 .frame(maxHeight: 320)
             }
+            .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier("player.sleepTimerPicker")
@@ -325,6 +328,7 @@ extension PlayerView {
                 }
                 .frame(maxHeight: 360)
             }
+            .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal, 8)
@@ -407,6 +411,7 @@ extension PlayerView {
                 }
                 .frame(maxHeight: 360)
             }
+            .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal, 8)
