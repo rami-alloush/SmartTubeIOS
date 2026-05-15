@@ -42,7 +42,7 @@ public actor InnerTubeAPI {
     // WiFi switch, cellular handover). A fresh visitorData is issued on the next
     // browse request and is tied to the new IP context, avoiding UNPLAYABLE responses
     // caused by session/IP mismatch after a network transition.
-    nonisolated(unsafe) private let pathMonitor = NWPathMonitor()
+    nonisolated private let pathMonitor = NWPathMonitor()
     private var lastPathStatus: NWPath.Status? = nil
 
     /// The web client context used to fetch home/search/channel feeds.

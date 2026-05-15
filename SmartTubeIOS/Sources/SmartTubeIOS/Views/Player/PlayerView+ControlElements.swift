@@ -668,7 +668,7 @@ extension PlayerControlsOverlay {
 
     private var speedLabel: String {
         store.settings.playbackSpeed == 1.0 ? "Normal"
-            : "\(store.settings.playbackSpeed, specifier: "%.2g")×"
+            : String(format: "%.2g", store.settings.playbackSpeed) + "×"
     }
 
     private var qualityLabel: String {

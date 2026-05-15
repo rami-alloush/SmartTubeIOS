@@ -134,7 +134,7 @@ public actor VideoPreloadCache {
 
     // MARK: - Network-aware throttling (Phase K)
 
-    nonisolated(unsafe) private let pathMonitor = NWPathMonitor()
+    nonisolated private let pathMonitor = NWPathMonitor()
     private var currentPath: NWPath? = nil
 
     private init(

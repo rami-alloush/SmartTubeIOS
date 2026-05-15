@@ -234,7 +234,7 @@ public final class PlaybackViewModel {
     var tracker: WatchtimeTracker
 
     // AVMediaSelectionGroup (forwarded to AudioTrackManager)
-    @ObservationIgnored nonisolated(unsafe) var audioSelectionGroup: AVMediaSelectionGroup? {
+    @ObservationIgnored nonisolated var audioSelectionGroup: AVMediaSelectionGroup? {
         get { audioManager.audioSelectionGroup }
         set { audioManager.audioSelectionGroup = newValue }
     }

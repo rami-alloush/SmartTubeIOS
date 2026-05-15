@@ -159,7 +159,6 @@ public final class BrowseViewModel {
             let raw = String(arg.dropFirst("--uitesting-inject-recommended-ids=".count))
             let ids = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
             if !ids.isEmpty {
-                let baseVideos = ids.map { Video(id: $0, title: $0, channelTitle: "Test Channel") }
                 isAuthRequired = false
                 recommendedUsesSearchFallback = false
                 isLoading = false

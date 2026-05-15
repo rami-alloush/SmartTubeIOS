@@ -111,7 +111,7 @@ final class PlaybackQualityManager {
                     self.player.rate = Float(self.delegate?.settings.playbackSpeed ?? 1)
                     self.delegate?.isPlaying = true
                     if let delegate = self.delegate {
-                        await delegate.loadAudioTracks(from: item)
+                        delegate.loadAudioTracks(from: item)
                     }
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
@@ -266,7 +266,7 @@ final class PlaybackQualityManager {
                     self.player.rate = Float(self.delegate?.settings.playbackSpeed ?? 1)
                     self.delegate?.isPlaying = true
                     if let delegate = self.delegate {
-                        await delegate.loadAudioTracks(from: item)
+                        delegate.loadAudioTracks(from: item)
                     }
                     playerLog.notice("✅ H.264-capped AVPlayerItem readyToPlay")
                 case .failed:

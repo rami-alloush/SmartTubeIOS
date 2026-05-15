@@ -11,7 +11,7 @@ import Foundation
 // Files live at: <Caches>/st-video-cache/<sanitisedVideoId>-<dataType>.json
 // LRU eviction fires when directory size exceeds 20 MB.
 
-final class VideoDiskCache {
+final class VideoDiskCache: @unchecked Sendable {
 
     // MARK: - Configuration
 
@@ -35,10 +35,9 @@ final class VideoDiskCache {
 
     func store<T: Encodable>(_ value: T, videoId: String, dataType: String) {
         let url = fileURL(videoId: videoId, dataType: dataType)
+        guard let data = try? JSONEncoder().encode(value) else { return }
         queue.async { [weak self] in
             guard let self else { return }
-            let encoder = JSONEncoder()
-            guard let data = try? encoder.encode(value) else { return }
             try? data.write(to: url, options: .atomic)
             self.evictIfNeeded()
         }
