@@ -231,7 +231,9 @@ extension InnerTubeAPI {
                     if let v = parseVideoRenderer(renderer) { videos.append(v) }
                 } else if let renderer = dict["playlistVideoRenderer"] as? [String: Any] {
                     // WEB browse response for VL<playlistId> — playlist video items
-                    if let v = parseVideoRenderer(renderer) { videos.append(v) }
+                    // BUG-012 fix: use parsePlaylistVideoRenderer instead of parseVideoRenderer
+                    // so shortBylineText/shortViewCountText fields are read correctly.
+                    if let v = parsePlaylistVideoRenderer(renderer) { videos.append(v) }
                 } else if let renderer = dict["lockupViewModel"] as? [String: Any] {
                     // WEB home v2 (LockupItem in Android) — lockupViewModel
                     if let v = parseLockupViewModel(renderer) { videos.append(v) }
@@ -427,7 +429,21 @@ extension InnerTubeAPI {
             channelId: channelId,
             thumbnailURL: thumbURL,
             duration: duration,
-            viewCount: nil,
+            viewCount: {
+                // BUG-011 fix: extract viewCount from tileMetadata lines instead of hardcoding nil.
+                // The second line (index 1) typically contains "N views" or compact "1.2K views".
+                guard let lines = tileMetadata?["lines"] as? [[String: Any]] else { return nil }
+                for line in lines.dropFirst() {
+                    guard let items = (line["lineRenderer"] as? [String: Any])?["items"] as? [[String: Any]] else { continue }
+                    for item in items {
+                        guard let text = (item["lineItemRenderer"] as? [String: Any])?["text"] as? [String: Any],
+                              let str = extractText(text)
+                        else { continue }
+                        if let count = extractNumber(str) { return count }
+                    }
+                }
+                return nil
+            }(),
             publishedAt: publishedAt,
             isLive: isLive,
             isShort: isShort,
@@ -508,7 +524,21 @@ extension InnerTubeAPI {
 
         return Video(
             id: videoId, title: title, channelTitle: channelTitle, channelId: channelId,
-            thumbnailURL: thumbURL, duration: nil, viewCount: nil,
+            thumbnailURL: thumbURL, duration: nil,
+            viewCount: {
+                // BUG-011 fix: extract viewCount from contentMetadataViewModel metadataRows.
+                // Row index 1 (second row) often contains "N views" or compact count.
+                for row in metaRows.dropFirst() {
+                    guard let parts = row["metadataParts"] as? [[String: Any]] else { continue }
+                    for part in parts {
+                        guard let text = part["text"] as? [String: Any],
+                              let str = text["content"] as? String ?? extractText(text)
+                        else { continue }
+                        if let count = extractNumber(str) { return count }
+                    }
+                }
+                return nil
+            }(),
             isLive: false, isShort: isShort, badges: []
         )
     }
@@ -543,7 +573,12 @@ extension InnerTubeAPI {
 
         return Video(
             id: videoId, title: title, channelTitle: channelTitle, channelId: channelId,
-            thumbnailURL: thumbURL, duration: nil, viewCount: nil,
+            thumbnailURL: thumbURL, duration: nil,
+            viewCount: {
+                // BUG-011 fix: extract viewCount from viewCountText (runs or simpleText).
+                let vcText = (r["viewCountText"] as? [String: Any]).flatMap { extractText($0) }
+                return vcText.flatMap { extractNumber($0) }
+            }(),
             isLive: false, isShort: true, hasPortraitThumbnail: true, badges: []
         )
     }
@@ -580,7 +615,11 @@ extension InnerTubeAPI {
         let duration = lengthText.flatMap { parseDuration($0) }
 
         let viewCountText = (r["viewCountText"] as? [String: Any]).flatMap { extractText($0) }
+            // BUG-014 fix: fall back to shortViewCountText when viewCountText is absent (some locales/auth configs).
+            ?? (r["shortViewCountText"] as? [String: Any]).flatMap { extractText($0) }
         let viewCount = viewCountText.flatMap { extractNumber($0) }
+            // Further fallback: direct integer field (rare, but present in some compact API responses).
+            ?? r["viewCount"] as? Int
 
         let isLive = (r["badges"] as? [[String: Any]])?.contains {
             (($0["metadataBadgeRenderer"] as? [String: Any])?["style"] as? String) == "BADGE_STYLE_TYPE_LIVE_NOW"
@@ -647,4 +686,59 @@ extension InnerTubeAPI {
             hideChannelToken: feedbackTokens["BLOCK_CHANNEL"]
         )
     }
+
+    // MARK: – WEB playlistVideoRenderer parser (BUG-012 fix)
+    // Playlist video items use shortBylineText/shortViewCountText instead of
+    // ownerText/viewCountText which parseVideoRenderer expects.
+    private func parsePlaylistVideoRenderer(_ r: [String: Any]) -> Video? {
+        guard let videoId = r["videoId"] as? String else { return nil }
+        let title = (r["title"] as? [String: Any]).flatMap { extractText($0) } ?? ""
+
+        // channelTitle: shortBylineText preferred; ownerText as fallback
+        let channelTitle = (r["shortBylineText"] as? [String: Any]).flatMap { extractText($0) }
+            ?? (r["ownerText"] as? [String: Any]).flatMap { extractText($0) }
+            ?? ""
+
+        // channelId: from shortBylineText or ownerText runs[0].navigationEndpoint.browseEndpoint.browseId
+        let channelId: String? = {
+            let sourceKey = r["shortBylineText"] != nil ? "shortBylineText" : "ownerText"
+            guard let runs = (r[sourceKey] as? [String: Any])?["runs"] as? [[String: Any]],
+                  let first = runs.first,
+                  let nav = first["navigationEndpoint"] as? [String: Any],
+                  let browse = nav["browseEndpoint"] as? [String: Any]
+            else { return nil }
+            return browse["browseId"] as? String
+        }()
+
+        let thumbnails = (r["thumbnail"] as? [String: Any])?["thumbnails"] as? [[String: Any]]
+        let thumbURL = thumbnails?.last.flatMap { $0["url"] as? String }.flatMap { URL(string: $0) }
+
+        let lengthText = (r["lengthText"] as? [String: Any]).flatMap { extractText($0) }
+        let duration = lengthText.flatMap { parseDuration($0) }
+
+        // viewCount: shortViewCountText preferred; viewCountText as fallback; direct int last
+        let viewCountText = (r["shortViewCountText"] as? [String: Any]).flatMap { extractText($0) }
+            ?? (r["viewCountText"] as? [String: Any]).flatMap { extractText($0) }
+        let viewCount = viewCountText.flatMap { extractNumber($0) } ?? r["viewCount"] as? Int
+
+        let watchProgress: Double? = (r["thumbnailOverlays"] as? [[String: Any]])?
+            .compactMap { ($0["thumbnailOverlayResumePlaybackRenderer"] as? [String: Any])
+                .flatMap { $0["percentDurationWatched"] as? Double } }
+            .first.map { $0 / 100.0 }
+
+        return Video(
+            id: videoId,
+            title: title,
+            channelTitle: channelTitle,
+            channelId: channelId,
+            thumbnailURL: thumbURL,
+            duration: duration,
+            viewCount: viewCount,
+            isLive: false,
+            isShort: false,
+            watchProgress: watchProgress,
+            badges: []
+        )
+    }
 }
+

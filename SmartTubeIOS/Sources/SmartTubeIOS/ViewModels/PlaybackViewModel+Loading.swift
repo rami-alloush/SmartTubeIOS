@@ -297,6 +297,12 @@ extension PlaybackViewModel {
                 }
                 await VideoPreloadCache.shared.store(playerInfo: info, for: video.id)
             }
+            // BUG-005 fix: guard against rapid navigation — if the user navigated away while we
+            // were awaiting the player info, discard this result rather than overwrite ViewModel state.
+            guard currentVideo?.id == video.id else {
+                playerLog.notice("[loadAsync] superseded: discarding playerInfo for \(video.id)")
+                return
+            }
             playerInfo = info
             availableFormats = Self.deduplicatedVideoFormats(info.formats)
             availableCaptions = info.captionTracks
@@ -597,7 +603,7 @@ extension PlaybackViewModel {
     /// Fetches data that is not needed to start AVPlayer: related videos, end cards,
     /// SponsorBlock segments (cache miss only), tracking URLs, and neighbour prefetch.
     /// All property assignments happen on @MainActor because PlaybackViewModel is @MainActor.
-    private func loadAsyncPhase2(
+    func loadAsyncPhase2(
         video: Video,
         cached: CachedVideoData,
         info: PlayerInfo,
@@ -739,16 +745,19 @@ extension PlaybackViewModel {
         tracker.setTrackingURLs(resolvedTrackingURLs)
         playerLog.notice("activeTrackingURLs resolved: \(resolvedTrackingURLs != nil ? "account-bound" : "none")")
 
-        // --- Kick off neighbour pre-fetch now that relatedVideos is populated ---
+        // BUG-015 fix: read currentAuthToken per-prefetch-call so a token refresh mid-loop
+        // uses the fresh token rather than a stale snapshot captured before the loop starts.
         let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
-        let prefetchToken = currentAuthToken
         let sponsorCats = settings.activeSponsorCategories
-        Task(priority: .background) {
+        Task(priority: .background) { [weak self] in
             for videoId in neighbourIds {
+                // Re-read the token at each iteration — if a refresh happened, this picks up
+                // the new token without blocking the background task on the main actor.
+                let token = await MainActor.run { self?.currentAuthToken }
                 await VideoPreloadCache.shared.prefetch(
                     videoId: videoId,
                     sponsorCategories: sponsorCats,
-                    authToken: prefetchToken,
+                    authToken: token,
                     priority: .speculative
                 )
             }

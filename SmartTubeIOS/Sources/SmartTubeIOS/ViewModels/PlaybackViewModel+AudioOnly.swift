@@ -65,7 +65,7 @@ extension PlaybackViewModel {
 
         // Attempt 1: iOS client URL (already in memory, zero extra network cost).
         if let url = info.bestAdaptiveAudioURL {
-            let success = await tryLoadAudioURL(url, userAgent: InnerTubeClients.iOS.userAgent, seekTo: seekTime)
+            let success = await tryLoadAudioURL(url, userAgent: InnerTubeClients.iOS.userAgent, seekTo: seekTime, liveToggle: liveToggle)
             if success { return }
             audioOnlyLog.notice("Audio-only: iOS client URL failed, retrying with android_vr")
         }
@@ -76,7 +76,7 @@ extension PlaybackViewModel {
 
     /// Builds an `AVURLAsset` for the given audio URL, checks playability, and replaces
     /// the current player item. Returns `true` on success.
-    private func tryLoadAudioURL(_ url: URL, userAgent: String, seekTo seekTime: TimeInterval = 0) async -> Bool {
+    private func tryLoadAudioURL(_ url: URL, userAgent: String, seekTo seekTime: TimeInterval = 0, liveToggle: Bool = false) async -> Bool {
         let opts: [String: Any] = [
             "AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": userAgent]
         ]
@@ -89,6 +89,9 @@ extension PlaybackViewModel {
         // Set up an item observer before replacing the current item, matching the
         // pattern used by every other load path. Without this the audio item's
         // .failed status is never observed, causing silent playback stalls.
+        // BUG-009 fix: replace the current item BEFORE setting up the observer.
+        audioOnlyItemActive = true
+        player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()
         itemObserverTask = Task { [weak self] in
             for await status in item.statusStream {
@@ -106,10 +109,11 @@ extension PlaybackViewModel {
                     let err = item.error.map { "\($0)" } ?? "nil"
                     audioOnlyLog.error("❌ Audio-only AVPlayerItem failed: \(err)")
                     self.audioOnlyItemActive = false
-                    // Reset the flag so the UI re-shows the video layer.
-                    // The HLS item placed by the primary load path is no longer the
-                    // current item at this point, so also clear the error display.
-                    self.isAudioOnlyMode = false
+                    // BUG-008 fix: only reset isAudioOnlyMode when this is NOT a live toggle.
+                    // On liveToggle, the overlay stays visible with HLS audio underneath.
+                    if !liveToggle {
+                        self.isAudioOnlyMode = false
+                    }
                     self.error = item.error
                 case .unknown:
                     audioOnlyLog.notice("Audio-only: AVPlayerItem status unknown (loading)")
@@ -119,8 +123,22 @@ extension PlaybackViewModel {
             }
         }
 
-        audioOnlyItemActive = true
-        player.replaceCurrentItem(with: item)
+        // BUG-010 fix: restart endObserverTask so autoplay-to-next works in audio-only mode.
+        // The main loadAsync sets up endObserverTask for the HLS AVPlayerItem; when we replace
+        // that item with an audio-only AVPlayerItem, the old observer watches the wrong object
+        // and didPlayToEndTimeNotification is never delivered.
+        endObserverTask?.cancel()
+        endObserverTask = Task { [weak self] in
+            let notifications = NotificationCenter.default.notifications(
+                named: AVPlayerItem.didPlayToEndTimeNotification,
+                object: item
+            )
+            for await _ in notifications {
+                guard let self, !Task.isCancelled else { return }
+                self.handlePlaybackEnd()
+            }
+        }
+
         audioOnlyLog.notice("Audio-only: loaded \(url.absoluteString.prefix(80))")
         return true
     }
@@ -131,7 +149,7 @@ extension PlaybackViewModel {
         do {
             let vrInfo = try await api.fetchPlayerInfoAndroidVR(videoId: videoId)
             if let url = vrInfo.bestAdaptiveAudioURL {
-                let success = await tryLoadAudioURL(url, userAgent: InnerTubeClients.AndroidVR.userAgent, seekTo: seekTime)
+                let success = await tryLoadAudioURL(url, userAgent: InnerTubeClients.AndroidVR.userAgent, seekTo: seekTime, liveToggle: liveToggle)
                 if success { return }
             }
         } catch {

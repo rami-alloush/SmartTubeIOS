@@ -25,8 +25,15 @@ extension PlaybackViewModel {
                 return
             }
             playerLog.notice("Fallback stream URL: \(fallbackURL.absoluteString.prefix(120))")
+            // BUG-002 fix: propagate fetched info so format/caption pickers reflect the fallback response.
+            playerInfo = fallbackInfo
+            availableFormats = Self.deduplicatedVideoFormats(fallbackInfo.formats)
+            availableCaptions = fallbackInfo.captionTracks
             lastAttemptedStreamURL = fallbackURL
             let fallbackItem = AVPlayerItem(url: fallbackURL)
+            // BUG-009 fix: replace the current item BEFORE setting up the observer so the
+            // observer never fires on the old item.
+            player.replaceCurrentItem(with: fallbackItem)
             itemObserverTask?.cancel()
             itemObserverTask = Task { [weak self] in
                 for await status in fallbackItem.statusStream {
@@ -50,11 +57,25 @@ extension PlaybackViewModel {
                     }
                 }
             }
-            player.replaceCurrentItem(with: fallbackItem)
             player.rate = Float(settings.playbackSpeed)
             isPlaying = true
+            // BUG-007 fix: launch phase2 so SponsorBlock, tracking URLs, and nextInfo are fetched
+            // even when the primary load path fell back to the Android client.
+            let p2Video = video
+            let p2Info = fallbackInfo
+            phase2Task?.cancel()
+            phase2Task = Task(priority: .utility) { [weak self] in
+                let empty = CachedVideoData(
+                    playerInfo: nil, trackingURLs: nil, nextInfo: nil,
+                    endCards: nil, sponsorSegments: nil, deArrowBranding: nil,
+                    staleFields: []
+                )
+                await self?.loadAsyncPhase2(
+                    video: p2Video, cached: empty, info: p2Info,
+                    cachedTrackingURLs: nil, authTrackingTask: nil, sponsorCached: false
+                )
+            }
         } catch {
-            playerLog.error("❌ Fallback player fetch failed: \(String(describing: error))")
             // IP-block errors from the Android fallback are more actionable than the upstream
             // AVFoundation -11828 "Cannot Open". Surface ipBlocked so the user sees the
             // "YouTube is temporarily blocking this network…" banner instead of "Cannot Open".
@@ -84,6 +105,10 @@ extension PlaybackViewModel {
             await retryWithFallbackPlayer(video: video, originalError: originalError)
             return
         }
+        // BUG-004 fix: propagate the info that was passed in so format/caption pickers reflect it.
+        playerInfo = info
+        availableFormats = Self.deduplicatedVideoFormats(info.formats)
+        availableCaptions = info.captionTracks
         playerLog.notice("Adaptive composition: video=\(videoURL.absoluteString.prefix(80)) audio=\(audioURL.absoluteString.prefix(80))")
 
         let ua = InnerTubeClients.iOS.userAgent
@@ -121,6 +146,8 @@ extension PlaybackViewModel {
             lastAttemptedStreamURL = videoURL
             let compositeItem = AVPlayerItem(asset: composition)
 
+            // BUG-009 fix: replace before observing.
+            player.replaceCurrentItem(with: compositeItem)
             itemObserverTask?.cancel()
             itemObserverTask = Task { [weak self] in
                 for await status in compositeItem.statusStream {
@@ -144,9 +171,24 @@ extension PlaybackViewModel {
                     }
                 }
             }
-            player.replaceCurrentItem(with: compositeItem)
             player.rate = Float(settings.playbackSpeed)
             isPlaying = true
+            // BUG-007 fix: launch phase2 so SponsorBlock, tracking URLs, and nextInfo are fetched
+            // after the adaptive composition fallback.
+            let p2Video = video
+            let p2Info = info
+            phase2Task?.cancel()
+            phase2Task = Task(priority: .utility) { [weak self] in
+                let empty = CachedVideoData(
+                    playerInfo: nil, trackingURLs: nil, nextInfo: nil,
+                    endCards: nil, sponsorSegments: nil, deArrowBranding: nil,
+                    staleFields: []
+                )
+                await self?.loadAsyncPhase2(
+                    video: p2Video, cached: empty, info: p2Info,
+                    cachedTrackingURLs: nil, authTrackingTask: nil, sponsorCached: false
+                )
+            }
         } catch {
             playerLog.error("❌ Adaptive composition setup failed: \(error) — falling back to Android client")
             await retryWithFallbackPlayer(video: video, originalError: originalError)
@@ -167,8 +209,14 @@ extension PlaybackViewModel {
                 return
             }
             playerLog.notice("403 recovery stream URL: \(freshURL.absoluteString.prefix(120))")
+            // BUG-003 fix: propagate refreshed info so ViewModel state reflects fresh signed URLs.
+            playerInfo = freshInfo
+            availableFormats = Self.deduplicatedVideoFormats(freshInfo.formats)
+            availableCaptions = freshInfo.captionTracks
             lastAttemptedStreamURL = freshURL
             let recoveryItem = AVPlayerItem(url: freshURL)
+            // BUG-009 fix: replace before observing.
+            player.replaceCurrentItem(with: recoveryItem)
             itemObserverTask?.cancel()
             itemObserverTask = Task { [weak self] in
                 for await status in recoveryItem.statusStream {
@@ -192,9 +240,24 @@ extension PlaybackViewModel {
                     }
                 }
             }
-            player.replaceCurrentItem(with: recoveryItem)
             player.rate = Float(settings.playbackSpeed)
             isPlaying = true
+            // BUG-007 fix: launch phase2 so SponsorBlock, tracking URLs, and nextInfo are fetched
+            // after the 403-recovery fetch.
+            let p2Video = video
+            let p2Info = freshInfo
+            phase2Task?.cancel()
+            phase2Task = Task(priority: .utility) { [weak self] in
+                let empty = CachedVideoData(
+                    playerInfo: nil, trackingURLs: nil, nextInfo: nil,
+                    endCards: nil, sponsorSegments: nil, deArrowBranding: nil,
+                    staleFields: []
+                )
+                await self?.loadAsyncPhase2(
+                    video: p2Video, cached: empty, info: p2Info,
+                    cachedTrackingURLs: nil, authTrackingTask: nil, sponsorCached: false
+                )
+            }
         } catch {
             playerLog.error("❌ 403 recovery fetch failed: \(String(describing: error)) — falling back to Android client")
             await retryWithFallbackPlayer(video: video, originalError: originalError)

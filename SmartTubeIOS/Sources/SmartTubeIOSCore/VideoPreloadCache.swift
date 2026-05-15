@@ -389,6 +389,8 @@ public actor VideoPreloadCache {
         cacheLog.notice("[evict] auth sign-out — clearing trackingCache (\(self.trackingCache.count, privacy: .public) entries) + nextInfoCache (\(self.nextInfoCache.count, privacy: .public) entries)")
         trackingCache.removeAll()
         nextInfoCache.removeAll()
+        // BUG-013 fix: also purge disk so nextInfo (likeStatus) cannot be read back after sign-out.
+        disk.removeAll()
     }
 
     /// Call after a token refresh: tracking URLs bound to the old token are stale.
@@ -518,5 +520,23 @@ public struct CachedVideoData: Sendable {
     /// True when every field that is required for instant playback start is fresh.
     public var isComplete: Bool {
         playerInfo != nil && nextInfo != nil && sponsorSegments != nil
+    }
+
+    public init(
+        playerInfo: PlayerInfo?,
+        trackingURLs: PlaybackTrackingURLs??,
+        nextInfo: NextInfo?,
+        endCards: [EndCard]?,
+        sponsorSegments: [SponsorSegment]?,
+        deArrowBranding: DeArrowService.BrandingInfo?,
+        staleFields: Set<DataType>
+    ) {
+        self.playerInfo = playerInfo
+        self.trackingURLs = trackingURLs
+        self.nextInfo = nextInfo
+        self.endCards = endCards
+        self.sponsorSegments = sponsorSegments
+        self.deArrowBranding = deArrowBranding
+        self.staleFields = staleFields
     }
 }

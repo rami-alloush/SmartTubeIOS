@@ -75,6 +75,23 @@ final class VideoDiskCache: @unchecked Sendable {
         }
     }
 
+    // MARK: - Auth eviction (BUG-013 fix)
+
+    /// Removes all cached files from disk. Called by VideoPreloadCache.evictAuthSensitiveData()
+    /// on sign-out so nextInfo (which contains likeStatus) cannot be read back after the cache
+    /// is cleared in memory.
+    /// Uses queue.sync to ensure deletion completes before the caller returns, making this
+    /// safe to call synchronously from actor methods that need immediate consistency.
+    func removeAll() {
+        queue.sync {
+            let fm = FileManager.default
+            guard let files = try? fm.contentsOfDirectory(at: self.cacheDir, includingPropertiesForKeys: nil) else { return }
+            for file in files {
+                try? fm.removeItem(at: file)
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     func fileURL(videoId: String, dataType: String) -> URL {

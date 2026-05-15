@@ -461,7 +461,25 @@ extension InnerTubeAPI {
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        _ = try? await session.data(for: request)
+        // BUG-006 fix: log errors and retry once for transient failures instead of silently discarding.
+        do {
+            let (_, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                tubeLog.warning("pingTrackingURL: HTTP \(http.statusCode) for \(url.absoluteString.prefix(120), privacy: .public)")
+            }
+        } catch is CancellationError {
+            // Task was cancelled (user navigated away) — expected, do not retry.
+        } catch {
+            tubeLog.warning("pingTrackingURL: transient error (\(error.localizedDescription, privacy: .public)) — retrying once")
+            do {
+                let (_, response) = try await session.data(for: request)
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    tubeLog.error("pingTrackingURL: retry HTTP \(http.statusCode) for \(url.absoluteString.prefix(120), privacy: .public)")
+                }
+            } catch {
+                tubeLog.error("pingTrackingURL: retry also failed — \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Constructs a fallback playback stats URL for when the player response omits `playbackTracking`.

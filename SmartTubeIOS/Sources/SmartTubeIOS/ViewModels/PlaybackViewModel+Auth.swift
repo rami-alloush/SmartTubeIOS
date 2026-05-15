@@ -25,7 +25,10 @@ extension PlaybackViewModel {
             // Signed out: evict account-bound cache data
             Task { await VideoPreloadCache.shared.evictAuthSensitiveData() }
         } else if wasAuthenticated, token != nil {
-            // Token refreshed: tracking URLs bound to the old token are stale
+            // Token refreshed: tracking URLs bound to the old token are stale.
+            // BUG-016 fix: also clear WatchtimeTracker so any in-flight checkpoint between
+            // the token refresh and the next video load uses nil URLs rather than stale ones.
+            tracker.setTrackingURLs(nil)
             Task { await VideoPreloadCache.shared.evictTrackingURLs() }
         }
     }
