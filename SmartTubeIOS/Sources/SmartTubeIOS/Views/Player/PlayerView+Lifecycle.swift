@@ -607,7 +607,11 @@ extension PlayerView {
             channelDestination: $channelDestination,
             pipController: $pipController,
             isPiPActive: $isPiPActive,
-            isLandscapeLocked: $isLandscapeLocked
+            isLandscapeLocked: $isLandscapeLocked,
+            showSpeedPicker: $showSpeedPicker,
+            showQualityPicker: $showQualityPicker,
+            showAudioTrackPicker: $showAudioTrackPicker,
+            showSleepTimerPicker: $showSleepTimerPicker
         )
         #elseif os(tvOS)
         PlayerControlsOverlay(

@@ -26,6 +26,10 @@ struct PlayerControlsOverlay: View {
     @Binding var pipController: AVPictureInPictureController?
     @Binding var isPiPActive: Bool
     @Binding var isLandscapeLocked: Bool
+    @Binding var showSpeedPicker: Bool
+    @Binding var showQualityPicker: Bool
+    @Binding var showAudioTrackPicker: Bool
+    @Binding var showSleepTimerPicker: Bool
     @Environment(PlayerStateStore.self) private var playerState
     var vm: PlaybackViewModel { playerState.vm }
     #else
@@ -198,6 +202,9 @@ struct PlayerControlsOverlay: View {
                         .animation(.easeInOut(duration: 0.2), value: chapter.title)
                 }
                 progressBar
+                #if os(iOS)
+                quickAccessButtonRow
+                #endif
                 HStack {
                     // Previous video button
                     Button {
@@ -613,3 +620,91 @@ extension PlayerView {
         .accessibilityIdentifier("player.errorBanner")
     }
 }
+
+#if os(iOS)
+// MARK: - Quick-access row (iOS only)
+//
+// Compact pill buttons giving one-tap access to speed, quality, audio track,
+// and sleep-timer pickers without opening the 3-dot more menu.
+// Surfaced directly below the progress bar as requested in GitHub issue #52.
+extension PlayerControlsOverlay {
+
+    @ViewBuilder var quickAccessButtonRow: some View {
+        HStack(spacing: 8) {
+            quickAccessButton(
+                systemImage: "speedometer",
+                label: speedLabel,
+                accessibilityId: "player.quickAccess.speed"
+            ) { showSpeedPicker = true }
+
+            if !vm.availableFormats.isEmpty && !vm.isAudioOnlyMode {
+                quickAccessButton(
+                    systemImage: "4k.tv",
+                    label: qualityLabel,
+                    accessibilityId: "player.quickAccess.quality"
+                ) { showQualityPicker = true }
+            }
+
+            if vm.availableAudioTracks.count > 1 {
+                quickAccessButton(
+                    systemImage: "waveform",
+                    label: audioTrackLabel,
+                    accessibilityId: "player.quickAccess.audioTrack"
+                ) { showAudioTrackPicker = true }
+            }
+
+            quickAccessButton(
+                systemImage: "moon.zzz",
+                label: sleepTimerLabel,
+                accessibilityId: "player.quickAccess.sleepTimer"
+            ) { showSleepTimerPicker = true }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .accessibilityIdentifier("player.quickAccessRow")
+    }
+
+    // MARK: - Quick-access label helpers
+
+    private var speedLabel: String {
+        store.settings.playbackSpeed == 1.0 ? "Normal"
+            : "\(store.settings.playbackSpeed, specifier: "%.2g")×"
+    }
+
+    private var qualityLabel: String {
+        vm.selectedFormat?.qualityLabel ?? "Auto"
+    }
+
+    private var audioTrackLabel: String {
+        vm.selectedAudioTrack.map {
+            $0.isOriginal ? "\($0.name) (Original)" : $0.name
+        } ?? "Auto"
+    }
+
+    private var sleepTimerLabel: String {
+        vm.sleepTimerMinutes.map { "\($0) min" } ?? "Off"
+    }
+
+    // MARK: - Single pill button
+
+    @ViewBuilder
+    private func quickAccessButton(
+        systemImage: String,
+        label: String,
+        accessibilityId: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: systemImage)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.18))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(accessibilityId)
+    }
+}
+#endif
