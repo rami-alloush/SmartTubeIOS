@@ -5,6 +5,16 @@ import OSLog
 
 private let orientationLog = Logger(subsystem: "com.void.smarttube.app", category: "Orientation")
 
+/// File-scope handler passed to `UIWindowScene.requestGeometryUpdate(_:errorHandler:)`.
+/// Must live outside any `@MainActor` class so it does NOT inherit actor isolation.
+/// On iOS 26+ UIKit calls this handler on a background GCD queue via `_BSActionResponder`;
+/// a `@MainActor`-isolated closure would crash with `EXC_BREAKPOINT` in
+/// `_swift_task_checkIsolatedSwift` / `_dispatch_assert_queue_fail`.
+@Sendable
+private func geometryUpdateErrorHandler(_ error: Error) {
+    orientationLog.error("[OrientationManager] requestGeometryUpdate error: \(error.localizedDescription)")
+}
+
 /// Tracks whether the video player is currently presented on screen so that the
 /// app delegate can advertise landscape-capable orientations to UIKit while the
 /// player is active. Access is confined to the main actor because it is read by
@@ -68,9 +78,7 @@ public final class OrientationManager {
             try? await Task.sleep(for: .milliseconds(50))
             let pref = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
             orientationLog.notice("[OrientationManager] requestGeometryUpdate — requesting mask=\(mask.rawValue) on scene")
-            scene.requestGeometryUpdate(pref) { error in
-                orientationLog.error("[OrientationManager] requestGeometryUpdate error: \(error.localizedDescription)")
-            }
+            scene.requestGeometryUpdate(pref, errorHandler: geometryUpdateErrorHandler)
         }
     }
 }
