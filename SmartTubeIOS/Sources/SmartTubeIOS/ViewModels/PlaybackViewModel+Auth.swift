@@ -14,6 +14,10 @@ extension PlaybackViewModel {
         let wasAuthenticated = hasAuthToken
         hasAuthToken = token != nil
         currentAuthToken = token
+        // Propagate the token to the PlaybackViewModel's own API instance so that
+        // WatchtimeTracker sends authenticated watch-time pings (fixes watch history
+        // not being recorded for signed-in users — GitHub issue #51).
+        Task { await api.setAuthToken(token) }
         // Keep the cache's InnerTubeAPI instance in sync so prefetch requests
         // can make authenticated calls (e.g. fetchAuthenticatedTrackingURLs).
         Task { await VideoPreloadCache.shared.setAuthToken(token) }
