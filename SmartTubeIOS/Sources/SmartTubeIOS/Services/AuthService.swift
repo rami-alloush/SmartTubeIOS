@@ -4,7 +4,6 @@ import os
 import SmartTubeIOSCore
 
 let authLog = CrashlyticsLogger(category: "Auth")
-let keychainService = "com.smarttube.auth"
 
 // MARK: - AuthService
 //
@@ -68,11 +67,7 @@ public final class AuthService {
     private var currentCreds: YouTubeClientCredentials?
     private var isSigningIn: Bool = false
 
-    let tokenKey   = "st_access_token"
-    let refreshKey = "st_refresh_token"
-    let expiryKey  = "st_token_expiry"
-    let accountKey = "st_account_name"
-    let avatarKey  = "st_avatar_url"
+    public let tokenManager: TokenManager
 
     // MARK: - Static endpoint URLs (known-valid literals)
 
@@ -81,6 +76,7 @@ public final class AuthService {
     static let accountsListURL = URL(string: "https://www.youtube.com/youtubei/v1/account/accounts_list")!
 
     public init() {
+        tokenManager = TokenManager()
         loadFromKeychain()
         // If already signed in but no account info (e.g. stored before the
         // fetchUserInfo fix), refresh it silently in the background.
