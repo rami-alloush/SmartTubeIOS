@@ -192,8 +192,6 @@
 		};
 		67E6B67C2F9535CD00CD372F /* Smart Tube */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Smart Tube";
 			sourceTree = "<group>";
 		};
@@ -560,7 +558,7 @@
 			mainGroup = 10B1F40F599FC1A0781AF6D9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "SmartTubeIOS" */,
+				644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "../SmartTubeIOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5EF0B6AF2643BF476B25C7C0 /* Products */;
@@ -915,7 +913,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1345,7 +1343,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -1448,7 +1446,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "SmartTubeIOS" */ = {
+		644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "../SmartTubeIOS" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../SmartTubeIOS;
 		};
@@ -1457,17 +1455,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		4D96747315A9E066D09F1F4E /* SmartTubeIOSCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "SmartTubeIOS" */;
+			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "../SmartTubeIOS" */;
 			productName = SmartTubeIOSCore;
 		};
 		67E6B6862F9535CD00CD372F /* SmartTubeIOS */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "SmartTubeIOS" */;
+			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "../SmartTubeIOS" */;
 			productName = SmartTubeIOS;
 		};
 		AA01000000000000000000B1 /* SmartTubeIOSCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "SmartTubeIOS" */;
+			package = 644EA6428F48EF6B886E4B58 /* XCLocalSwiftPackageReference "../SmartTubeIOS" */;
 			productName = SmartTubeIOSCore;
 		};
 		B8401470D9A590E7F3685830 /* SmartTubeIOS */ = {
