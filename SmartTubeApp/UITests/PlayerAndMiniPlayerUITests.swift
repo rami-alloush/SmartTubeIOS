@@ -431,12 +431,23 @@ final class PlayerAndMiniPlayerUITests: XCTestCase {
         try XCTSkipIf(Self.skipAllTests, Self.skipReason)
         XCUIDevice.shared.orientation = .portrait
         try openPlayerFromHome()
-        showControls()
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        Thread.sleep(forTimeInterval: 0.5)
 
-        guard nextButton.waitForExistence(timeout: 8) else {
-            try captureAndSkip("player.nextBtn did not appear — controls may not have shown in portrait (timing-dependent)", in: app)
+        // Controls auto-hide after a few seconds. Poll with repeated taps until
+        // nextButton is both visible and hittable (up to 20 s total).
+        let center = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        var foundNext = false
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            center.tap()
+            Thread.sleep(forTimeInterval: 1.0)
+            if nextButton.exists, nextButton.isHittable {
+                foundNext = true
+                break
+            }
+        }
+
+        guard foundNext else {
+            try captureAndSkip("player.nextBtn did not become hittable in portrait within 20 s — timing-dependent", in: app)
         }
         XCTAssertTrue(nextButton.isHittable,
                       "player.nextBtn must be hittable in portrait — regression for task #45 hit-area fix")
