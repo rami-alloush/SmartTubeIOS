@@ -631,14 +631,18 @@ extension InnerTubeAPI {
                 return true
             }
             // Secondary signal: thumbnailOverlayTimeStatusRenderer.style == "SHORTS"
-            // (subscriptions feed often omits reelWatchEndpoint and uses this style instead)
-            return (r["thumbnailOverlays"] as? [[String: Any]])?.contains {
+            // (subscriptions feed often omits reelWatchEndpoint and uses this style instead).
+            // Guard with duration ≤ 180 s: regular videos can appear in Shorts-adjacent shelves
+            // with this overlay style, causing false positives. Duration validation prevents
+            // misclassification of videos like vkUokV3Xwp8. Mirrors the guard in parseTileRenderer.
+            let hasShortOverlay = (r["thumbnailOverlays"] as? [[String: Any]])?.contains {
                 ($0["thumbnailOverlayTimeStatusRenderer"] as? [String: Any])?["style"] as? String == "SHORTS"
             } ?? false
+            return hasShortOverlay && (duration.map { $0 <= 180 } ?? true)
         }()
         if isShort {
             let signal = ((r["navigationEndpoint"] as? [String: Any])?["reelWatchEndpoint"] != nil) ? "reelWatchEndpoint" : "overlayStyle"
-            tubeLog.debug("videoRenderer isShort=true id=\(videoId, privacy: .public) signal=\(signal, privacy: .public)")
+            tubeLog.debug("videoRenderer isShort=true id=\(videoId, privacy: .public) signal=\(signal, privacy: .public) duration=\(Int(duration ?? -1))")
         }
 
         let badges = (r["badges"] as? [[String: Any]])?.compactMap {

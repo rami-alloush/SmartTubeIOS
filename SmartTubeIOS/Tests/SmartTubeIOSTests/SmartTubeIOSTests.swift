@@ -796,7 +796,94 @@ struct InnerTubeAPIParsingGapsTests {
         #expect(video.isShort, "videoRenderer with thumbnailOverlayTimeStatusRenderer.style == SHORTS must be tagged isShort = true even without reelWatchEndpoint")
     }
 
-    // MARK: - Empty response
+    @Test("videoRenderer with SHORTS overlay but duration > 180 s is NOT tagged isShort")
+    func videoRendererShortsOverlayLongDurationNotShort() async throws {
+        // Regression for vkUokV3Xwp8: a regular video in a Shorts-adjacent shelf carries the
+        // SHORTS overlay style but has a duration > 180 s — must NOT be classified as a Short.
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [[
+                        "itemSectionRenderer": [
+                            "contents": [[
+                                "shelfRenderer": [
+                                    "content": [
+                                        "horizontalListRenderer": [
+                                            "items": [[
+                                                "gridVideoRenderer": [
+                                                    "videoId": "longVideoFalseShort",
+                                                    "title": ["runs": [["text": "A 10-minute regular video"]]],
+                                                    "shortBylineText": ["runs": [["text": "Channel"]]],
+                                                    "thumbnail": ["thumbnails": [["url": "https://i.ytimg.com/vi/longVideoFalseShort/hqdefault.jpg"]]],
+                                                    "navigationEndpoint": ["watchEndpoint": ["videoId": "longVideoFalseShort"]],
+                                                    "lengthText": ["simpleText": "10:15"],
+                                                    "thumbnailOverlays": [[
+                                                        "thumbnailOverlayTimeStatusRenderer": [
+                                                            "text": ["simpleText": "10:15"],
+                                                            "style": "SHORTS"
+                                                        ]
+                                                    ]]
+                                                ]
+                                            ]]
+                                        ]
+                                    ]
+                                ]
+                            ]]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Feed")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "longVideoFalseShort")
+        #expect(!video.isShort, "videoRenderer with SHORTS overlay but duration 10:15 (615 s) must NOT be tagged isShort = true")
+    }
+
+    @Test("videoRenderer with SHORTS overlay at exactly 180 s boundary is tagged isShort")
+    func videoRendererShortsOverlayBoundaryDurationIsShort() async throws {
+        // Boundary: exactly 180 s with SHORTS overlay → must be classified as a Short.
+        let mockResponse: [String: Any] = [
+            "contents": [
+                "sectionListRenderer": [
+                    "contents": [[
+                        "itemSectionRenderer": [
+                            "contents": [[
+                                "shelfRenderer": [
+                                    "content": [
+                                        "horizontalListRenderer": [
+                                            "items": [[
+                                                "gridVideoRenderer": [
+                                                    "videoId": "boundaryShort180",
+                                                    "title": ["runs": [["text": "Exactly 3-minute short"]]],
+                                                    "shortBylineText": ["runs": [["text": "Creator"]]],
+                                                    "thumbnail": ["thumbnails": [["url": "https://i.ytimg.com/vi/boundaryShort180/hqdefault.jpg"]]],
+                                                    "navigationEndpoint": ["watchEndpoint": ["videoId": "boundaryShort180"]],
+                                                    "lengthText": ["simpleText": "3:00"],
+                                                    "thumbnailOverlays": [[
+                                                        "thumbnailOverlayTimeStatusRenderer": [
+                                                            "text": ["simpleText": "3:00"],
+                                                            "style": "SHORTS"
+                                                        ]
+                                                    ]]
+                                                ]
+                                            ]]
+                                        ]
+                                    ]
+                                ]
+                            ]]
+                        ]
+                    ]]
+                ]
+            ]
+        ]
+        let api = InnerTubeAPI()
+        let group = try await api.parseVideoGroupForTesting(mockResponse, title: "Feed")
+        let video = try #require(group.videos.first)
+        #expect(video.id == "boundaryShort180")
+        #expect(video.isShort, "videoRenderer with SHORTS overlay and duration exactly 3:00 (180 s) must be tagged isShort = true")
+    }
 
     @Test("Empty JSON response produces an empty VideoGroup")
     func emptyContentsReturnsEmptyGroup() async throws {
