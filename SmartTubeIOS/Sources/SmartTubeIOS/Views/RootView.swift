@@ -122,9 +122,20 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 // MARK: - MainTabView  (iOS / iPadOS)
 
+// Propagates the bottom safe-area inset (tab bar + home indicator) from inside a
+// NavigationStack tab to the enclosing MainTabView so the mini player overlay can
+// be positioned exactly at the top of the tab bar without hard-coding its height.
+private struct TabBarBottomInsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct MainTabView: View {
     @State private var searchVM = SearchViewModel()
     @State private var selectedTab: AppSection = .home
+    @State private var tabBarBottomInset: CGFloat = 0
     @Environment(\.innerTubeAPI) private var api
     #if os(iOS)
     @Environment(PlayerStateStore.self) private var playerState
@@ -154,21 +165,53 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             ForEach(AppSection.allCases) { section in
                 NavigationStack { section.destination(api: api) }
+                    // Capture the bottom safe-area inset as seen from inside the tab
+                    // (UITabBarController sets this to tab-bar height + home-indicator).
+                    // The value is propagated up to tabBarBottomInset via PreferenceKey
+                    // so the mini-player overlay can be positioned above the tab bar.
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear
+                                .preference(
+                                    key: TabBarBottomInsetKey.self,
+                                    value: geo.safeAreaInsets.bottom
+                                )
+                        }
+                    }
                     .tabItem { Label(section.rawValue, systemImage: section.icon) }
                     .tag(section)
                     .accessibilityIdentifier("tab.\(section.rawValue.lowercased())")
             }
         }
+        .onPreferenceChange(TabBarBottomInsetKey.self) { tabBarBottomInset = $0 }
         .environment(searchVM)
         .onReceive(NotificationCenter.default.publisher(for: .navigateToSearch)) { _ in
             selectedTab = .search
         }
         #if os(iOS)
+        // Reserve vertical space so scrollable tab content is not hidden under the
+        // mini player. Uses a transparent placeholder rather than the real MiniPlayerView
+        // to avoid duplicating the PersistentPlayerHostView UIKit layer across tabs.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if playerState.presentation == .miniPlayer {
-                MiniPlayerView()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.2), value: playerState.presentation)
+                Color.clear.frame(height: 62)
+            }
+        }
+        // Render the single visible MiniPlayerView above the tab bar.
+        // tabBarBottomInset = tab-bar height + home-indicator (e.g. 83 pt on Face ID
+        // iPhones), read from inside the NavigationStack where UITabBarController has
+        // already baked it into the safe area. The transparent passthrough spacer below
+        // the mini player ensures tab-bar items remain tappable.
+        .overlay(alignment: .bottom) {
+            if playerState.presentation == .miniPlayer {
+                VStack(spacing: 0) {
+                    MiniPlayerView()
+                    Color.clear
+                        .frame(height: tabBarBottomInset)
+                        .allowsHitTesting(false)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.2), value: playerState.presentation)
             }
         }
         .landscapePlayerCover(item: fullScreenBinding) { video in

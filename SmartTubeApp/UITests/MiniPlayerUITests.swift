@@ -86,6 +86,36 @@ final class MiniPlayerUITests: XCTestCase {
 
     // MARK: - Tests
 
+    /// Regression test for task #95.
+    /// Verifies that when the mini player is visible the tab bar is still accessible:
+    ///   1. Mini player frame sits entirely above the tab bar (no vertical overlap).
+    ///   2. A tab bar item can be tapped and switches the tab while the mini player stays on screen.
+    func testMiniPlayerDoesNotOverlapTabBar() throws {
+        try openPlayerFromHome()
+        minimizePlayer()
+        guard miniPlayerBar.waitForExistence(timeout: 5) else {
+            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+        }
+
+        // 1. Frame check: mini player bottom must not exceed tab bar top.
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5), "Tab bar must be present")
+        let miniPlayerMaxY = miniPlayerBar.frame.maxY
+        let tabBarMinY = tabBar.frame.minY
+        XCTAssertLessThanOrEqual(
+            miniPlayerMaxY, tabBarMinY + 2, // 2 pt tolerance for sub-pixel rounding
+            "Mini player bottom (\(miniPlayerMaxY)) must not overlap tab bar top (\(tabBarMinY))"
+        )
+
+        // 2. Interaction check: tapping a tab while mini player is showing must switch tabs.
+        UITestHelpers.tapTab(named: "Search", in: app)
+        XCTAssertTrue(miniPlayerBar.waitForExistence(timeout: 5),
+                      "Mini player must persist across tab switch")
+        // Verify we are actually on the Search tab (search text field appears).
+        let onSearchTab = app.textFields["search.bar"].waitForExistence(timeout: 5)
+        XCTAssertTrue(onSearchTab, "Tapping Search tab must navigate there (tab bar must be accessible under mini player)")
+    }
+
     func testMiniPlayerAppearsAfterBackButton() throws {
         try openPlayerFromHome()
         minimizePlayer()
