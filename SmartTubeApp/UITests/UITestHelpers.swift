@@ -137,7 +137,7 @@ extension XCTestCase {
         file: StaticString = #file,
         line: UInt = #line
     ) throws -> Never {
-        let shot = app.screenshot()
+        let shot = XCUIScreen.main.screenshot()
         let shotAttachment = XCTAttachment(screenshot: shot)
         shotAttachment.name = "Skip state: \(reason.prefix(60))"
         shotAttachment.lifetime = .keepAlways
@@ -155,7 +155,7 @@ extension XCTestCase {
     /// `keepAlways` lifetime. Call this immediately before an assertion that may
     /// fail to provide visual context in the result bundle.
     func captureState(_ label: String = "failure", in app: XCUIApplication) {
-        let shot = app.screenshot()
+        let shot = XCUIScreen.main.screenshot()
         let shotAttachment = XCTAttachment(screenshot: shot)
         shotAttachment.name = "Screenshot: \(label)"
         shotAttachment.lifetime = .keepAlways

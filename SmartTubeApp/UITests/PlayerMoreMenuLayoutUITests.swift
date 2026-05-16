@@ -211,7 +211,7 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
 
         let qualityRow = app.buttons["player.moreMenu.qualityRow"].firstMatch
         guard qualityRow.waitForExistence(timeout: 10) else {
-            throw XCTSkip("Quality row not shown — video formats unavailable")
+            try captureAndSkip("Quality row not shown — video formats unavailable", in: app)
         }
         qualityRow.tap()
 
@@ -228,7 +228,7 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
 
         let speedRow = app.buttons["player.moreMenu.speedRow"].firstMatch
         guard speedRow.waitForExistence(timeout: 10) else {
-            throw XCTSkip("Speed row not shown in landscape — hidden in compact height layout")
+            try captureAndSkip("Speed row not shown in landscape — hidden in compact height layout", in: app)
         }
         speedRow.tap()
 
@@ -245,7 +245,7 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
 
         let sleepRow = app.buttons["player.moreMenu.sleepTimerRow"].firstMatch
         guard sleepRow.waitForExistence(timeout: 10) else {
-            throw XCTSkip("Sleep timer row not shown in landscape — hidden in compact height layout")
+            try captureAndSkip("Sleep timer row not shown in landscape — hidden in compact height layout", in: app)
         }
         sleepRow.tap()
 
