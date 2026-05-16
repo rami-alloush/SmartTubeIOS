@@ -162,7 +162,7 @@ extension PlayerView {
 
     private var moreMenuMaxHeight: CGFloat {
         #if os(iOS)
-        verticalSizeClass == .compact ? 320 : 520
+        verticalSizeClass == .compact ? 320 : 380
         #else
         520
         #endif

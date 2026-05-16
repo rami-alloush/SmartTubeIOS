@@ -85,4 +85,25 @@ final class PlayerMoreMenuLayoutUITests: XCTestCase {
         let speedRow = app.buttons["player.moreMenu.speedRow"].firstMatch
         XCTAssertTrue(speedRow.isHittable, "Speed row must be tappable in portrait")
     }
+
+    /// Regression for #94: the portrait more menu must fit all items without
+    /// requiring the user to scroll (moreMenuMaxHeight reduced from 520→380 pt).
+    func testMoreMenuDoesNotRequireScrollInPortrait() throws {
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let player = app.otherElements["player.view"].firstMatch
+        guard player.waitForExistence(timeout: 20) else {
+            throw XCTSkip("Player did not open within 20 s — network unavailable or video inaccessible")
+        }
+
+        let cancelButton = app.buttons["player.moreMenu.cancel"].firstMatch
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 10),
+                      "Cancel button must be accessible in the portrait more menu")
+
+        // Cancel is the bottom-most item. If it is immediately hittable without
+        // any scrolling the menu fits fully in the portrait frame.
+        XCTAssertTrue(cancelButton.isHittable,
+                      "Cancel button must be hittable without scrolling in portrait — " +
+                      "menu should fit entirely within portrait height (moreMenuMaxHeight = 380 pt)")
+    }
 }
