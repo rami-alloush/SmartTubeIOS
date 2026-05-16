@@ -135,6 +135,41 @@ final class ShortsNavigationUITests: XCTestCase {
         _ = app.scrollViews.firstMatch.waitForExistence(timeout: 3)
         XCTAssertTrue(app.windows.firstMatch.exists, "App should still be running after navigating to Shorts")
     }
+
+    // MARK: - Context menu regression (#90)
+
+    /// Regression for #90: Short cards must show a long-press context menu
+    /// with the same core actions as regular video cards.
+    func testShortsCardLongPressShowsContextMenu() throws {
+        tapTab(named: "Home")
+
+        // Wait for the Home feed to show the Shorts row.
+        let shortsRow = app.scrollViews["home.shortsRow"]
+        guard shortsRow.waitForExistence(timeout: 30) else {
+            throw XCTSkip("home.shortsRow not found — fetchShorts() API flakiness. Skipping.")
+        }
+
+        // Find the first Short card in the row.
+        let predicate = NSPredicate(format: "identifier BEGINSWITH 'shorts.card.'")
+        let cards = shortsRow.descendants(matching: .any).matching(predicate)
+        guard cards.count > 0 else {
+            throw XCTSkip("No shorts.card.* elements found — feed empty. Skipping.")
+        }
+        let firstCard = cards.element(boundBy: 0)
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 5))
+
+        // Long-press to trigger the context menu.
+        firstCard.press(forDuration: 1.2)
+
+        // Assert at least one expected menu item appears.
+        let shareButton    = app.buttons["Share"].firstMatch
+        let addToQueue     = app.buttons["Add to Queue"].firstMatch
+        let menuAppeared   = shareButton.waitForExistence(timeout: 4)
+                         || addToQueue.waitForExistence(timeout: 4)
+
+        XCTAssertTrue(menuAppeared,
+            "Long-pressing a Short card must show a context menu with Share or Add to Queue")
+    }
 }
 
 // MARK: - ShortsSwipeUITests
