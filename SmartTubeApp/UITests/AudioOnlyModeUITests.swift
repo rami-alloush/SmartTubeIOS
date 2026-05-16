@@ -45,7 +45,7 @@ final class AudioOnlyModeUITests: XCTestCase {
     func testAudioOnlyModeOpensVideoWithoutError() throws {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            try captureAndSkip("No video cards on Home — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
             XCTFail("Player did not open within 15 s in audio-only mode")

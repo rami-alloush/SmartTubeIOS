@@ -318,8 +318,8 @@ final class TVPlayerSettingsUITests: XCTestCase {
         }
 
         guard reachedSleepTimer else {
-            throw XCTSkip("Sleep Timer row did not receive focus after 5 D-pad presses — " +
-                          "row count may vary or network unavailable")
+            try captureAndSkip("Sleep Timer row did not receive focus after 5 D-pad presses — " +
+                          "row count may vary or network unavailable", in: app)
         }
 
         remote.press(.select)

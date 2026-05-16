@@ -100,7 +100,7 @@ final class ShortsPlayerUITests: XCTestCase {
         // still in the accessibility tree during the section-switch animation.
         let sectionFeed = app.descendants(matching: .any)["home.sectionContainer"]
         guard sectionFeed.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Shorts section feed did not appear within 20 s — network unavailable or Shorts empty")
+            try captureAndSkip("Shorts section feed did not appear within 20 s — network unavailable or Shorts empty", in: app)
         }
 
         let feedPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -108,7 +108,7 @@ final class ShortsPlayerUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 10) == .completed else {
-            throw XCTSkip("Shorts feed did not load within 10 s — network unavailable or Shorts empty")
+            try captureAndSkip("Shorts feed did not load within 10 s — network unavailable or Shorts empty", in: app)
         }
 
         cards.firstMatch.tap()
@@ -154,7 +154,7 @@ final class ShortsPlayerUITests: XCTestCase {
     func testShortsPlayerOpensFromHomeChip() throws {
         launchWithRealShorts(ids: Self.knownGoodShortIDs)
         guard indexLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Shorts player did not appear — network unavailable or Short IDs may be stale")
+            try captureAndSkip("Shorts player did not appear — network unavailable or Short IDs may be stale", in: app)
         }
         XCTAssertTrue(indexLabel.exists,
                       "shorts.indexLabel should be visible when ShortsPlayerView is open")
@@ -168,13 +168,13 @@ final class ShortsPlayerUITests: XCTestCase {
                                "--uitesting-show-controls"]
         app.launch()
         guard indexLabel.waitForExistence(timeout: 40) else {
-            throw XCTSkip("Shorts player did not appear — network unavailable or Short IDs may be stale")
+            try captureAndSkip("Shorts player did not appear — network unavailable or Short IDs may be stale", in: app)
         }
         // Controls are shown immediately via --uitesting-show-controls.
         let backPred = NSPredicate(format: "identifier == 'shorts.backButton'")
         let backBtn = app.descendants(matching: .any).matching(backPred).firstMatch
         guard backBtn.waitForExistence(timeout: 10) else {
-            throw XCTSkip("shorts.backButton did not appear — controls may not be visible")
+            try captureAndSkip("shorts.backButton did not appear — controls may not be visible", in: app)
         }
         backBtn.tap()
         // In direct-launch mode ShortsPlayerView is the root view, so dismiss() has no visual
@@ -256,7 +256,7 @@ final class ShortsPlayerUITests: XCTestCase {
     /// skips with guidance to update the array.
     func testNoErrorBannerOnShortsOpen() throws {
         guard !Self.knownGoodShortIDs.isEmpty else {
-            throw XCTSkip("knownGoodShortIDs is empty — add at least one valid Short ID")
+            try captureAndSkip("knownGoodShortIDs is empty — add at least one valid Short ID", in: app)
         }
         var lastError = "unknown"
         for shortID in Self.knownGoodShortIDs {
@@ -264,7 +264,7 @@ final class ShortsPlayerUITests: XCTestCase {
             launchWithRealShorts(ids: [shortID])
             guard indexLabel.waitForExistence(timeout: 20) else {
                 // Network unavailable — cannot determine if ID is valid; skip the whole test.
-                throw XCTSkip("Shorts player did not appear for '\(shortID)' — network unavailable")
+                try captureAndSkip("Shorts player did not appear for '\(shortID)' — network unavailable", in: app)
             }
             Thread.sleep(forTimeInterval: 5)
             let banner = app.staticTexts["shorts.errorBanner"].firstMatch
@@ -274,9 +274,10 @@ final class ShortsPlayerUITests: XCTestCase {
             // Video is stale (deleted, private, or region-locked). Try next ID.
             lastError = banner.label
         }
-        throw XCTSkip(
+        try captureAndSkip(
             "All \(Self.knownGoodShortIDs.count) short IDs show errors — update knownGoodShortIDs in ShortsPlayerUITests.swift. " +
-            "Last error for '\(Self.knownGoodShortIDs.last ?? "")': '\(lastError)'"
+            "Last error for '\(Self.knownGoodShortIDs.last ?? "")': '\(lastError)'",
+            in: app
         )
     }
 }

@@ -42,12 +42,12 @@ final class RSSFeedsUITests: XCTestCase {
 
         let picker = app.segmentedControls["library.sectionPicker"].firstMatch
         guard picker.waitForExistence(timeout: 5) else {
-            throw XCTSkip("library.sectionPicker not found — Library tab may not have loaded")
+            try captureAndSkip("library.sectionPicker not found — Library tab may not have loaded", in: app)
         }
 
         let rssSegment = app.buttons["library.picker.rss feeds"].firstMatch
         guard rssSegment.waitForExistence(timeout: 3) else {
-            throw XCTSkip("RSS Feeds segment not found in Library picker")
+            try captureAndSkip("RSS Feeds segment not found in Library picker", in: app)
         }
         rssSegment.tap()
     }
@@ -67,7 +67,7 @@ final class RSSFeedsUITests: XCTestCase {
         UITestHelpers.tapTab(named: "Library", in: app)
         let rssSegment = app.buttons["library.picker.rss feeds"].firstMatch
         guard rssSegment.waitForExistence(timeout: 5) else {
-            throw XCTSkip("RSS Feeds segment not found — Library picker may not have loaded")
+            try captureAndSkip("RSS Feeds segment not found — Library picker may not have loaded", in: app)
         }
         XCTAssertTrue(rssSegment.exists, "RSS Feeds segment must be present in the Library picker")
     }
@@ -97,7 +97,7 @@ final class RSSFeedsUITests: XCTestCase {
     func testAddFeedButtonOpensSheet() throws {
         try openRSSFeedsTab()
         guard addFeedButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.addFeedButton not found — cannot test sheet opening")
+            try captureAndSkip("rss.addFeedButton not found — cannot test sheet opening", in: app)
         }
         addFeedButton.tap()
 
@@ -114,18 +114,18 @@ final class RSSFeedsUITests: XCTestCase {
     func testAddFeedSheetCanBeDismissed() throws {
         try openRSSFeedsTab()
         guard addFeedButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.addFeedButton not found — cannot test sheet dismissal")
+            try captureAndSkip("rss.addFeedButton not found — cannot test sheet dismissal", in: app)
         }
         addFeedButton.tap()
 
         let urlField = app.textFields["rss.addFeed.urlField"].firstMatch
         guard urlField.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Add RSS Feed sheet did not appear — cannot test dismissal")
+            try captureAndSkip("Add RSS Feed sheet did not appear — cannot test dismissal", in: app)
         }
 
         let cancelButton = app.buttons["Cancel"].firstMatch
         guard cancelButton.waitForExistence(timeout: 3) else {
-            throw XCTSkip("Cancel button not found in Add RSS Feed sheet")
+            try captureAndSkip("Cancel button not found in Add RSS Feed sheet", in: app)
         }
         cancelButton.tap()
 
@@ -138,13 +138,13 @@ final class RSSFeedsUITests: XCTestCase {
     func testAddFeedConfirmButtonDisabledWhenEmpty() throws {
         try openRSSFeedsTab()
         guard addFeedButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.addFeedButton not found")
+            try captureAndSkip("rss.addFeedButton not found", in: app)
         }
         addFeedButton.tap()
 
         let confirmButton = app.buttons["rss.addFeed.confirmButton"].firstMatch
         guard confirmButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.addFeed.confirmButton not found in Add RSS Feed sheet")
+            try captureAndSkip("rss.addFeed.confirmButton not found in Add RSS Feed sheet", in: app)
         }
         XCTAssertFalse(confirmButton.isEnabled,
                        "Add Feed button must be disabled when title and URL fields are empty")
@@ -154,7 +154,7 @@ final class RSSFeedsUITests: XCTestCase {
     func testManageFeedsButtonOpensSheet() throws {
         try openRSSFeedsTab()
         guard manageFeedsButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.manageFeedsButton not found — cannot test sheet opening")
+            try captureAndSkip("rss.manageFeedsButton not found — cannot test sheet opening", in: app)
         }
         manageFeedsButton.tap()
 
@@ -168,13 +168,13 @@ final class RSSFeedsUITests: XCTestCase {
     func testManageFeedsSheetCanBeDismissed() throws {
         try openRSSFeedsTab()
         guard manageFeedsButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("rss.manageFeedsButton not found — cannot test sheet dismissal")
+            try captureAndSkip("rss.manageFeedsButton not found — cannot test sheet dismissal", in: app)
         }
         manageFeedsButton.tap()
 
         let doneButton = app.buttons["Done"].firstMatch
         guard doneButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Manage RSS Feeds sheet did not appear — cannot test dismissal")
+            try captureAndSkip("Manage RSS Feeds sheet did not appear — cannot test dismissal", in: app)
         }
         doneButton.tap()
 

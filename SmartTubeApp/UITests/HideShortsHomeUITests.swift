@@ -66,7 +66,7 @@ final class HideShortsHomeUITests: XCTestCase {
         continueAfterFailure = false
 
         guard waitForHomeFeed() else {
-            throw XCTSkip("Home feed did not load — network or sign-in issue.")
+            try captureAndSkip("Home feed did not load — network or sign-in issue.", in: app)
         }
 
         // Give pagination a moment so at least one page is fully rendered.
@@ -116,7 +116,7 @@ final class HideShortsHomeUITests: XCTestCase {
         continueAfterFailure = false
 
         guard waitForHomeFeed() else {
-            throw XCTSkip("Home feed did not load — network or sign-in issue.")
+            try captureAndSkip("Home feed did not load — network or sign-in issue.", in: app)
         }
 
         // Wait for at least a couple of cards to render before inspecting.
@@ -143,7 +143,7 @@ final class HideShortsHomeUITests: XCTestCase {
         // 2. Shorts chip must be visible when hideShorts is off.
         let chipBar = app.scrollViews["home.chipBar"].firstMatch
         guard chipBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("home.chipBar not found — chip bar may not be rendered on this device.")
+            try captureAndSkip("home.chipBar not found — chip bar may not be rendered on this device.", in: app)
         }
         UITestHelpers.scrollChipIntoView(chipBar.buttons["Shorts"], in: chipBar, app: app)
         XCTAssertTrue(

@@ -42,10 +42,10 @@ final class AirPlayUITests: XCTestCase {
     private func openPlayer() throws {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            try captureAndSkip("No video cards on Home — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("Player did not open within 15 s — network unavailable or timing-dependent", in: app)
         }
     }
 
@@ -83,8 +83,8 @@ final class AirPlayUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         Thread.sleep(forTimeInterval: 0.5)
         guard airPlayButton.waitForExistence(timeout: 8) else {
-            throw XCTSkip("player.airPlayButton not found — AVRoutePickerView may not be " +
-                          "accessible on this simulator configuration (controls may have dismissed)")
+            try captureAndSkip("player.airPlayButton not found — AVRoutePickerView may not be " +
+                          "accessible on this simulator configuration (controls may have dismissed)", in: app)
         }
     }
 
@@ -93,10 +93,10 @@ final class AirPlayUITests: XCTestCase {
         try openPlayer()
         showControls()
         guard airPlayButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.airPlayButton not found — controls may not have appeared")
+            try captureAndSkip("player.airPlayButton not found — controls may not have appeared", in: app)
         }
         guard pipButton.waitForExistence(timeout: 3) else {
-            throw XCTSkip("player.pipButton not found — PiP may not be supported on this simulator")
+            try captureAndSkip("player.pipButton not found — PiP may not be supported on this simulator", in: app)
         }
         // Both must be in the same screen region (top-right area).
         let airPlayFrame = airPlayButton.frame
@@ -112,7 +112,7 @@ final class AirPlayUITests: XCTestCase {
         try openPlayer()
         showControls()
         guard airPlayButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.airPlayButton not found — cannot test tap behaviour")
+            try captureAndSkip("player.airPlayButton not found — cannot test tap behaviour", in: app)
         }
         airPlayButton.tap()
         Thread.sleep(forTimeInterval: 1.0)
@@ -130,7 +130,7 @@ final class AirPlayUITests: XCTestCase {
         try openPlayer()
         showControls()
         guard airPlayButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.airPlayButton not found — cannot test playback continuity")
+            try captureAndSkip("player.airPlayButton not found — cannot test playback continuity", in: app)
         }
         airPlayButton.tap()
         Thread.sleep(forTimeInterval: 1.0)

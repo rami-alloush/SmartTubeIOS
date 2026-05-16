@@ -54,7 +54,7 @@ final class SubscriptionsScrollRestorationUITests: XCTestCase {
         //    The scroll restoration mechanism under test is section-agnostic.
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found — section may be disabled in settings")
+            try captureAndSkip("Recommended chip not found — section may be disabled in settings", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
@@ -63,14 +63,14 @@ final class SubscriptionsScrollRestorationUITests: XCTestCase {
         //    has occurred and the Home feed is rendering.
         let feedScrollView = app.descendants(matching: .any)["home.sectionContainer"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
-            throw XCTSkip("home.sectionContainer did not appear within 30 s — Home feed may not have loaded")
+            try captureAndSkip("home.sectionContainer did not appear within 30 s — Home feed may not have loaded", in: app)
         }
 
         // 4. Wait for at least one video card inside the section feed.
         let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
         let firstCard = feedScrollView.descendants(matching: .any).matching(cardPredicate).firstMatch
         guard firstCard.waitForExistence(timeout: 20) else {
-            throw XCTSkip("No video cards in Subscriptions feed within 20 s — feed may be empty")
+            try captureAndSkip("No video cards in Subscriptions feed within 20 s — feed may be empty", in: app)
         }
 
         // 5. Scroll the section feed down twice so at least one full page is below

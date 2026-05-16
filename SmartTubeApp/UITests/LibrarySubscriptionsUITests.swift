@@ -32,11 +32,11 @@ final class LibrarySubscriptionsUITests: XCTestCase {
         UITestHelpers.tapTab(named: "Library", in: app)
         let picker = app.segmentedControls["library.sectionPicker"]
         guard picker.waitForExistence(timeout: 5) else {
-            throw XCTSkip("library.sectionPicker did not appear — Library tab may not have loaded")
+            try captureAndSkip("library.sectionPicker did not appear — Library tab may not have loaded", in: app)
         }
         let button = picker.buttons["Subscriptions"]
         guard button.waitForExistence(timeout: 3) else {
-            throw XCTSkip("Subscriptions segment not found in library section picker")
+            try captureAndSkip("Subscriptions segment not found in library section picker", in: app)
         }
         button.tap()
     }
@@ -64,7 +64,7 @@ final class LibrarySubscriptionsUITests: XCTestCase {
     func testSubscriptionsSegmentShowsFeed() throws {
         try openSubscriptionsSegment()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — account may not be signed in or has no subscriptions")
+            try captureAndSkip("No video cards loaded within 20 s — account may not be signed in or has no subscriptions", in: app)
         }
     }
 
@@ -77,7 +77,7 @@ final class LibrarySubscriptionsUITests: XCTestCase {
     func testSubscriptionsScrollLoadsMore() throws {
         try openSubscriptionsSegment()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in Subscriptions feed — signed-in account required")
+            try captureAndSkip("No video cards in Subscriptions feed — signed-in account required", in: app)
         }
 
         let countBefore = app.descendants(matching: .any)
@@ -100,20 +100,20 @@ final class LibrarySubscriptionsUITests: XCTestCase {
     func testTappingVideoFromSubscriptionsOpensPlayer() throws {
         try openSubscriptionsSegment()
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in Subscriptions — signed-in account required")
+            try captureAndSkip("No video cards in Subscriptions — signed-in account required", in: app)
         }
         XCTAssertTrue(UITestHelpers.openPlayer(from: firstCard, in: app),
                       "player.titleLabel must appear after tapping a video in Library Subscriptions")
         let errorBanner = app.otherElements["player.errorBanner"].firstMatch
         if errorBanner.exists {
-            throw XCTSkip("player.errorBanner appeared — network issue on this simulator clone")
+            try captureAndSkip("player.errorBanner appeared — network issue on this simulator clone", in: app)
         }
     }
 
     func testScrollRestorationAfterPlayback() throws {
         try openSubscriptionsSegment()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards — signed-in account required")
+            try captureAndSkip("No video cards — signed-in account required", in: app)
         }
 
         let firstCard = app.descendants(matching: .any)
@@ -127,7 +127,7 @@ final class LibrarySubscriptionsUITests: XCTestCase {
 
         let firstCardMaxYAfterScroll = firstCard.frame.maxY
         guard firstCardMaxYAfterScroll < 100 else {
-            throw XCTSkip("Could not scroll first card off-screen — feed may have too few items")
+            try captureAndSkip("Could not scroll first card off-screen — feed may have too few items", in: app)
         }
 
         // Tap via screen centre coordinate so we don't have to pick a specific card.
@@ -137,24 +137,24 @@ final class LibrarySubscriptionsUITests: XCTestCase {
 
         let titleLabel = app.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 15) else {
-            throw XCTSkip("PlayerView did not open within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("PlayerView did not open within 15 s — network unavailable or timing-dependent", in: app)
         }
 
         let backButton = app.buttons["player.backButton"].firstMatch
         guard backButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.backButton not found after player opened")
+            try captureAndSkip("player.backButton not found after player opened", in: app)
         }
         backButton.tap()
 
         let picker = app.segmentedControls["library.sectionPicker"]
         guard picker.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Library picker did not reappear after back navigation")
+            try captureAndSkip("Library picker did not reappear after back navigation", in: app)
         }
 
         Thread.sleep(forTimeInterval: 1.0)
         let firstCardMaxYAfterBack = firstCard.frame.maxY
         guard firstCardMaxYAfterBack < 100 else {
-            throw XCTSkip("Scroll position not restored — first card reappeared on-screen (timing or animation-dependent)")
+            try captureAndSkip("Scroll position not restored — first card reappeared on-screen (timing or animation-dependent)", in: app)
         }
     }
 }

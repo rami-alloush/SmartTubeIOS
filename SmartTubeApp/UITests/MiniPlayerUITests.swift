@@ -60,10 +60,10 @@ final class MiniPlayerUITests: XCTestCase {
     private func openPlayerFromHome() throws -> String {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            try captureAndSkip("No video cards on Home — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("Player did not open within 15 s — network unavailable or timing-dependent", in: app)
         }
         // Wait for the title label to be populated (it may be empty immediately after open).
         let deadline = Date().addingTimeInterval(5)
@@ -94,7 +94,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
 
         // 1. Frame check: mini player bottom must not exceed tab bar top.
@@ -129,11 +129,11 @@ final class MiniPlayerUITests: XCTestCase {
     func testMiniPlayerShowsCorrectTitle() throws {
         let title = try openPlayerFromHome()
         guard !title.isEmpty else {
-            throw XCTSkip("Player title not yet populated — cannot verify mini-player title match")
+            try captureAndSkip("Player title not yet populated — cannot verify mini-player title match", in: app)
         }
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         XCTAssertEqual(miniPlayerTitle.label, title,
                        "miniPlayer.titleLabel should match the video that was playing")
@@ -143,7 +143,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         miniPlayerPlayPause.tap()
         Thread.sleep(forTimeInterval: 0.5)
@@ -159,7 +159,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         miniPlayerClose.tap()
         let miniGone = NSPredicate(format: "exists == false")
@@ -175,7 +175,7 @@ final class MiniPlayerUITests: XCTestCase {
         let title = try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         // Tap the bar area (avoid the buttons by targeting the title area)
         miniPlayerBar.tap()
@@ -189,7 +189,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         for tab in ["Search", "Library", "Settings", "Home"] {
             UITestHelpers.tapTab(named: tab, in: app)
@@ -239,7 +239,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
         miniPlayerClose.tap()
         Thread.sleep(forTimeInterval: 1.0)
@@ -248,10 +248,10 @@ final class MiniPlayerUITests: XCTestCase {
         // Open the player again — must open cleanly with no crash.
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards for second open attempt — network unavailable or feed empty")
+            try captureAndSkip("No video cards for second open attempt — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not reopen within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("Player did not reopen within 15 s — network unavailable or timing-dependent", in: app)
         }
         XCTAssertEqual(app.state, .runningForeground,
                        "App must be running after re-opening the player")
@@ -273,7 +273,7 @@ final class MiniPlayerUITests: XCTestCase {
         try openPlayerFromHome()
         minimizePlayer()
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar not found — mini-player may not be active in this environment")
+            try captureAndSkip("miniPlayer.bar not found — mini-player may not be active in this environment", in: app)
         }
 
         // Tap X — this triggers stop() which now calls AVAudioSession.setActive(false).
@@ -289,10 +289,10 @@ final class MiniPlayerUITests: XCTestCase {
         // Open a second video — AVAudioSession must be reacquirable without error.
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards for second open — network unavailable or feed empty")
+            try captureAndSkip("No video cards for second open — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not reopen within 15 s — timing-dependent")
+            try captureAndSkip("Player did not reopen within 15 s — timing-dependent", in: app)
         }
 
         // If the audio session was not properly deactivated, AVPlayer activation

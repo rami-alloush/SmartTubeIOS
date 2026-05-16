@@ -62,8 +62,9 @@ final class ChannelViewUITests: XCTestCase {
         guard channelNavBar.waitForExistence(timeout: 30)
                 || channelTitleEl.waitForExistence(timeout: 5)
                 || headerEl.waitForExistence(timeout: 5) else {
-            throw XCTSkip(
-                "ChannelView did not appear within 30 s — deeplink may not have fired or network is unavailable"
+            try captureAndSkip(
+                "ChannelView did not appear within 30 s — deeplink may not have fired or network is unavailable",
+                in: app
             )
         }
     }
@@ -75,7 +76,7 @@ final class ChannelViewUITests: XCTestCase {
         UITestHelpers.tapTab(named: "Search", in: app)
         let bar = app.textFields["search.bar"]
         guard bar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("search.bar did not appear — Search tab may not have loaded")
+            try captureAndSkip("search.bar did not appear — Search tab may not have loaded", in: app)
         }
         bar.tap()
         bar.typeText(query)
@@ -132,7 +133,7 @@ final class ChannelViewUITests: XCTestCase {
         let headerPred = NSPredicate(format: "identifier == 'channel.header'")
         let header = app.descendants(matching: .any).matching(headerPred).firstMatch
         guard header.waitForExistence(timeout: 10) else {
-            throw XCTSkip("channel.header did not appear — network unavailable or channel slow to load")
+            try captureAndSkip("channel.header did not appear — network unavailable or channel slow to load", in: app)
         }
     }
 
@@ -143,14 +144,14 @@ final class ChannelViewUITests: XCTestCase {
         let headerPred = NSPredicate(format: "identifier == 'channel.header'")
         let header = app.descendants(matching: .any).matching(headerPred).firstMatch
         guard header.waitForExistence(timeout: 10) else {
-            throw XCTSkip("channel.header did not appear — network unavailable or channel slow to load")
+            try captureAndSkip("channel.header did not appear — network unavailable or channel slow to load", in: app)
         }
     }
 
     func testChannelVideoGridPopulates() throws {
         try openChannelViaDeeplink()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in channel grid — network unavailable or channel empty")
+            try captureAndSkip("No video cards in channel grid — network unavailable or channel empty", in: app)
         }
     }
 
@@ -158,18 +159,18 @@ final class ChannelViewUITests: XCTestCase {
         try openChannelViaDeeplink()
         let picker = app.segmentedControls["channel.filterPicker"]
         guard picker.waitForExistence(timeout: 10) else {
-            throw XCTSkip("channel.filterPicker did not appear — network unavailable or channel slow to load")
+            try captureAndSkip("channel.filterPicker did not appear — network unavailable or channel slow to load", in: app)
         }
     }
 
     func testShortsFilterSwitchesContent() throws {
         try openChannelViaDeeplink()
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 20) != nil else {
-            throw XCTSkip("No video cards — channel may be empty")
+            try captureAndSkip("No video cards — channel may be empty", in: app)
         }
         let picker = app.segmentedControls["channel.filterPicker"]
         guard picker.waitForExistence(timeout: 10) else {
-            throw XCTSkip("channel.filterPicker not found")
+            try captureAndSkip("channel.filterPicker not found", in: app)
         }
         picker.buttons["Shorts"].tap()
         // After switching to Shorts, the grid should either show content or be empty.
@@ -181,28 +182,28 @@ final class ChannelViewUITests: XCTestCase {
     func testAllFilterRestoresFeed() throws {
         try openChannelViaDeeplink()
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 20) != nil else {
-            throw XCTSkip("No video cards")
+            try captureAndSkip("No video cards", in: app)
         }
         let picker = app.segmentedControls["channel.filterPicker"]
         guard picker.waitForExistence(timeout: 10) else {
-            throw XCTSkip("channel.filterPicker not found")
+            try captureAndSkip("channel.filterPicker not found", in: app)
         }
         picker.buttons["Shorts"].tap()
         Thread.sleep(forTimeInterval: 1)
         picker.buttons["All"].tap()
         Thread.sleep(forTimeInterval: 2)
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 10) else {
-            throw XCTSkip("No video cards after switching back to All — channel may only have Shorts")
+            try captureAndSkip("No video cards after switching back to All — channel may only have Shorts", in: app)
         }
     }
 
     func testTappingVideoFromChannelOpensPlayer() throws {
         try openChannelViaDeeplink()
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in channel")
+            try captureAndSkip("No video cards in channel", in: app)
         }
         guard UITestHelpers.openPlayer(from: firstCard, in: app) else {
-            throw XCTSkip("Player did not open from channel — network unavailable or timing-dependent")
+            try captureAndSkip("Player did not open from channel — network unavailable or timing-dependent", in: app)
         }
     }
 
@@ -211,7 +212,7 @@ final class ChannelViewUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 5)
         let errorAlert = app.alerts["Error"].firstMatch
         if errorAlert.exists {
-            throw XCTSkip("Error alert appeared on channel load — network issue on this simulator clone")
+            try captureAndSkip("Error alert appeared on channel load — network issue on this simulator clone", in: app)
         }
     }
 }

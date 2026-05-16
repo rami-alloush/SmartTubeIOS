@@ -117,3 +117,53 @@ enum UITestHelpers {
                        "shorts.errorBanner appeared — PlaybackViewModel.error was set for the Short")
     }
 }
+
+// MARK: - XCTestCase diagnostic helpers
+
+extension XCTestCase {
+
+    /// Captures a screenshot and accessibility-tree dump, attaches both with
+    /// `keepAlways` lifetime, then throws `XCTSkip` with the given reason.
+    ///
+    /// The `throws -> Never` signature lets Swift treat every call site as a
+    /// guaranteed scope-exit, so no trailing `return` is needed in guard-else blocks:
+    ///
+    ///     guard card.exists else {
+    ///         try captureAndSkip("Feed empty — network issue", in: app)
+    ///     }
+    func captureAndSkip(
+        _ reason: String,
+        in app: XCUIApplication,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) throws -> Never {
+        let shot = app.screenshot()
+        let shotAttachment = XCTAttachment(screenshot: shot)
+        shotAttachment.name = "Skip state: \(reason.prefix(60))"
+        shotAttachment.lifetime = .keepAlways
+        add(shotAttachment)
+
+        let treeAttachment = XCTAttachment(string: app.debugDescription)
+        treeAttachment.name = "Accessibility tree at skip"
+        treeAttachment.lifetime = .keepAlways
+        add(treeAttachment)
+
+        throw XCTSkip(reason, file: file, line: line)
+    }
+
+    /// Captures a screenshot and accessibility-tree dump and attaches both with
+    /// `keepAlways` lifetime. Call this immediately before an assertion that may
+    /// fail to provide visual context in the result bundle.
+    func captureState(_ label: String = "failure", in app: XCUIApplication) {
+        let shot = app.screenshot()
+        let shotAttachment = XCTAttachment(screenshot: shot)
+        shotAttachment.name = "Screenshot: \(label)"
+        shotAttachment.lifetime = .keepAlways
+        add(shotAttachment)
+
+        let treeAttachment = XCTAttachment(string: app.debugDescription)
+        treeAttachment.name = "Accessibility tree: \(label)"
+        treeAttachment.lifetime = .keepAlways
+        add(treeAttachment)
+    }
+}

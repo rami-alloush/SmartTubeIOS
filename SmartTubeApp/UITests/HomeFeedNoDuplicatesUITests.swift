@@ -48,7 +48,7 @@ final class HomeFeedNoDuplicatesUITests: XCTestCase {
     func test_InitialHomeLoad_NoDuplicateCards() throws {
         // Wait for the Home tab feed to populate.
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 25) != nil else {
-            throw XCTSkip("Home feed did not load any cards — likely a network issue.")
+            try captureAndSkip("Home feed did not load any cards — likely a network issue.", in: app)
         }
         // Allow the grid to finish settling.
         Thread.sleep(forTimeInterval: 1.0)
@@ -66,7 +66,7 @@ final class HomeFeedNoDuplicatesUITests: XCTestCase {
     /// there must still be no duplicate cards in the full accessibility tree.
     func test_AfterPagination_NoDuplicateCards() throws {
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 25) != nil else {
-            throw XCTSkip("Home feed did not load any cards — likely a network issue.")
+            try captureAndSkip("Home feed did not load any cards — likely a network issue.", in: app)
         }
         Thread.sleep(forTimeInterval: 1.0)
 
@@ -96,7 +96,7 @@ final class HomeFeedNoDuplicatesUITests: XCTestCase {
     /// failed to resolve the correct model.
     func test_AllCards_HaveNonEmptyTitles() throws {
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 25) != nil else {
-            throw XCTSkip("Home feed did not load any cards — likely a network issue.")
+            try captureAndSkip("Home feed did not load any cards — likely a network issue.", in: app)
         }
         Thread.sleep(forTimeInterval: 1.0)
 

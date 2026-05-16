@@ -44,7 +44,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
         // Wait for PlayerView to open.
         let titleLabel = app.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear within 20 s — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear within 20 s — network unavailable or deeplink did not fire", in: app)
         }
 
         let videoTitle = titleLabel.label
@@ -96,7 +96,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
         // 1. Wait for Home feed to load.
         UITestHelpers.tapTab(named: "Home", in: homeApp)
         guard let firstCard = UITestHelpers.waitForVideoCards(in: homeApp, timeout: 25) else {
-            throw XCTSkip("Home feed did not load any cards — network unavailable")
+            try captureAndSkip("Home feed did not load any cards — network unavailable", in: app)
         }
 
         // Record the card identifier so we can find the same video after stop.
@@ -104,7 +104,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
 
         // 2. Open the video from Home.
         guard UITestHelpers.openPlayer(from: firstCard, in: homeApp) else {
-            throw XCTSkip("Player did not open within 15 s — network unavailable")
+            try captureAndSkip("Player did not open within 15 s — network unavailable", in: app)
         }
 
         // Give the stream time to start buffering.
@@ -121,7 +121,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
 
         let miniPlayerBar = homeApp.otherElements["miniPlayer.bar"].firstMatch
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar did not appear — mini-player may be disabled on this build")
+            try captureAndSkip("miniPlayer.bar did not appear — mini-player may be disabled on this build", in: app)
         }
 
         // 4. Tap X on the mini-player — calls stop().
@@ -138,7 +138,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
         // 5. Find the same video card in the Home feed and open it again.
         let sameCard = homeApp.descendants(matching: .any).matching(identifier: cardID).firstMatch
         guard sameCard.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Video card '\(cardID)' not found after returning to Home — feed may have refreshed")
+            try captureAndSkip("Video card '\(cardID)' not found after returning to Home — feed may have refreshed", in: app)
         }
         sameCard.tap()
 
@@ -183,7 +183,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
         // 1. Wait for the deeplink player to open.
         let titleLabel = app.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear within 20 s — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear within 20 s — network unavailable or deeplink did not fire", in: app)
         }
 
         // 2. Let the video start buffering.
@@ -198,7 +198,7 @@ final class VideoPlaybackRegressionUITests: XCTestCase {
         // 4. Wait for the mini-player bar to appear, then tap its close button to stop.
         let miniPlayerBar = app.otherElements["miniPlayer.bar"].firstMatch
         guard miniPlayerBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("miniPlayer.bar did not appear — mini-player may be disabled on this build")
+            try captureAndSkip("miniPlayer.bar did not appear — mini-player may be disabled on this build", in: app)
         }
         let miniPlayerClose = app.buttons["miniPlayer.closeButton"].firstMatch
         XCTAssertTrue(miniPlayerClose.waitForExistence(timeout: 5), "miniPlayer.closeButton not found after minimizing")

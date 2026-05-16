@@ -50,7 +50,7 @@ final class SubscriptionsPlaybackUITests: XCTestCase {
         // 2. Scroll the chip bar until the Subscriptions chip is fully on screen, then tap it.
         let chip = chipBar.buttons["Subscriptions"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Subscriptions chip not found — section may be disabled in settings")
+            try captureAndSkip("Subscriptions chip not found — section may be disabled in settings", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
@@ -61,7 +61,7 @@ final class SubscriptionsPlaybackUITests: XCTestCase {
         let feedLoaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                    object: cards)
         guard XCTWaiter().wait(for: [feedLoaded], timeout: 20) == .completed else {
-            throw XCTSkip("Subscriptions feed did not load within 20 s — network unavailable or feed empty")
+            try captureAndSkip("Subscriptions feed did not load within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Assert no alert appeared while loading the feed.

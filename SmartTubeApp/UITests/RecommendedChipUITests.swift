@@ -54,7 +54,7 @@ final class RecommendedChipUITests: XCTestCase {
 
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found — HomeView may not have injected it")
+            try captureAndSkip("Recommended chip not found — HomeView may not have injected it", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         XCTAssertTrue(chip.exists, "Recommended chip must exist in the chip bar")
@@ -71,7 +71,7 @@ final class RecommendedChipUITests: XCTestCase {
 
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found — HomeView may not have injected it")
+            try captureAndSkip("Recommended chip not found — HomeView may not have injected it", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
@@ -82,13 +82,13 @@ final class RecommendedChipUITests: XCTestCase {
         let anyCard0 = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"),
                                                  object: allCards0)
         guard XCTWaiter().wait(for: [anyCard0], timeout: 15) == .completed else {
-            throw XCTSkip("No video.card.* appeared within 15 s after tapping Recommended — inject may not have run")
+            try captureAndSkip("No video.card.* appeared within 15 s after tapping Recommended — inject may not have run", in: app)
         }
 
         // Wait for the section feed container to appear.
         let feedScrollView = app.descendants(matching: .any)["home.sectionContainer"]
         guard feedScrollView.waitForExistence(timeout: 10) else {
-            throw XCTSkip("home.sectionContainer did not appear within 10 s — feed may not have loaded")
+            try captureAndSkip("home.sectionContainer did not appear within 10 s — feed may not have loaded", in: app)
         }
 
         // At least one video card must appear.
@@ -116,7 +116,7 @@ final class RecommendedChipUITests: XCTestCase {
         let homeChip = chipBar.buttons["Home"]
         let recChip  = chipBar.buttons["Recommended"]
         guard recChip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found")
+            try captureAndSkip("Recommended chip not found", in: app)
         }
 
         // Home chip starts selected.
@@ -141,14 +141,14 @@ final class RecommendedChipUITests: XCTestCase {
 
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found")
+            try captureAndSkip("Recommended chip not found", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
         let feedScrollView = app.descendants(matching: .any)["home.sectionContainer"]
         guard feedScrollView.waitForExistence(timeout: 30) else {
-            throw XCTSkip("home.sectionContainer did not appear within 30 s — network unavailable")
+            try captureAndSkip("home.sectionContainer did not appear within 30 s — network unavailable", in: app)
         }
 
         let cardPredicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -174,7 +174,7 @@ final class RecommendedChipUITests: XCTestCase {
         let recChip  = chipBar.buttons["Recommended"]
         let homeChip = chipBar.buttons["Home"]
         guard recChip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found")
+            try captureAndSkip("Recommended chip not found", in: app)
         }
 
         scrollChipIntoView(recChip, in: chipBar)
@@ -210,14 +210,14 @@ final class RecommendedChipUITests: XCTestCase {
 
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found")
+            try captureAndSkip("Recommended chip not found", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
         let feedScrollView = app.descendants(matching: .any)["home.sectionContainer"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
-            throw XCTSkip("home.sectionContainer did not appear within 65 s — network unavailable")
+            try captureAndSkip("home.sectionContainer did not appear within 65 s — network unavailable", in: app)
         }
 
         let cardPredicate2 = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
@@ -265,14 +265,14 @@ final class RecommendedChipUITests: XCTestCase {
 
         let chip = chipBar.buttons["Recommended"]
         guard chip.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Recommended chip not found")
+            try captureAndSkip("Recommended chip not found", in: app)
         }
         scrollChipIntoView(chip, in: chipBar)
         chip.tap()
 
         let feedScrollView = app.descendants(matching: .any)["home.sectionContainer"]
         guard feedScrollView.waitForExistence(timeout: 65) else {
-            throw XCTSkip("home.sectionContainer did not appear within 65 s — network unavailable")
+            try captureAndSkip("home.sectionContainer did not appear within 65 s — network unavailable", in: app)
         }
 
         let cardPredicate3 = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")

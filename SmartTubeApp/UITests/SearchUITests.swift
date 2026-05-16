@@ -75,7 +75,7 @@ final class SearchUITests: XCTestCase {
 
         let suggestions = app.tables["search.suggestionsContainer"]
         guard suggestions.waitForExistence(timeout: 20) else {
-            throw XCTSkip("search.suggestionsContainer did not appear within 20 s — network may be unavailable")
+            try captureAndSkip("search.suggestionsContainer did not appear within 20 s — network may be unavailable", in: app)
         }
         XCTAssertGreaterThan(suggestions.cells.count, 0,
                              "At least one suggestion should appear after typing 'swift'")

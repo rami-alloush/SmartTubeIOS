@@ -72,9 +72,10 @@ final class HomeShortsRowUITests: XCTestCase {
         let result = XCTWaiter().wait(for: [eitherExpectation], timeout: 60)
 
         guard result == .completed else {
-            throw XCTSkip(
+            try captureAndSkip(
                 "Neither Shorts cards nor empty state appeared in 60 s — " +
-                "network unavailable or fetchShorts() is hanging. Skipping."
+                "network unavailable or fetchShorts() is hanging. Skipping.",
+                in: app
             )
         }
 
@@ -84,7 +85,7 @@ final class HomeShortsRowUITests: XCTestCase {
                 .matching(NSPredicate(format: "identifier BEGINSWITH 'video.card.'"))
                 .count > 0
             if !hasCards {
-                throw XCTSkip("Shorts section returned 0 videos — network/auth issue. Skipping.")
+                try captureAndSkip("Shorts section returned 0 videos — network/auth issue. Skipping.", in: app)
             }
         }
 
@@ -106,15 +107,16 @@ final class HomeShortsRowUITests: XCTestCase {
 
         // Wait for regular video cards to confirm the feed loaded.
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 30) != nil else {
-            throw XCTSkip("Home feed did not load any video cards — network issue.")
+            try captureAndSkip("Home feed did not load any video cards — network issue.", in: app)
         }
 
         // The Shorts row may need a moment after regular videos appear.
         let shortsRow = app.scrollViews["home.shortsRow"]
         guard shortsRow.waitForExistence(timeout: 15) else {
-            throw XCTSkip(
+            try captureAndSkip(
                 "home.shortsRow not found — fetchShorts() likely returned 0 videos " +
-                "(FEshorts API flakiness). Skipping rather than failing."
+                "(FEshorts API flakiness). Skipping rather than failing.",
+                in: app
             )
         }
 

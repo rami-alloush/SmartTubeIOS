@@ -71,7 +71,7 @@ final class WatchLaterContextMenuUITests: XCTestCase {
     func testWatchLaterMenuItemVisibleWhenSignedIn() throws {
         let card = try firstHomeCard()
         guard let button = openContextMenuWatchLaterButton(on: card) else {
-            throw XCTSkip("'Save to Watch Later' not shown — account may not be signed in")
+            try captureAndSkip("'Save to Watch Later' not shown — account may not be signed in", in: app)
         }
         XCTAssertTrue(button.exists,
                       "'Save to Watch Later' context menu item must be visible for signed-in users")
@@ -90,7 +90,7 @@ final class WatchLaterContextMenuUITests: XCTestCase {
     func testSaveToWatchLaterShowsSuccessAlertNotError() throws {
         let card = try firstHomeCard()
         guard let button = openContextMenuWatchLaterButton(on: card) else {
-            throw XCTSkip("'Save to Watch Later' not shown — account may not be signed in")
+            try captureAndSkip("'Save to Watch Later' not shown — account may not be signed in", in: app)
         }
         button.tap()
 

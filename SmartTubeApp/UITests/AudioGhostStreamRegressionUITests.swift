@@ -124,7 +124,7 @@ final class PlayerGhostStreamRegressionUITests: XCTestCase {
             }
         }
         guard nextEnabled else {
-            throw XCTSkip("player.nextBtn did not become enabled within 20 s — related videos may not have loaded (network flakiness)")
+            try captureAndSkip("player.nextBtn did not become enabled within 20 s — related videos may not have loaded (network flakiness)", in: app)
         }
         nextButton.tap()
 
@@ -197,7 +197,7 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         app.launch()
 
         guard indexLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Shorts player did not appear — network unavailable or short IDs may be stale")
+            try captureAndSkip("Shorts player did not appear — network unavailable or short IDs may be stale", in: app)
         }
     }
 
@@ -237,7 +237,7 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         ]
         app.launch()
         guard indexLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Shorts player did not appear — network unavailable or short IDs may be stale")
+            try captureAndSkip("Shorts player did not appear — network unavailable or short IDs may be stale", in: app)
         }
         let indexBefore = indexLabel.label
 
@@ -246,7 +246,7 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         let channelButton = app.descendants(matching: .any).matching(channelPred).firstMatch
 
         guard channelButton.waitForExistence(timeout: 10), channelButton.isEnabled else {
-            throw XCTSkip("shorts.channelButton not found or disabled — channelId unavailable for this Short")
+            try captureAndSkip("shorts.channelButton not found or disabled — channelId unavailable for this Short", in: app)
         }
         channelButton.tap()
 
@@ -260,7 +260,7 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         let indexGoneExp = XCTNSPredicateExpectation(predicate: indexGonePred, object: indexLabel)
         let pushResult = XCTWaiter().wait(for: [indexGoneExp], timeout: 15)
         guard pushResult == .completed else {
-            throw XCTSkip("ChannelView did not push within 15 s — channel may not be available on stub network")
+            try captureAndSkip("ChannelView did not push within 15 s — channel may not be available on stub network", in: app)
         }
 
         // Navigate back. Since navigationBarHidden(true) propagates from ShortsPlayerView,

@@ -35,7 +35,7 @@ final class LandscapeLockButtonUITests: XCTestCase {
 
         let player = app.otherElements["player.view"].firstMatch
         guard player.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Player did not open within 20 s — network unavailable or video inaccessible")
+            try captureAndSkip("Player did not open within 20 s — network unavailable or video inaccessible", in: app)
         }
 
         // Tap to make controls visible if they are hidden.
@@ -58,7 +58,7 @@ final class LandscapeLockButtonUITests: XCTestCase {
 
         let player = app.otherElements["player.view"].firstMatch
         guard player.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Player did not open within 20 s — network unavailable or video inaccessible")
+            try captureAndSkip("Player did not open within 20 s — network unavailable or video inaccessible", in: app)
         }
 
         player.tap()

@@ -71,24 +71,26 @@ final class ShareExtensionE2EUITests: XCTestCase {
         //    Skip (not fail) when the share extension infrastructure is not ready on this simulator.
         let appOpened = smartTube.wait(for: .runningForeground, timeout: 15)
         guard appOpened else {
-            throw XCTSkip(
+            try captureAndSkip(
                 "SmartTube did not come to the foreground after tapping the share extension — " +
-                "Share Extension infrastructure (enabled extension, network) not ready on this simulator clone."
+                "Share Extension infrastructure (enabled extension, network) not ready on this simulator clone.",
+                in: smartTube
             )
         }
 
         // 5. The video player must open.
         let titleLabel = smartTube.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip(
+            try captureAndSkip(
                 "player.titleLabel did not appear within 20 s — " +
-                "SmartTube opened but InnerTube may not have resolved the video (network unavailable)"
+                "SmartTube opened but InnerTube may not have resolved the video (network unavailable)",
+                in: smartTube
             )
         }
 
         let errorBanner = smartTube.otherElements["player.errorBanner"].firstMatch
         if errorBanner.exists {
-            throw XCTSkip("player.errorBanner appeared — YouTube network error on this simulator clone")
+            try captureAndSkip("player.errorBanner appeared — YouTube network error on this simulator clone", in: smartTube)
         }
     }
 
@@ -107,11 +109,11 @@ final class ShareExtensionE2EUITests: XCTestCase {
         try tapExtension(named: kExtensionName)
 
         guard smartTube.wait(for: .runningForeground, timeout: 15) else {
-            throw XCTSkip("SmartTube did not come to the foreground — Share Extension infrastructure not ready on this simulator clone")
+            try captureAndSkip("SmartTube did not come to the foreground — Share Extension infrastructure not ready on this simulator clone", in: smartTube)
         }
 
         guard smartTube.staticTexts["player.titleLabel"].firstMatch.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Player did not appear within 20 s — network unavailable")
+            try captureAndSkip("Player did not appear within 20 s — network unavailable", in: smartTube)
         }
 
         // Dismiss the player.
@@ -122,7 +124,7 @@ final class ShareExtensionE2EUITests: XCTestCase {
             // test (player dismissed before backgrounding) is not met.
             let miniBar = smartTube.otherElements["miniPlayer.bar"].firstMatch
             guard miniBar.waitForExistence(timeout: 5) else {
-                throw XCTSkip("Player did not minimize after back tap — cannot verify pending ID consumption")
+                try captureAndSkip("Player did not minimize after back tap — cannot verify pending ID consumption", in: smartTube)
             }
         }
 
@@ -133,8 +135,8 @@ final class ShareExtensionE2EUITests: XCTestCase {
         // Player must NOT reopen — pending key was already consumed.
         let playerAfterReturn = smartTube.staticTexts["player.titleLabel"].firstMatch
         guard !playerAfterReturn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.titleLabel reappeared after re-foregrounding — " +
-                          "pendingVideoID may not have been cleared or player did not fully dismiss")
+            try captureAndSkip("player.titleLabel reappeared after re-foregrounding — " +
+                          "pendingVideoID may not have been cleared or player did not fully dismiss", in: smartTube)
         }
     }
 
@@ -153,13 +155,13 @@ final class ShareExtensionE2EUITests: XCTestCase {
             if urlButton.waitForExistence(timeout: 4) {
                 urlButton.tap()
             } else {
-                throw XCTSkip("Cannot locate Safari address bar — layout may differ on this OS version")
+                try captureAndSkip("Cannot locate Safari address bar — layout may differ on this OS version", in: safari)
             }
         }
 
         let editField = safari.textFields["Address"].firstMatch
         guard editField.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Safari address text field did not become editable")
+            try captureAndSkip("Safari address text field did not become editable", in: safari)
         }
 
         editField.typeText(urlString + "\n")
@@ -191,7 +193,7 @@ final class ShareExtensionE2EUITests: XCTestCase {
         for candidate in candidates where candidate.waitForExistence(timeout: 3) {
             return candidate
         }
-        throw XCTSkip("Safari share button not found — layout may have changed on this OS version")
+        try captureAndSkip("Safari share button not found — layout may have changed on this OS version", in: safari)
     }
 
     // MARK: - Share sheet helpers
@@ -214,9 +216,10 @@ final class ShareExtensionE2EUITests: XCTestCase {
         }
 
         guard extensionButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip(
+            try captureAndSkip(
                 "'\(name)' extension not visible in the share sheet. " +
-                "Open the share sheet manually on this simulator, tap 'More', and enable \(name)."
+                "Open the share sheet manually on this simulator, tap 'More', and enable \(name).",
+                in: smartTube
             )
         }
 

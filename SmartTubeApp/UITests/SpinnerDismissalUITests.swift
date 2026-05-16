@@ -91,7 +91,7 @@ final class SpinnerDismissalUITests: XCTestCase {
     /// proves `isLoading` was set to false in the fallback `.readyToPlay` handler.
     func testPlayPauseButtonBecomesEnabledAfterFallbackPath() throws {
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire", in: app)
         }
 
         // Show controls once so the element is in the accessibility tree.
@@ -118,13 +118,13 @@ final class SpinnerDismissalUITests: XCTestCase {
     /// play/pause button must physically respond to a tap without crashing.
     func testPlayPauseButtonIsInteractableAfterFallbackPath() throws {
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire", in: app)
         }
 
         // Wait for the fallback path to complete (isLoading → false).
         showControls()
         guard waitForPlayPauseEnabled(timeout: 30) else {
-            throw XCTSkip("player.playPauseButton did not become enabled within 30 s — network slow or fallback stalled")
+            try captureAndSkip("player.playPauseButton did not become enabled within 30 s — network slow or fallback stalled", in: app)
         }
 
         // Tap the button — it must not crash and the app must still be running.
@@ -147,13 +147,13 @@ final class SpinnerDismissalUITests: XCTestCase {
     /// accessibility tree; after `isLoading = false` it is removed from the hierarchy.
     func testNoLoadingSpinnerAfterFallbackPlaybackStarts() throws {
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire", in: app)
         }
 
         // Wait for the fallback path to complete (isLoading → false).
         showControls()
         guard waitForPlayPauseEnabled(timeout: 30) else {
-            throw XCTSkip("player.playPauseButton did not become enabled — cannot assess spinner state")
+            try captureAndSkip("player.playPauseButton did not become enabled — cannot assess spinner state", in: app)
         }
 
         // Give the transition animation 0.3 s (easeInOut 0.2 s + margin) to complete.
@@ -173,7 +173,7 @@ final class SpinnerDismissalUITests: XCTestCase {
     /// Paired with the spinner tests to give a complete picture of the fallback path.
     func testNoErrorBannerDuringFallbackPlayback() throws {
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire")
+            try captureAndSkip("player.titleLabel did not appear — network unavailable or deeplink did not fire", in: app)
         }
 
         showControls()

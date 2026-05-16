@@ -188,7 +188,7 @@ final class PlayerDoubleTapUITests: XCTestCase {
                 "\($0.identifier.isEmpty ? "(no-id)" : $0.identifier): '\($0.label)' exists=\($0.exists)"
             }
             print("▶ [skip] No toast found. Visible texts: \(allTexts). Buttons: \(allButtons)")
-            throw XCTSkip("Centre-zone double-tap toast did not appear in the XCTest simulator environment — known issue (task-16). Visible texts: \(allTexts)")
+            try captureAndSkip("Centre-zone double-tap toast did not appear in the XCTest simulator environment — known issue (task-16). Visible texts: \(allTexts)", in: app)
         }
 
         // Decide which element we found.

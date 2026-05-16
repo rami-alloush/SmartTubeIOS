@@ -34,10 +34,10 @@ final class PlayerControlsUITests: XCTestCase {
     private func openPlayerFromHome() throws -> String {
         UITestHelpers.tapTab(named: "Home", in: app)
         guard let card = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards on Home — network unavailable or feed empty")
+            try captureAndSkip("No video cards on Home — network unavailable or feed empty", in: app)
         }
         guard UITestHelpers.openPlayer(from: card, in: app) else {
-            throw XCTSkip("Player did not open within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("Player did not open within 15 s — network unavailable or timing-dependent", in: app)
         }
         return app.staticTexts["player.titleLabel"].firstMatch.label
     }
@@ -79,7 +79,7 @@ final class PlayerControlsUITests: XCTestCase {
         try openPlayerFromHome()
         showControls()
         guard playPauseButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.playPauseButton did not appear — controls overlay may not respond to tap reliably on simulator (timing-dependent)")
+            try captureAndSkip("player.playPauseButton did not appear — controls overlay may not respond to tap reliably on simulator (timing-dependent)", in: app)
         }
     }
 
@@ -87,7 +87,7 @@ final class PlayerControlsUITests: XCTestCase {
         try openPlayerFromHome()
         showControls()
         guard playPauseButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.playPauseButton did not appear — controls overlay may not respond to tap reliably on simulator (timing-dependent)")
+            try captureAndSkip("player.playPauseButton did not appear — controls overlay may not respond to tap reliably on simulator (timing-dependent)", in: app)
         }
 
         // Capture current image (playing → pause icon, or paused → play icon).
@@ -97,7 +97,7 @@ final class PlayerControlsUITests: XCTestCase {
         // Tap again to restore.
         showControls()
         guard playPauseButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.playPauseButton did not reappear after re-tap — timing-dependent")
+            try captureAndSkip("player.playPauseButton did not reappear after re-tap — timing-dependent", in: app)
         }
         playPauseButton.tap()
 
@@ -121,7 +121,7 @@ final class PlayerControlsUITests: XCTestCase {
         // Close the mini-player to fully stop playback.
         let miniPlayerClose = app.buttons["miniPlayer.closeButton"].firstMatch
         guard miniPlayerClose.waitForExistence(timeout: 3) else {
-            throw XCTSkip("miniPlayer.closeButton not found — in-app PiP may not be active on this build")
+            try captureAndSkip("miniPlayer.closeButton not found — in-app PiP may not be active on this build", in: app)
         }
         miniPlayerClose.tap()
 
@@ -162,7 +162,7 @@ final class PlayerControlsUITests: XCTestCase {
             }
         }
         guard nextEnabled else {
-            throw XCTSkip("player.nextBtn did not become enabled within 20 s — related videos may not have loaded")
+            try captureAndSkip("player.nextBtn did not become enabled within 20 s — related videos may not have loaded", in: app)
         }
 
         nextButton.tap()
@@ -176,7 +176,7 @@ final class PlayerControlsUITests: XCTestCase {
             newTitle = titleLabel.label
         }
         guard newTitle != initialTitle else {
-            throw XCTSkip("Title did not change within 30s — next video may share the same title or network is slow")
+            try captureAndSkip("Title did not change within 30s — next video may share the same title or network is slow", in: app)
         }
     }
 
@@ -191,7 +191,7 @@ final class PlayerControlsUITests: XCTestCase {
         try openPlayerFromHome()
         showControls()
         guard pipButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.pipButton not found — PiP may not be available on this device/iOS version")
+            try captureAndSkip("player.pipButton not found — PiP may not be available on this device/iOS version", in: app)
         }
         pipButton.tap()
         // PiP windows are not directly queryable; just ensure no crash.
@@ -219,7 +219,7 @@ final class PlayerControlsUITests: XCTestCase {
 
         // next button must exist and be hittable
         guard nextButton.waitForExistence(timeout: 8) else {
-            throw XCTSkip("player.nextBtn did not appear — controls may not have shown in portrait (timing-dependent)")
+            try captureAndSkip("player.nextBtn did not appear — controls may not have shown in portrait (timing-dependent)", in: app)
         }
         XCTAssertTrue(nextButton.isHittable,
                       "player.nextBtn must be hittable in portrait — regression for task #45 hit-area fix")

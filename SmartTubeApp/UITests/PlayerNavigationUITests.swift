@@ -97,7 +97,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         card.tap()
@@ -106,12 +106,12 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         // waitForExistence only checks element presence, not that the label is populated.
         // playerInfo loads asynchronously, so we poll until the label is non-empty.
         guard titleLabel.waitForExistence(timeout: 15) else {
-            throw XCTSkip("player.titleLabel did not appear after opening a video — network unavailable")
+            try captureAndSkip("player.titleLabel did not appear after opening a video — network unavailable", in: app)
         }
         let nonEmptyPred = NSPredicate(format: "label != ''")
         let titleHasText = XCTNSPredicateExpectation(predicate: nonEmptyPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText], timeout: 10) == .completed else {
-            throw XCTSkip("player.titleLabel exists but label stayed empty — playerInfo did not load (network unavailable)")
+            try captureAndSkip("player.titleLabel exists but label stayed empty — playerInfo did not load (network unavailable)", in: app)
         }
         let initialTitle = titleLabel.label
 
@@ -129,7 +129,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred = NSPredicate(format: "label != '' AND label != %@", initialTitle)
         let titleChanged = XCTNSPredicateExpectation(predicate: titleChangedPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left within 5s — swipe navigation is network/timing-dependent")
+            try captureAndSkip("Title did not change after swipe left within 5s — swipe navigation is network/timing-dependent", in: app)
         }
 
         let afterSwipeLeft = titleLabel.label
@@ -146,7 +146,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
             XCTAssertEqual(afterSwipeRight, initialTitle,
                            "Swipe right should return to the original video")
         } else {
-            throw XCTSkip("Title did not revert after swipe right within 10s — back-navigation is network/timing-dependent")
+            try captureAndSkip("Title did not revert after swipe right within 10s — back-navigation is network/timing-dependent", in: app)
         }
     }
 
@@ -155,7 +155,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
         card.tap()
 
@@ -175,7 +175,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
         card.tap()
 
@@ -231,29 +231,29 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         // gestures differently. Skip until the player is adapted for iPad.
         let windowWidth = app.windows.firstMatch.frame.width
         if windowWidth > 700 {
-            throw XCTSkip("Player controls-visible swipe not yet adapted for iPad layout")
+            try captureAndSkip("Player controls-visible swipe not yet adapted for iPad layout", in: app)
         }
 
         openHomeTab()
 
         guard let card = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
         card.tap()
 
         guard titleLabel.waitForExistence(timeout: 15) else {
-            throw XCTSkip("Player did not open — network unavailable")
+            try captureAndSkip("Player did not open — network unavailable", in: app)
         }
 
         // Keep tapping to maintain controls visibility while waiting for hasNext.
         guard waitForControlsWithNextEnabled(timeout: 20) else {
-            throw XCTSkip("Related videos did not load within 20 s — network unavailable")
+            try captureAndSkip("Related videos did not load within 20 s — network unavailable", in: app)
         }
         // By now playerInfo has had time to load; wait for non-empty title.
         let nonEmptyPred = NSPredicate(format: "label != ''")
         let titleHasText = XCTNSPredicateExpectation(predicate: nonEmptyPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText], timeout: 5) == .completed else {
-            throw XCTSkip("Title label stayed empty after controls loaded — playerInfo did not load (network unavailable)")
+            try captureAndSkip("Title label stayed empty after controls loaded — playerInfo did not load (network unavailable)", in: app)
         }
         let initialTitle = titleLabel.label
 
@@ -263,7 +263,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred = NSPredicate(format: "label != '' AND label != %@", initialTitle)
         let titleChanged = XCTNSPredicateExpectation(predicate: titleChangedPred, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left within 5s — network/timing-dependent")
+            try captureAndSkip("Title did not change after swipe left within 5s — network/timing-dependent", in: app)
         }
 
         XCTAssertNotEqual(titleLabel.label, initialTitle,
@@ -276,7 +276,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         // gestures differently. Skip until the player is adapted for iPad.
         let windowWidth = app.windows.firstMatch.frame.width
         if windowWidth > 700 {
-            throw XCTSkip("Player controls-visible swipe not yet adapted for iPad layout")
+            try captureAndSkip("Player controls-visible swipe not yet adapted for iPad layout", in: app)
         }
 
         // Open Rick Astley via deeplink with:
@@ -293,18 +293,18 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         app.launch()
 
         guard titleLabel.waitForExistence(timeout: 20) else {
-            throw XCTSkip("Player did not open — network unavailable")
+            try captureAndSkip("Player did not open — network unavailable", in: app)
         }
 
         // With inject + show-controls, player.nextBtn should be enabled within seconds.
         guard waitForControlsWithNextEnabled(timeout: 15) else {
-            throw XCTSkip("player.nextBtn did not become enabled within 15 s — inject may not have applied")
+            try captureAndSkip("player.nextBtn did not become enabled within 15 s — inject may not have applied", in: app)
         }
         // Wait for non-empty title (playerInfo loads from network even with inject).
         let nonEmptyPred2 = NSPredicate(format: "label != ''")
         let titleHasText2 = XCTNSPredicateExpectation(predicate: nonEmptyPred2, object: titleLabel)
         guard XCTWaiter().wait(for: [titleHasText2], timeout: 10) == .completed else {
-            throw XCTSkip("Title label stayed empty after controls loaded — playerInfo did not load (network unavailable)")
+            try captureAndSkip("Title label stayed empty after controls loaded — playerInfo did not load (network unavailable)", in: app)
         }
         let firstTitle = titleLabel.label
 
@@ -314,11 +314,11 @@ final class PlayerLiveSwipeUITests: XCTestCase {
         let titleChangedPred2 = NSPredicate(format: "label != '' AND label != %@", firstTitle)
         let titleChanged2 = XCTNSPredicateExpectation(predicate: titleChangedPred2, object: titleLabel)
         guard XCTWaiter().wait(for: [titleChanged2], timeout: 5) == .completed else {
-            throw XCTSkip("Title did not change after swipe left — network/timing-dependent")
+            try captureAndSkip("Title did not change after swipe left — network/timing-dependent", in: app)
         }
         let secondTitle = titleLabel.label
         guard secondTitle != firstTitle else {
-            throw XCTSkip("Must be on a second video before testing swipe right with controls")
+            try captureAndSkip("Must be on a second video before testing swipe right with controls", in: app)
         }
 
         // Do NOT tap to show controls before swipe-right.
@@ -338,7 +338,7 @@ final class PlayerLiveSwipeUITests: XCTestCase {
             XCTAssertNotEqual(titleLabel.label, secondTitle,
                               "Swipe right should navigate away from the second video")
         } else {
-            throw XCTSkip("Title did not change after swipe right within 10s — previous-video navigation is network/timing-dependent")
+            try captureAndSkip("Title did not change after swipe right within 10s — previous-video navigation is network/timing-dependent", in: app)
         }
     }
 }

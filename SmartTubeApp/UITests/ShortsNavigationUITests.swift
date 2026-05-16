@@ -146,14 +146,14 @@ final class ShortsNavigationUITests: XCTestCase {
         // Wait for the Home feed to show the Shorts row.
         let shortsRow = app.scrollViews["home.shortsRow"]
         guard shortsRow.waitForExistence(timeout: 30) else {
-            throw XCTSkip("home.shortsRow not found — fetchShorts() API flakiness. Skipping.")
+            try captureAndSkip("home.shortsRow not found — fetchShorts() API flakiness. Skipping.", in: app)
         }
 
         // Find the first Short card in the row.
         let predicate = NSPredicate(format: "identifier BEGINSWITH 'shorts.card.'")
         let cards = shortsRow.descendants(matching: .any).matching(predicate)
         guard cards.count > 0 else {
-            throw XCTSkip("No shorts.card.* elements found — feed empty. Skipping.")
+            try captureAndSkip("No shorts.card.* elements found — feed empty. Skipping.", in: app)
         }
         let firstCard = cards.element(boundBy: 0)
         XCTAssertTrue(firstCard.waitForExistence(timeout: 5))
@@ -180,7 +180,7 @@ final class ShortsNavigationUITests: XCTestCase {
 
         let chipBar = app.scrollViews.matching(identifier: "home.chipBar").firstMatch
         guard chipBar.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Chip bar not found — cannot verify Shorts chip load.")
+            try captureAndSkip("Chip bar not found — cannot verify Shorts chip load.", in: app)
         }
 
         // Tap the Shorts chip.
@@ -193,7 +193,7 @@ final class ShortsNavigationUITests: XCTestCase {
         // without navigating to Settings and back first.
         let sectionContainer = app.otherElements["home.sectionContainer"].firstMatch
         guard sectionContainer.waitForExistence(timeout: 15) else {
-            throw XCTSkip("Section container not found after Shorts chip tap — network issue.")
+            try captureAndSkip("Section container not found after Shorts chip tap — network issue.", in: app)
         }
 
         // Either the content loads, or a legitimate empty/auth state is shown.
@@ -509,7 +509,7 @@ final class ShortsLiveSwipeUITests: XCTestCase {
 
         // Wait for real Shorts to load from the network.
         guard let firstCard = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No Shorts loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No Shorts loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Tap the first Short to open ShortsPlayerView.
@@ -537,7 +537,7 @@ final class ShortsLiveSwipeUITests: XCTestCase {
         try navigateToShortsChip()
 
         guard let firstCard = waitForFirstVideoCard(timeout: 20) else {
-            throw XCTSkip("No Shorts loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No Shorts loaded within 20 s — network unavailable or feed empty", in: app)
         }
         firstCard.tap()
 

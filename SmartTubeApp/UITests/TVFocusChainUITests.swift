@@ -105,7 +105,7 @@ final class TVFocusChainUITests: XCTestCase {
 
         // Wait for video cards to load before navigating
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Step 1: ↓ from tab bar → chip bar receives focus
@@ -135,7 +135,7 @@ final class TVFocusChainUITests: XCTestCase {
         )
 
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Navigate into video list (down × 2)
@@ -172,7 +172,7 @@ final class TVFocusChainUITests: XCTestCase {
         )
 
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Navigate to player: ↓ (tab bar → chips) ↓ (chips → video list) select
@@ -214,7 +214,7 @@ final class TVFocusChainUITests: XCTestCase {
         )
 
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s — network unavailable or feed empty")
+            try captureAndSkip("No video cards loaded within 20 s — network unavailable or feed empty", in: app)
         }
 
         // Open the player
@@ -254,7 +254,7 @@ final class TVFocusChainUITests: XCTestCase {
         XCTAssertTrue(chipBar.waitForExistence(timeout: 15))
 
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s")
+            try captureAndSkip("No video cards loaded within 20 s", in: app)
         }
 
         remote.press(.down)
@@ -284,7 +284,7 @@ final class TVFocusChainUITests: XCTestCase {
         XCTAssertTrue(chipBar.waitForExistence(timeout: 15))
 
         guard waitForVideoCards(timeout: 20) else {
-            throw XCTSkip("No video cards loaded within 20 s")
+            try captureAndSkip("No video cards loaded within 20 s", in: app)
         }
 
         remote.press(.down)

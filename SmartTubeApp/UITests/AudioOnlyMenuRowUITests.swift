@@ -32,7 +32,7 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
 
         let playerTitle = app.staticTexts["player.titleLabel"].firstMatch
         guard playerTitle.waitForExistence(timeout: timeout) else {
-            throw XCTSkip("Player did not open within \(timeout) s — network unavailable or video inaccessible")
+            try captureAndSkip("Player did not open within \(timeout) s — network unavailable or video inaccessible", in: app)
         }
         // Ensure controls are visible by tapping the player
         app.otherElements["player.view"].firstMatch.tap()
@@ -55,7 +55,7 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
 
         let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.audioOnlyButton not visible — skipping toggle test")
+            try captureAndSkip("player.audioOnlyButton not visible — skipping toggle test", in: app)
         }
 
         audioOnlyBtn.tap()
@@ -73,7 +73,7 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
 
         let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.audioOnlyButton not visible — skipping overlay test")
+            try captureAndSkip("player.audioOnlyButton not visible — skipping overlay test", in: app)
         }
 
         // Ensure audio-only is OFF first (overlay must not exist yet)
@@ -92,20 +92,20 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
 
         let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.audioOnlyButton not visible — skipping overlay hide test")
+            try captureAndSkip("player.audioOnlyButton not visible — skipping overlay hide test", in: app)
         }
 
         // Turn audio-only ON
         audioOnlyBtn.tap()
         let overlay = app.otherElements["player.audioOnlyOverlay"].firstMatch
         guard overlay.waitForExistence(timeout: 15) else {
-            throw XCTSkip("Overlay did not appear after enabling audio-only — skipping hide test")
+            try captureAndSkip("Overlay did not appear after enabling audio-only — skipping hide test", in: app)
         }
 
         // Tap controls to make the button visible again, then turn OFF
         app.otherElements["player.view"].firstMatch.tap()
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.audioOnlyButton not visible after overlay appeared — skipping")
+            try captureAndSkip("player.audioOnlyButton not visible after overlay appeared — skipping", in: app)
         }
         audioOnlyBtn.tap()
 
@@ -126,7 +126,7 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
 
         let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.audioOnlyButton not visible — skipping toast test")
+            try captureAndSkip("player.audioOnlyButton not visible — skipping toast test", in: app)
         }
 
         // Tap to enter audio-only mode — toast "Audio-Only Mode" should appear
@@ -137,7 +137,7 @@ final class AudioOnlyMenuRowUITests: XCTestCase {
         // Note: if toast disappears before we catch it, the test is flaky only on very slow CI.
         // XCTSkip rather than XCTFail if the toast was too brief to capture.
         if !toastExists {
-            throw XCTSkip("Toast disappeared before assertion — may be a slow simulator timing issue")
+            try captureAndSkip("Toast disappeared before assertion — may be a slow simulator timing issue", in: app)
         }
         XCTAssertEqual(app.state, .runningForeground,
                        "App must remain running after audio-only toast")

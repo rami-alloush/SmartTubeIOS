@@ -33,11 +33,11 @@ final class LibraryPlaylistsUITests: XCTestCase {
         UITestHelpers.tapTab(named: "Library", in: app)
         let picker = app.segmentedControls["library.sectionPicker"]
         guard picker.waitForExistence(timeout: 5) else {
-            throw XCTSkip("library.sectionPicker did not appear — Library tab may not have loaded")
+            try captureAndSkip("library.sectionPicker did not appear — Library tab may not have loaded", in: app)
         }
         let playlistsButton = picker.buttons["Playlists"]
         guard playlistsButton.waitForExistence(timeout: 3) else {
-            throw XCTSkip("Playlists segment not found in library section picker")
+            try captureAndSkip("Playlists segment not found in library section picker", in: app)
         }
         playlistsButton.tap()
     }
@@ -83,14 +83,14 @@ final class LibraryPlaylistsUITests: XCTestCase {
     func testPlaylistsFeedPopulates() throws {
         try openPlaylistsSegment()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist items loaded within 20 s — account may not be signed in or has no playlists")
+            try captureAndSkip("No playlist items loaded within 20 s — account may not be signed in or has no playlists", in: app)
         }
     }
 
     func testTappingPlaylistOpensPlaylistView() throws {
         try openPlaylistsSegment()
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist cards loaded — signed-in account with playlists required")
+            try captureAndSkip("No playlist cards loaded — signed-in account with playlists required", in: app)
         }
         firstCard.tap()
         // PlaylistView sets its navigationTitle to the playlist name; the nav bar appears.
@@ -103,7 +103,7 @@ final class LibraryPlaylistsUITests: XCTestCase {
     func testPlaylistViewShowsVideoCardsOrEmpty() throws {
         try openPlaylistsSegment()
         guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist cards loaded — signed-in account with playlists required")
+            try captureAndSkip("No playlist cards loaded — signed-in account with playlists required", in: app)
         }
         firstCard.tap()
 
@@ -119,30 +119,30 @@ final class LibraryPlaylistsUITests: XCTestCase {
     func testTappingVideoInPlaylistOpensPlayer() throws {
         try openPlaylistsSegment()
         guard let playlistCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist cards — signed-in account with playlists required")
+            try captureAndSkip("No playlist cards — signed-in account with playlists required", in: app)
         }
         playlistCard.tap()
 
         // Wait for PlaylistView to open and load videos.
         let feed = app.scrollViews["playlistView.feed"]
         guard feed.waitForExistence(timeout: 15) else {
-            throw XCTSkip("playlistView.feed did not appear — playlist may be empty")
+            try captureAndSkip("playlistView.feed did not appear — playlist may be empty", in: app)
         }
         guard let videoCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards inside playlist — playlist may be empty")
+            try captureAndSkip("No video cards inside playlist — playlist may be empty", in: app)
         }
         XCTAssertTrue(UITestHelpers.openPlayer(from: videoCard, in: app),
                       "player.titleLabel should appear after tapping a video in a playlist")
         let errorBanner = app.otherElements["player.errorBanner"].firstMatch
         if errorBanner.exists {
-            throw XCTSkip("player.errorBanner appeared — network issue on this simulator clone")
+            try captureAndSkip("player.errorBanner appeared — network issue on this simulator clone", in: app)
         }
     }
 
     func testScrollRestorationAfterPlayback() throws {
         try openPlaylistsSegment()
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist cards — signed-in account with playlists required")
+            try captureAndSkip("No playlist cards — signed-in account with playlists required", in: app)
         }
 
         // Open the first playlist.
@@ -153,10 +153,10 @@ final class LibraryPlaylistsUITests: XCTestCase {
 
         let feed = app.scrollViews["playlistView.feed"]
         guard feed.waitForExistence(timeout: 15) else {
-            throw XCTSkip("playlistView.feed did not appear — playlist may be empty")
+            try captureAndSkip("playlistView.feed did not appear — playlist may be empty", in: app)
         }
         guard let _ = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No video cards in playlist")
+            try captureAndSkip("No video cards in playlist", in: app)
         }
 
         // Scroll down.
@@ -170,7 +170,7 @@ final class LibraryPlaylistsUITests: XCTestCase {
             .firstMatch
         let firstCardMaxYAfterScroll = firstCard.frame.maxY
         guard firstCardMaxYAfterScroll < 100 else {
-            throw XCTSkip("Could not scroll past first card — playlist may have too few items")
+            try captureAndSkip("Could not scroll past first card — playlist may have too few items", in: app)
         }
 
         // Tap a video via coordinate.
@@ -179,23 +179,23 @@ final class LibraryPlaylistsUITests: XCTestCase {
 
         let titleLabel = app.staticTexts["player.titleLabel"].firstMatch
         guard titleLabel.waitForExistence(timeout: 15) else {
-            throw XCTSkip("PlayerView did not open within 15 s — network unavailable or timing-dependent")
+            try captureAndSkip("PlayerView did not open within 15 s — network unavailable or timing-dependent", in: app)
         }
 
         let backButton = app.buttons["player.backButton"].firstMatch
         guard backButton.waitForExistence(timeout: 5) else {
-            throw XCTSkip("player.backButton not found after player opened")
+            try captureAndSkip("player.backButton not found after player opened", in: app)
         }
         backButton.tap()
 
         guard feed.waitForExistence(timeout: 5) else {
-            throw XCTSkip("playlistView.feed did not reappear after back")
+            try captureAndSkip("playlistView.feed did not reappear after back", in: app)
         }
         Thread.sleep(forTimeInterval: 1.0)
 
         let firstCardMaxYAfterBack = firstCard.frame.maxY
         guard firstCardMaxYAfterBack < 100 else {
-            throw XCTSkip("Scroll position not restored — first card reappeared on-screen (timing or animation-dependent)")
+            try captureAndSkip("Scroll position not restored — first card reappeared on-screen (timing or animation-dependent)", in: app)
         }
     }
 
@@ -206,16 +206,16 @@ final class LibraryPlaylistsUITests: XCTestCase {
     func testPlaylistLoadsMoreVideosOnScroll() throws {
         try openPlaylistsSegment()
         guard let playlistCard = UITestHelpers.waitForVideoCards(in: app, timeout: 20) else {
-            throw XCTSkip("No playlist cards — signed-in account with playlists required")
+            try captureAndSkip("No playlist cards — signed-in account with playlists required", in: app)
         }
         playlistCard.tap()
 
         let feed = app.scrollViews["playlistView.feed"]
         guard feed.waitForExistence(timeout: 15) else {
-            throw XCTSkip("playlistView.feed did not appear — playlist may be empty")
+            try captureAndSkip("playlistView.feed did not appear — playlist may be empty", in: app)
         }
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 20) != nil else {
-            throw XCTSkip("No video cards in playlist")
+            try captureAndSkip("No video cards in playlist", in: app)
         }
 
         // Count cards after initial load.
@@ -223,7 +223,7 @@ final class LibraryPlaylistsUITests: XCTestCase {
         let cards = app.descendants(matching: .any).matching(cardsPredicate)
         let initialCount = cards.count
         guard initialCount >= 15 else {
-            throw XCTSkip("Playlist has fewer than 15 videos — pagination won't trigger (got \(initialCount))")
+            try captureAndSkip("Playlist has fewer than 15 videos — pagination won't trigger (got \(initialCount))", in: app)
         }
 
         // Scroll to the bottom repeatedly to trigger the loadMoreIfNeeded onAppear.
