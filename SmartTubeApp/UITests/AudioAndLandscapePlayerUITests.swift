@@ -44,10 +44,11 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
             if ok.exists { ok.tap() } else { alert.buttons.firstMatch.tap() }
         }
         // If audio-only mode is ON from a previous test (overlay visible), turn it OFF.
-        let overlay = app.otherElements["player.audioOnlyOverlay"].firstMatch
+        let overlayPred = NSPredicate(format: "identifier == 'player.audioOnlyOverlay'")
+        let overlay = app.descendants(matching: .any).matching(overlayPred).firstMatch
         if overlay.waitForExistence(timeout: 2) {
             // Show controls then tap the audio-only button to disable.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            showControls()
             let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
             if audioOnlyBtn.waitForExistence(timeout: 3) {
                 audioOnlyBtn.tap()
@@ -75,9 +76,15 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
         }
     }
 
-    /// Taps the centre of the player to toggle controls visibility.
+    /// Ensures player controls are visible by tapping centre until the audio-only button
+    /// is hittable. Mirrors the loop pattern in PlayerAndMiniPlayerUITests.showControls().
     private func showControls() {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let audioOnlyBtn = app.buttons["player.audioOnlyButton"].firstMatch
+        for _ in 0..<5 {
+            if audioOnlyBtn.exists { return }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            Thread.sleep(forTimeInterval: 1.5)
+        }
     }
 
     // MARK: - Tests (from AudioOnlyMenuRowUITests)
@@ -100,9 +107,8 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
             try captureAndSkip("player.audioOnlyButton not visible — skipping toggle test", in: app)
         }
         audioOnlyBtn.tap()
-        let player = app.otherElements["player.view"].firstMatch
-        XCTAssertTrue(player.waitForExistence(timeout: 5),
-                      "Player must remain visible after tapping Audio-Only")
+        // Verify the app didn't crash — no player.view identifier exists; use app.state.
+        Thread.sleep(forTimeInterval: 1)
         XCTAssertEqual(app.state, .runningForeground,
                        "App must remain running after tapping Audio-Only")
     }
@@ -116,7 +122,8 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
             try captureAndSkip("player.audioOnlyButton not visible — skipping overlay test", in: app)
         }
         // setUp ensures audio-only is OFF, so overlay must not exist yet.
-        let overlay = app.otherElements["player.audioOnlyOverlay"].firstMatch
+        let overlayPred = NSPredicate(format: "identifier == 'player.audioOnlyOverlay'")
+        let overlay = app.descendants(matching: .any).matching(overlayPred).firstMatch
         XCTAssertFalse(overlay.exists, "Overlay must not be visible before enabling audio-only")
         audioOnlyBtn.tap()
         XCTAssertTrue(overlay.waitForExistence(timeout: 15),
@@ -133,10 +140,13 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
         }
         // Turn audio-only ON.
         audioOnlyBtn.tap()
-        let overlay = app.otherElements["player.audioOnlyOverlay"].firstMatch
+        let overlayPred = NSPredicate(format: "identifier == 'player.audioOnlyOverlay'")
+        let overlay = app.descendants(matching: .any).matching(overlayPred).firstMatch
         guard overlay.waitForExistence(timeout: 15) else {
             try captureAndSkip("Overlay did not appear after enabling audio-only — skipping hide test", in: app)
         }
+        // The audio-only stream load may briefly reset controlsVisible; allow it to settle.
+        Thread.sleep(forTimeInterval: 5)
         // Show controls again then turn OFF.
         showControls()
         guard audioOnlyBtn.waitForExistence(timeout: 5) else {
@@ -186,22 +196,22 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
     func testLandscapeLockButtonToggles() throws {
         try waitForPlayer()
         showControls()
-        let player = app.otherElements["player.view"].firstMatch
         let lockButton = app.buttons["player.landscapeLockButton"].firstMatch
         XCTAssertTrue(lockButton.waitForExistence(timeout: 5),
                       "Landscape lock button must be present before tapping")
         // Tap to lock.
         lockButton.tap()
-        XCTAssertTrue(player.waitForExistence(timeout: 3),
-                      "Player must remain visible after tapping the landscape lock button")
+        // Verify no crash — player.view identifier doesn't exist; use app.state.
         XCTAssertEqual(app.state, .runningForeground,
-                       "App must remain running after toggling the landscape lock")
+                       "App must remain running after tapping the landscape lock button")
+        // Wait for the landscape rotation animation to settle before re-probing controls.
+        Thread.sleep(forTimeInterval: 2)
         // Tap again to unlock.
         showControls()
         XCTAssertTrue(lockButton.waitForExistence(timeout: 5),
                       "Lock button must still exist after first tap")
         lockButton.tap()
-        XCTAssertTrue(player.waitForExistence(timeout: 3),
-                      "Player must remain visible after unlocking")
+        XCTAssertEqual(app.state, .runningForeground,
+                       "App must remain running after unlocking")
     }
 }
