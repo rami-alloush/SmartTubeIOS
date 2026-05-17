@@ -195,7 +195,7 @@ struct LocalSubscriptionFeedServiceTests {
         let entries = videoIds.map { id in
             """
             <entry>
-              <yt:videoId xmlns:yt="http://www.youtube.com/xml/schemas/2015">\(id)</yt:videoId>
+              <yt:videoId>\(id)</yt:videoId>
               <title>Video \(id)</title>
               <author><name>Channel</name></author>
             </entry>
@@ -203,7 +203,8 @@ struct LocalSubscriptionFeedServiceTests {
         }.joined(separator: "\n")
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <feed xmlns="http://www.w3.org/2005/Atom">
+        <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+              xmlns="http://www.w3.org/2005/Atom">
           <title>Channel</title>
           \(entries)
         </feed>
