@@ -141,23 +141,6 @@ public final class HomeViewModel {
         self.api = api
         self.sections = Self.shelfSections.map { SectionState(section: $0) }
         observeFeedHideNotifications()
-
-        // UI-testing synchronous inject: --uitesting-inject-shorts-ids=id1,id2,...
-        // Runs at init so the view renders with data immediately, without waiting
-        // for any auth token or network call. load() is skipped for this path.
-        if let arg = ProcessInfo.processInfo.arguments.first(where: {
-            $0.hasPrefix("--uitesting-inject-shorts-ids=")
-        }) {
-            let raw = String(arg.dropFirst("--uitesting-inject-shorts-ids=".count))
-            let ids = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
-            if !ids.isEmpty {
-                shortsVideos = ids.map { Video(id: $0, title: $0, channelTitle: "Test", isShort: true) }
-                for i in sections.indices { sections[i].isLoading = false }
-                isRefreshing = false
-                loadedAt = Date()
-                homeLog.notice("UI-testing inject: populated \(ids.count) shorts at init")
-            }
-        }
     }
 
     // MARK: - Feed hide handling
@@ -192,19 +175,6 @@ public final class HomeViewModel {
     // MARK: - Public API
 
     public func load() {
-        // UI-testing synchronous inject: if shorts were already injected at init,
-        // skip the full network load so injected data is not wiped.
-        // MUST be checked before the reset block below, which would clear shortsVideos.
-        if let arg = ProcessInfo.processInfo.arguments.first(where: {
-            $0.hasPrefix("--uitesting-inject-shorts-ids=")
-        }) {
-            let raw = String(arg.dropFirst("--uitesting-inject-shorts-ids=".count))
-            if !raw.split(separator: ",").filter({ !$0.isEmpty }).isEmpty {
-                homeLog.notice("UI-testing inject: load() skipped — data already injected at init")
-                return
-            }
-        }
-
         loadTask?.cancel()
         loadedAt = nil
         isRefreshing = true

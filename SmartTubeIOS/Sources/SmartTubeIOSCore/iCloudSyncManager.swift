@@ -56,17 +56,17 @@ public actor iCloudSyncManager {
     /// Calling `synchronize()` pulls the latest values from the server.
     public func start() {
         kvStore.synchronize()
-        Task { [weak self] in
-            for await notification in NotificationCenter.default.notifications(
-                named: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
-                object: nil
-            ) {
-                // Extract changed keys as [String] — a Sendable type — before crossing
-                // the actor boundary to avoid a data race on the raw userInfo dict.
-                let changedKeys = (notification.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey]
-                    as? [String]) ?? []
-                await self?.handleExternalChange(changedKeys)
-            }
+        // Use the callback-based observer so the non-Sendable Notification.userInfo
+        // is consumed synchronously (before any actor crossing). Only the extracted
+        // [String] — a Sendable type — crosses into the actor via the Task.
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            let changedKeys = (notification.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey]
+                as? [String]) ?? []
+            Task { await self?.handleExternalChange(changedKeys) }
         }
     }
 

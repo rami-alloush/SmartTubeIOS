@@ -18,7 +18,7 @@ final class HomeShortsUITests: XCTestCase {
     override class func setUp() {
         super.setUp()
         sharedApp = XCUIApplication()
-        sharedApp.launchArguments += ["--uitesting", "--uitesting-reset-settings", "--uitesting-enable-shorts"]
+        sharedApp.launchArguments += ["--uitesting", "--uitesting-reset-settings", "--uitesting-enable-shorts", "--uitesting-signed-in"]
         sharedApp.launch()
     }
 
@@ -140,6 +140,7 @@ final class HomeShortsUITests: XCTestCase {
     /// with the same core actions as regular video cards.
     func testShortsCardLongPressShowsContextMenu() throws {
         UITestHelpers.tapTab(named: "Home", in: app)
+        app.scrollViews["home.chipBar"].buttons["Home"].firstMatch.tap()
 
         let shortsRow = app.scrollViews["home.shortsRow"]
         guard shortsRow.waitForExistence(timeout: 30) else {
@@ -182,7 +183,8 @@ final class HomeShortsUITests: XCTestCase {
         scrollToShortsChip()
         shortsChip.tap()
 
-        let sectionContainer = app.otherElements["home.sectionContainer"].firstMatch
+        let sectionContainer = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'home.sectionContainer'")).firstMatch
         guard sectionContainer.waitForExistence(timeout: 15) else {
             try captureAndSkip("Section container not found after Shorts chip tap — network issue.", in: app)
         }
@@ -250,6 +252,7 @@ final class HomeShortsUITests: XCTestCase {
     /// at least one `shorts.card.*` element.
     func test_HomeTab_ShortsRowVisible() throws {
         UITestHelpers.tapTab(named: "Home", in: app)
+        app.scrollViews["home.chipBar"].buttons["Home"].firstMatch.tap()
 
         guard UITestHelpers.waitForVideoCards(in: app, timeout: 30) != nil else {
             try captureAndSkip("Home feed did not load any video cards — network issue.", in: app)

@@ -7,17 +7,10 @@ import XCTest
 //
 // Launch args (per-test launch, matching RecommendedChipUITests pattern):
 //   --uitesting                        standard test guard
-//   --uitesting-inject-shorts-ids=...  injects 8 known video IDs so the test
-//                                      does not depend on real network data or auth
+//   --uitesting-signed-in              forces auth.isSignedIn = true
 //
 // No --uitesting-reset-settings: preserves keychain auth so auth.isSignedIn
 // is naturally true (or falls through to --uitesting-signed-in backup).
-
-// 8 video IDs used as deterministic test fixtures.
-private let kInjectedShortsIDs = [
-    "dQw4w9WgXcQ", "jNQXAC9IVRw", "9bZkp7q19f0", "kffacxfA7G4",
-    "hT_nvWreIhg", "OPf0YbXqDm0", "M7lc1UVf-VE", "YQHsXMglC9A"
-]
 
 final class HomeShortsCountUITests: XCTestCase {
 
@@ -30,8 +23,7 @@ final class HomeShortsCountUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments += [
             "--uitesting",
-            "--uitesting-signed-in",
-            "--uitesting-inject-shorts-ids=\(kInjectedShortsIDs.joined(separator: ","))"
+            "--uitesting-signed-in"
         ]
         app.launch()
         UITestHelpers.tapTab(named: "Home", in: app)
@@ -98,8 +90,7 @@ final class HomeShortsCountUITests: XCTestCase {
         add(screenshot)
         XCTAssertGreaterThanOrEqual(
             count, 6,
-            "Shorts row should show ≥ 6 cards (2 screens × 3 cards/screen); got \(count). " +
-            "Injected \(kInjectedShortsIDs.count) IDs — check --uitesting-inject-shorts-ids handling."
+            "Shorts row should show ≥ 6 cards (2 screens × 3 cards/screen); got \(count)."
         )
     }
 
