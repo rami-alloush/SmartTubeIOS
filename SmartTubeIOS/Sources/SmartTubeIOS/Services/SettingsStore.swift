@@ -52,6 +52,7 @@ public final class SettingsStore {
         if let data = try? JSONEncoder().encode(settings) {
             UserDefaults.standard.set(data, forKey: Self.key)
         }
+        iCloudSyncManager.shared.syncEnabled = settings.iCloudSyncEnabled
     }
 
     public func reset() {

@@ -29,9 +29,16 @@ protocol UserDefaultsBackedStore: Actor {
 
     /// Assigns a decoded value loaded from UserDefaults to internal storage.
     func decodeValue(_ decoded: Value)
+
+    /// Called immediately after a successful persist to UserDefaults.
+    /// Conformers may override this to push the new value to iCloud sync.
+    /// Default implementation is a no-op.
+    func afterPersist()
 }
 
 extension UserDefaultsBackedStore {
+    func afterPersist() {}
+
     /// Decodes the stored value from `defaults`. Nonisolated — safe to call
     /// from actor `init` before isolation is established.
     static func loadFrom(_ defaults: UserDefaults) -> Value? {
@@ -41,10 +48,12 @@ extension UserDefaultsBackedStore {
         return decoded
     }
 
-    /// Encodes the current in-memory value as JSON and writes it to UserDefaults.
+    /// Encodes the current in-memory value as JSON, writes it to UserDefaults,
+    /// then calls `afterPersist()` for optional side effects (e.g. iCloud push).
     /// Call after any mutation that should be durable.
     func persist() {
         guard let data = try? JSONEncoder().encode(encodedValue()) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
+        afterPersist()
     }
 }

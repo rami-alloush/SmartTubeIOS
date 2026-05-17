@@ -40,6 +40,11 @@ struct SmartTubeApp: App {
                 .onChange(of: settingsStore.settings.enabledSections) { _, newSections in
                     browseViewModel.configureSections(newSections)
                 }
+                .task {
+                    // Sync enablement state on launch, then start the iCloud KV listener.
+                    iCloudSyncManager.shared.syncEnabled = settingsStore.settings.iCloudSyncEnabled
+                    await iCloudSyncManager.shared.start()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

@@ -168,6 +168,8 @@ public struct SettingsView: View {
             }
             Toggle("Force IPv4 (VPN users)", isOn: $store.settings.forceIPv4)
                 .accessibilityIdentifier("settings.forceIPv4Toggle")
+            Toggle("Sync to iCloud", isOn: $store.settings.iCloudSyncEnabled)
+                .accessibilityIdentifier("settings.iCloudSyncToggle")
         }
     }
 

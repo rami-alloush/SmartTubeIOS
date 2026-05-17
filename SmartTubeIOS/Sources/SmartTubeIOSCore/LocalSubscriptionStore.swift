@@ -84,4 +84,9 @@ public actor LocalSubscriptionStore: UserDefaultsBackedStore {
 
     func encodedValue() -> [String: LocalChannel] { channels }
     func decodeValue(_ decoded: [String: LocalChannel]) { channels = decoded }
+
+    func afterPersist() {
+        let value = channels
+        Task { await iCloudSyncManager.shared.push(.subscriptions, value) }
+    }
 }

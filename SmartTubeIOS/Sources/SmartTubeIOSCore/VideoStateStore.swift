@@ -83,6 +83,11 @@ public actor VideoStateStore: UserDefaultsBackedStore {
     func encodedValue() -> [String: State] { states }
     func decodeValue(_ decoded: [String: State]) { states = decoded }
 
+    func afterPersist() {
+        let value = states
+        Task { await iCloudSyncManager.shared.push(.videoState, value) }
+    }
+
     // MARK: - Persistence
 
     private func prune() {

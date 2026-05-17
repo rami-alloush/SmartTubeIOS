@@ -124,6 +124,11 @@ public struct AppSettings: Codable {
     /// ~90% data reduction vs 1080p. Live streams are excluded automatically.
     public var audioOnlyMode: Bool
 
+    // MARK: iCloud sync
+    /// When `true`, local user data (subscriptions, RSS feeds, video state, queue) is
+    /// synced to iCloud via `NSUbiquitousKeyValueStore`. Defaults to `false` (opt-in).
+    public var iCloudSyncEnabled: Bool
+
     // MARK: Types
 
     /// Canonical ordered list of selectable playback speeds — single source of truth.
@@ -222,5 +227,6 @@ public struct AppSettings: Codable {
         forceIPv4            = false
         poTokenServiceURL    = nil
         audioOnlyMode        = false
+        iCloudSyncEnabled    = false
     }
 }

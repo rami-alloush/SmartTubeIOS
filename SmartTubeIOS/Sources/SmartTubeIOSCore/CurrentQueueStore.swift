@@ -108,4 +108,9 @@ public actor CurrentQueueStore: UserDefaultsBackedStore {
 
     func encodedValue() -> [Video] { videos }
     func decodeValue(_ decoded: [Video]) { videos = decoded }
+
+    func afterPersist() {
+        let value = videos
+        Task { await iCloudSyncManager.shared.push(.currentQueue, value) }
+    }
 }

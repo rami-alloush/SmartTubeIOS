@@ -85,5 +85,7 @@ public actor RSSFeedStore {
         if let data = try? JSONEncoder().encode(dict) {
             defaults.set(data, forKey: Self.udKey)
         }
+        let value = dict
+        Task { await iCloudSyncManager.shared.push(.rssFeeds, value) }
     }
 }
