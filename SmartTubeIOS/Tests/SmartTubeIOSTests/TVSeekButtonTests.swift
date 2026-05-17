@@ -29,4 +29,26 @@ struct TVSeekButtonTests {
         #expect(backDelta < 0)
         #expect(forwardDelta > 0)
     }
+
+    // MARK: - task-100: availableSeekOptions & preferredAudioLanguage defaults
+
+    /// Default seekBackSeconds must be in the availableSeekOptions list so the
+    /// tvOS Picker pre-selects a valid entry without migration.
+    @Test func seekBackSecondsIsValidPickerOption() {
+        let settings = AppSettings()
+        #expect(AppSettings.availableSeekOptions.contains(settings.seekBackSeconds))
+    }
+
+    /// Default seekForwardSeconds must be in the availableSeekOptions list.
+    @Test func seekForwardSecondsIsValidPickerOption() {
+        let settings = AppSettings()
+        #expect(AppSettings.availableSeekOptions.contains(settings.seekForwardSeconds))
+    }
+
+    /// preferredAudioLanguage default must be nil — the tvOS Picker
+    /// represents this as "System Default".
+    @Test func preferredAudioLanguageDefaultIsNil() {
+        let settings = AppSettings()
+        #expect(settings.preferredAudioLanguage == nil)
+    }
 }

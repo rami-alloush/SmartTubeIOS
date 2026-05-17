@@ -93,7 +93,6 @@ public struct SettingsView: View {
                 }
             }
 
-            #if !os(tvOS)
             Picker("Preferred Audio Language", selection: $store.settings.preferredAudioLanguage) {
                 Text("System Default").tag(nil as String?)
                 Divider()
@@ -109,21 +108,35 @@ public struct SettingsView: View {
                 Text("Original Track Only").tag("original" as String?)
             }
             .accessibilityIdentifier("settings.preferredAudioLanguageRow")
-            #endif
 
-            #if !os(tvOS)
+            #if os(tvOS)
+            Picker("Seek Back", selection: $store.settings.seekBackSeconds) {
+                ForEach(AppSettings.availableSeekOptions, id: \.self) { s in
+                    Text("\(s) s").tag(s)
+                }
+            }
+            .accessibilityIdentifier("settings.seekBackRow")
+            Picker("Seek Forward", selection: $store.settings.seekForwardSeconds) {
+                ForEach(AppSettings.availableSeekOptions, id: \.self) { s in
+                    Text("\(s) s").tag(s)
+                }
+            }
+            .accessibilityIdentifier("settings.seekForwardRow")
+            #else
             Stepper(
                 "Seek Back: \(store.settings.seekBackSeconds) s",
                 value: $store.settings.seekBackSeconds,
                 in: 5...60,
                 step: 5
             )
+            .accessibilityIdentifier("settings.seekBackRow")
             Stepper(
                 "Seek Forward: \(store.settings.seekForwardSeconds) s",
                 value: $store.settings.seekForwardSeconds,
                 in: 5...60,
                 step: 5
             )
+            .accessibilityIdentifier("settings.seekForwardRow")
             #endif
 
             Picker("Hide Controls After", selection: $store.settings.controlsHideTimeout) {

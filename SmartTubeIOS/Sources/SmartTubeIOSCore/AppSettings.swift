@@ -134,6 +134,9 @@ public struct AppSettings: Codable {
     /// Canonical ordered list of selectable playback speeds — single source of truth.
     public static let availableSpeeds: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
+    /// Canonical ordered list of selectable seek-interval values (seconds) — used by Stepper on iOS and Picker on tvOS.
+    public static let availableSeekOptions: [Int] = [5, 10, 15, 20, 30, 45, 60]
+
     public enum VideoQuality: String, Codable, CaseIterable, Sendable {
         case auto  = "auto"
         case q2160 = "2160p"
