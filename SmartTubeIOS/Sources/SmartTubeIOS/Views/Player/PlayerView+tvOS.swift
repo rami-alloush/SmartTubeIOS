@@ -92,6 +92,13 @@ extension PlayerView {
         showMoreMenu || showQualityPicker || showSpeedPicker || showSleepTimerPicker
     }
 
+    /// True while a SponsorBlock skip toast is visible.
+    /// Kept separate from `isAnyOverlayVisible` so the `onChange(of: isAnyOverlayVisible)`
+    /// handler's `vm.cancelControlsHide()` call is not triggered by the transient toast.
+    var isSkipToastActive: Bool {
+        vm.currentToastSegment != nil
+    }
+
     // MARK: - Controls navigation
 
     /// Returns the next control to highlight when the user presses a d-pad direction.

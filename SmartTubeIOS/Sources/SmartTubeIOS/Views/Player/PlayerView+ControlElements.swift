@@ -583,6 +583,9 @@ extension PlayerView {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(seg.category.color)
+                    #if os(tvOS)
+                    .focused($skipToastButtonFocused)
+                    #endif
                     .padding()
                     .transition(.move(edge: .trailing))
                 }

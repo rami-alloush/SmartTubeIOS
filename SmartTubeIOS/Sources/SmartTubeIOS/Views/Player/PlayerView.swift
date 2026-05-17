@@ -88,6 +88,7 @@ public struct PlayerView: View {
     @FocusState var moreMenuFocusedRow: MoreMenuRow?
     @FocusState var speedPickerFocused: Bool
     @FocusState var sleepTimerPickerFocused: Bool
+    @FocusState var skipToastButtonFocused: Bool
     #endif
 
     /// Scales player control icon sizes up on iPad so they're easier to tap.

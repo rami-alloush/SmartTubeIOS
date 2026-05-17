@@ -231,9 +231,9 @@ extension PlayerView {
         // focus engine to pick a child element or leaving focus on the previous screen.
         .focusScope(playerBodyNamespace)
         .prefersDefaultFocus(in: playerBodyNamespace)
-        .focusable(!isAnyOverlayVisible)
+        .focusable(!isAnyOverlayVisible && !isSkipToastActive)
         .focused($playerFocused)
-        .modifier(ConditionalMoveCommand(enabled: !isAnyOverlayVisible) { direction in
+        .modifier(ConditionalMoveCommand(enabled: !isAnyOverlayVisible && !isSkipToastActive) { direction in
             swipeLog.debug("[tv] onMoveCommand dir=\(String(describing: direction)) isTransitioning=\(isTransitioning) highlighted=\(String(describing: highlightedControl))")
             guard !isTransitioning else { return }
             if let current = highlightedControl {
@@ -262,7 +262,7 @@ extension PlayerView {
         })
         .onTapGesture {
             swipeLog.notice("[tv] onTapGesture (select) — isAnyOverlayVisible=\(isAnyOverlayVisible) highlighted=\(String(describing: highlightedControl)) controlsVisible=\(vm.controlsVisible)")
-            guard !isAnyOverlayVisible else { return }
+            guard !isAnyOverlayVisible && !isSkipToastActive else { return }
             if let current = highlightedControl {
                 tvActivateControl(current)
             } else if vm.controlsVisible {
@@ -326,6 +326,21 @@ extension PlayerView {
                     try? await Task.sleep(nanoseconds: 50_000_000)
                     sleepTimerPickerFocused = true
                     swipeLog.notice("[tv] sleepTimerPickerFocused set → true")
+                }
+            }
+        }
+        .onChange(of: vm.currentToastSegment) { _, segment in
+            swipeLog.notice("[tv] currentToastSegment changed → \(segment == nil ? "nil" : segment!.category.rawValue)")
+            if segment != nil {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    skipToastButtonFocused = true
+                    swipeLog.notice("[tv] skipToastButtonFocused set → true")
+                }
+            } else {
+                skipToastButtonFocused = false
+                if !isAnyOverlayVisible {
+                    playerFocused = true
                 }
             }
         }
