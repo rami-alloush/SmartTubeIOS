@@ -20,6 +20,10 @@ extension Notification.Name {
 public struct VideoCardView: View {
     public let video: Video
     public var compact: Bool = false
+    /// Called when the user taps/selects the card on tvOS (via `.onTapGesture`).
+    /// iOS call sites continue using their own tap handlers; this is only invoked
+    /// from the `#else` (tvOS) modifier block below.
+    public var onSelect: (() -> Void)? = nil
 
     @Environment(AuthService.self) private var authService
     @Environment(SettingsStore.self) private var store
@@ -39,9 +43,10 @@ public struct VideoCardView: View {
         localProgress ?? video.watchProgress
     }
 
-    public init(video: Video, compact: Bool = false) {
+    public init(video: Video, compact: Bool = false, onSelect: (() -> Void)? = nil) {
         self.video = video
         self.compact = compact
+        self.onSelect = onSelect
     }
 
     public var body: some View {
@@ -194,6 +199,7 @@ public struct VideoCardView: View {
         // the card-level @State. Only the button label/disabled state is read here.
         .padding(0)  // zero-effect modifier to keep the view chain well-typed
         #else
+        .onTapGesture { onSelect?() }
         .focused($isFocused)
         .shadow(color: isFocused ? .white.opacity(0.9) : .clear, radius: 18, x: 0, y: 0)
         .scaleEffect(isFocused ? 1.08 : 1.0)

@@ -96,14 +96,11 @@ public struct PlaylistView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(displayVideos) { video in
                         #if os(tvOS)
-                        Button { selectedVideo = video } label: {
-                            VideoCardView(video: video, compact: true)
-                                .padding(.horizontal)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("video.card.\(video.id)")
-                        .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
+                        VideoCardView(video: video, compact: true, onSelect: { selectedVideo = video })
+                            .padding(.horizontal)
+                            .padding(.vertical, 6)
+                            .accessibilityIdentifier("video.card.\(video.id)")
+                            .onAppear { vm.loadMoreIfNeeded(lastVideo: video) }
                         #else
                         VideoCardView(video: video, compact: true)
                             .padding(.horizontal)
@@ -132,12 +129,9 @@ public struct PlaylistView: View {
                         let rowVideos = Array(displayVideos[startIdx..<min(startIdx + columnCount, displayVideos.count)])
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(rowVideos) { video in
-                                Button { selectedVideo = video } label: {
-                                    VideoCardView(video: video, compact: false)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("video.card.\(video.id)")
+                                VideoCardView(video: video, compact: false, onSelect: { selectedVideo = video })
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityIdentifier("video.card.\(video.id)")
                             }
                             let remainder = columnCount - rowVideos.count
                             if remainder > 0 {

@@ -97,31 +97,15 @@ public struct BrowseView: View {
                         VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
                     }
                     ForEach(gridVideos) { video in
-                        #if os(tvOS)
-                        Button { selectVideo(video, from: gridVideos) } label: {
-                            VideoCardView(video: video, compact: true)
-                                .padding(.horizontal)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("video.card.\(video.id)")
-                        .onAppear {
-                            if video.id == gridVideos.last?.id {
-                                vm.loadMoreIfNeeded(lastVideo: video)
-                            }
-                        }
-                        #else
-                        VideoCardView(video: video, compact: true)
+                        VideoCardView(video: video, compact: true, onSelect: { selectVideo(video, from: gridVideos) })
                             .padding(.horizontal)
                             .padding(.vertical, 6)
                             .accessibilityIdentifier("video.card.\(video.id)")
-                            .onTapGesture { selectVideo(video, from: gridVideos) }
                             .onAppear {
                                 if video.id == gridVideos.last?.id {
                                     vm.loadMoreIfNeeded(lastVideo: video)
                                 }
                             }
-                        #endif
                         Divider().padding(.horizontal)
                     }
                     if vm.isLoading {
@@ -144,34 +128,14 @@ public struct BrowseView: View {
                     ForEach(Array(stride(from: 0, to: gridVideos.count, by: 2)), id: \.self) { idx in
                         HStack(alignment: .top, spacing: videoGridRowSpacing) {
                             let v1 = gridVideos[idx]
-                            #if os(tvOS)
-                            Button { selectVideo(v1, from: gridVideos) } label: {
-                                VideoCardView(video: v1, compact: false)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("video.card.\(v1.id)")
-                            #else
-                            VideoCardView(video: v1, compact: false)
+                            VideoCardView(video: v1, compact: false, onSelect: { selectVideo(v1, from: gridVideos) })
                                 .frame(maxWidth: .infinity)
                                 .accessibilityIdentifier("video.card.\(v1.id)")
-                                .onTapGesture { selectVideo(v1, from: gridVideos) }
-                            #endif
                             if idx + 1 < gridVideos.count {
                                 let v2 = gridVideos[idx + 1]
-                                #if os(tvOS)
-                                Button { selectVideo(v2, from: gridVideos) } label: {
-                                    VideoCardView(video: v2, compact: false)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("video.card.\(v2.id)")
-                                #else
-                                VideoCardView(video: v2, compact: false)
+                                VideoCardView(video: v2, compact: false, onSelect: { selectVideo(v2, from: gridVideos) })
                                     .frame(maxWidth: .infinity)
                                     .accessibilityIdentifier("video.card.\(v2.id)")
-                                    .onTapGesture { selectVideo(v2, from: gridVideos) }
-                                #endif
                             } else {
                                 Color.clear.frame(maxWidth: .infinity)
                             }
@@ -289,16 +253,13 @@ struct VideoGridSection: View {
             LazyVStack(spacing: 0) {
                 ForEach(videos) { video in
                     #if os(tvOS)
-                    Button { onSelect(video) } label: {
-                        VideoCardView(video: video, compact: true)
-                            .padding(.horizontal)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("video.card.\(video.id)")
-                    .onAppear {
-                        if video.id == videos.last?.id { loadMore?() }
-                    }
+                    VideoCardView(video: video, compact: true, onSelect: { onSelect(video) })
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+                        .accessibilityIdentifier("video.card.\(video.id)")
+                        .onAppear {
+                            if video.id == videos.last?.id { loadMore?() }
+                        }
                     #else
                     VideoCardView(video: video, compact: true)
                         .padding(.horizontal)
@@ -325,12 +286,9 @@ struct VideoGridSection: View {
                     let rowVideos = Array(videos[startIdx..<min(startIdx + columnCount, videos.count)])
                     HStack(alignment: .top, spacing: videoGridRowSpacing) {
                         ForEach(rowVideos) { video in
-                            Button { onSelect(video) } label: {
-                                VideoCardView(video: video, compact: false)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("video.card.\(video.id)")
+                            VideoCardView(video: video, compact: false, onSelect: { onSelect(video) })
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("video.card.\(video.id)")
                         }
                         let remainder = columnCount - rowVideos.count
                         if remainder > 0 {
@@ -377,12 +335,9 @@ struct VideoRowSection: View {
             HStack(alignment: .top, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
                     #if os(tvOS)
-                    Button { onSelect(video) } label: {
-                        VideoCardView(video: video, compact: false)
-                            .frame(width: 360)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("video.card.\(video.id)")
+                    VideoCardView(video: video, compact: false, onSelect: { onSelect(video) })
+                        .frame(width: 360)
+                        .accessibilityIdentifier("video.card.\(video.id)")
                     #else
                     VideoCardView(video: video, compact: false)
                         .frame(width: 220)

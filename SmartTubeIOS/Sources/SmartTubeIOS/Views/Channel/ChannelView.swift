@@ -180,12 +180,9 @@ public struct ChannelView: View {
                         let rowVideos = Array(videos[startIdx..<min(startIdx + columnCount, videos.count)])
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(rowVideos) { video in
-                                Button { selectedVideo = video } label: {
-                                    VideoCardView(video: video, compact: false)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("video.card.\(video.id)")
+                                VideoCardView(video: video, compact: false, onSelect: { selectedVideo = video })
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityIdentifier("video.card.\(video.id)")
                             }
                             let remainder = columnCount - rowVideos.count
                             if remainder > 0 {
