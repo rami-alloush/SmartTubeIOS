@@ -101,6 +101,7 @@ extension PlayerView {
                     #endif
                     moreMenuDownloadRow
                     moreMenuCaptionsRow
+                    moreMenuAudioTrackRow
                     moreMenuDescriptionRow
                     moreMenuCommentsRow
                     moreMenuCancelRow
@@ -162,7 +163,7 @@ extension PlayerView {
 
     private var moreMenuMaxHeight: CGFloat {
         #if os(iOS)
-        verticalSizeClass == .compact ? 320 : 380
+        verticalSizeClass == .compact ? 320 : 440
         #else
         520
         #endif
