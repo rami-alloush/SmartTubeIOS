@@ -164,8 +164,6 @@ public struct SettingsView: View {
             Toggle("Subtitles", isOn: $store.settings.subtitlesEnabled)
             Toggle("Background Playback", isOn: $store.settings.backgroundPlaybackEnabled)
             #if os(iOS)
-            Toggle("Landscape Always Play", isOn: $store.settings.landscapeAlwaysPlay)
-                .accessibilityIdentifier("settings.landscapeAlwaysPlayToggle")
             Toggle("Picture in Picture", isOn: $store.settings.pipEnabled)
                 .accessibilityIdentifier("settings.pipToggle")
             Toggle("In-App Mini Player", isOn: $store.settings.miniPlayerEnabled)

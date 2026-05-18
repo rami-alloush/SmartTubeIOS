@@ -26,7 +26,6 @@
 		AA02000000000000000000B2 /* SiriShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000000000000000000B1 /* SiriShortcuts.swift */; };
 		AA02000000000000000001B2 /* SiriShortcutsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000000000000000001B1 /* SiriShortcutsUITests.swift */; };
 		AA11000000000000000001A2 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000001A1 /* UITestHelpers.swift */; };
-		AA1100000000000000001301 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000001A1 /* UITestHelpers.swift */; };
 		AA11000000000000000002A2 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000002A1 /* SettingsUITests.swift */; };
 		AA11000000000000000003A2 /* LibraryPlaylistsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000003A1 /* LibraryPlaylistsUITests.swift */; };
 		AA11000000000000000004A2 /* HomeInteractionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000004A1 /* HomeInteractionsUITests.swift */; };
@@ -39,16 +38,21 @@
 		AA1100000000000000000BA2 /* AudioOriginalTrackSelectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */; };
 		AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000CA1 /* RecommendedChipUITests.swift */; };
 		AA1100000000000000000DA2 /* TVPlayerSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */; };
+		AA1100000000000000000EA2 /* AudioOnlyModeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */; };
+		AA1100000000000000000FA2 /* PlayerMoreMenuLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */; };
+		AA1100000000000000001002 /* PlayerPickerOverlayLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001001 /* PlayerPickerOverlayLayoutUITests.swift */; };
+		AA1100000000000000001102 /* AudioAndLandscapePlayerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001101 /* AudioAndLandscapePlayerUITests.swift */; };
 		AA1100000000000000001202 /* TVSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001201 /* TVSettingsUITests.swift */; };
+		AA1100000000000000001301 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11000000000000000001A1 /* UITestHelpers.swift */; };
 		AA1100000000000000001302 /* TVHomeFeedUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001401 /* TVHomeFeedUITests.swift */; };
 		AA1100000000000000001502 /* TVLibraryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001501 /* TVLibraryUITests.swift */; };
 		AA1100000000000000001602 /* TVPlayerControlsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001601 /* TVPlayerControlsUITests.swift */; };
 		AA1100000000000000001702 /* TVVideoPlaybackRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001701 /* TVVideoPlaybackRegressionUITests.swift */; };
 		AA1100000000000000001802 /* TVAudioAndCaptionPickerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001801 /* TVAudioAndCaptionPickerUITests.swift */; };
-		AA1100000000000000000EA2 /* AudioOnlyModeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */; };
-		AA1100000000000000000FA2 /* PlayerMoreMenuLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */; };
-		AA1100000000000000001002 /* PlayerPickerOverlayLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001001 /* PlayerPickerOverlayLayoutUITests.swift */; };
-		AA1100000000000000001102 /* AudioAndLandscapePlayerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001101 /* AudioAndLandscapePlayerUITests.swift */; };
+		AA1100000000000000001902 /* DownloadsPlaybackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001901 /* DownloadsPlaybackUITests.swift */; };
+		AA1100000000000000001A02 /* HideShortsHomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001A01 /* HideShortsHomeUITests.swift */; };
+		AA1100000000000000001B02 /* OrientationCrashRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001B01 /* OrientationCrashRegressionUITests.swift */; };
+		AA1100000000000000001C02 /* QuickAccessRowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001C01 /* QuickAccessRowUITests.swift */; };
 		AB01CD23EF456789AB01CD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB01CD23EF456789AB01CD24 /* AppDelegate.swift */; };
 		AP000000000000000000001B /* AirPlayUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AP000000000000000000001A /* AirPlayUITests.swift */; };
 		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
@@ -169,16 +173,20 @@
 		AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOriginalTrackSelectionUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000000CA1 /* RecommendedChipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedChipUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerSettingsUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOnlyModeUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerMoreMenuLayoutUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001001 /* PlayerPickerOverlayLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPickerOverlayLayoutUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001101 /* AudioAndLandscapePlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAndLandscapePlayerUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001201 /* TVSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSettingsUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001401 /* TVHomeFeedUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVHomeFeedUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001501 /* TVLibraryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVLibraryUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001601 /* TVPlayerControlsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerControlsUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001701 /* TVVideoPlaybackRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVVideoPlaybackRegressionUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001801 /* TVAudioAndCaptionPickerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAudioAndCaptionPickerUITests.swift; sourceTree = "<group>"; };
-		AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOnlyModeUITests.swift; sourceTree = "<group>"; };
-		AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerMoreMenuLayoutUITests.swift; sourceTree = "<group>"; };
-		AA1100000000000000001001 /* PlayerPickerOverlayLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPickerOverlayLayoutUITests.swift; sourceTree = "<group>"; };
-		AA1100000000000000001101 /* AudioAndLandscapePlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAndLandscapePlayerUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001901 /* DownloadsPlaybackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsPlaybackUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001A01 /* HideShortsHomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HideShortsHomeUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001B01 /* OrientationCrashRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationCrashRegressionUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001C01 /* QuickAccessRowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAccessRowUITests.swift; sourceTree = "<group>"; };
 		AB01CD23EF456789AB01CD24 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AP000000000000000000001A /* AirPlayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayUITests.swift; sourceTree = "<group>"; };
@@ -334,6 +342,10 @@
 				A3B7C2D4E5F6A7B8C9D0E1F2 /* PlayerAndMiniPlayerUITests.swift */,
 				F8A9B0C1D2E3F4A5B6C7D8E9 /* LibraryUITests.swift */,
 				AA1100000000000000001101 /* AudioAndLandscapePlayerUITests.swift */,
+				AA1100000000000000001901 /* DownloadsPlaybackUITests.swift */,
+				AA1100000000000000001A01 /* HideShortsHomeUITests.swift */,
+				AA1100000000000000001B01 /* OrientationCrashRegressionUITests.swift */,
+				AA1100000000000000001C01 /* QuickAccessRowUITests.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -799,6 +811,10 @@
 				B4C8D3E4F5A6B7C8D9E0F1A2 /* PlayerAndMiniPlayerUITests.swift in Sources */,
 				E7F8A9B0C1D2E3F4A5B6C7D8 /* LibraryUITests.swift in Sources */,
 				AA1100000000000000001102 /* AudioAndLandscapePlayerUITests.swift in Sources */,
+				AA1100000000000000001902 /* DownloadsPlaybackUITests.swift in Sources */,
+				AA1100000000000000001A02 /* HideShortsHomeUITests.swift in Sources */,
+				AA1100000000000000001B02 /* OrientationCrashRegressionUITests.swift in Sources */,
+				AA1100000000000000001C02 /* QuickAccessRowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -967,7 +983,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1397,7 +1413,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
