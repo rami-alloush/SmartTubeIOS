@@ -30,6 +30,18 @@ extension PlaybackViewModel {
             if fallbackInfo.hlsURL == nil,
                fallbackInfo.bestAdaptiveVideoURL == nil,
                fallbackInfo.bestAdaptiveAudioURL == nil {
+                // NW-3-FIX-CACHE: Android returned muxed-only, but the upstream iOS-client
+                // cache entry may have been stale (hlsURL missing because the preload ran
+                // against an expired token / incomplete response). Before giving up, do ONE
+                // fresh iOS-client fetch — if it produces an HLS URL we can play that
+                // directly. Guard with hasRetriedPlayback to prevent a second cycle.
+                playerLog.notice("⚠️ Android muxed-only for \(video.id) — attempting fresh iOS client fetch (hasRetried=\(hasRetriedPlayback))")
+                if !hasRetriedPlayback {
+                    hasRetriedPlayback = true
+                    await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                    await retryWith403Recovery(video: video, originalError: originalError)
+                    return
+                }
                 playerLog.error("❌ Android client returned muxed-only (no HLS/adaptive) — cannot play this video")
                 self.error = APIError.unavailable("Unable to play this video")
                 return
