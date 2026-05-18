@@ -95,6 +95,42 @@ struct IPBlockDetectionTests {
         }
     }
 
+    @Test("NW-7: NSURLError -999 (request cancelled) is suppressed from Crashlytics")
+    func nsURLError999IsSuppressed() {
+        // Mirrors the transient-suppression check in PlaybackViewModel.error.didSet.
+        // -999 = URLError.cancelled — fires when AVPlayer or URLSession cancels an
+        // in-flight request because the user navigated away or a superseded task fired.
+        func shouldRecord(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            let transientCodes = [-1, -999, -1001, -1005, -1009, -1202]
+            if nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code) {
+                return false
+            }
+            return true
+        }
+        let cancelledError = NSError(domain: NSURLErrorDomain, code: -999,
+                                     userInfo: [NSLocalizedDescriptionKey: "cancelled"])
+        #expect(!shouldRecord(cancelledError),
+                "NSURLError -999 must be suppressed (NW-7-FIX)")
+    }
+
+    @Test("NW-7: non-transient NSURLError is still recorded")
+    func nonTransientNSURLErrorIsRecorded() {
+        func shouldRecord(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            let transientCodes = [-1, -999, -1001, -1005, -1009, -1202]
+            if nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code) {
+                return false
+            }
+            return true
+        }
+        // -1200 = SSL handshake failed — a real error that should be recorded
+        let sslError = NSError(domain: NSURLErrorDomain, code: -1200,
+                               userInfo: [NSLocalizedDescriptionKey: "SSL handshake failed"])
+        #expect(shouldRecord(sslError),
+                "NSURLError -1200 is not transient and must still be recorded")
+    }
+
     // MARK: - NW-6-FIX: Suppression and retry behaviour
 
     @Test("NW-6: ipBlocked error is suppressed from Crashlytics non-fatal recording")

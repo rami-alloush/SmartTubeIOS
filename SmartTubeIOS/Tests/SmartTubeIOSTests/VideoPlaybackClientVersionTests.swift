@@ -34,3 +34,18 @@ struct VideoPlaybackClientVersionTests {
         #expect(parts.count >= 2, "Version string must have at least major_minor parts")
     }
 }
+
+// MARK: - InnerTubeAPI network timeout constant (NW-4-FIX)
+
+@Suite("InnerTubeAPI network configuration")
+struct InnerTubeAPINetworkConfigTests {
+
+    @Test("NW-4-FIX: requestTimeoutInterval is 30 seconds")
+    func requestTimeoutIntervalIs30Seconds() {
+        // Firebase issue 709b3e91: a 2m48s hang occurred because the OS default (60 s)
+        // was too permissive for slow/throttled youtubei.googleapis.com requests.
+        // This constant is used directly in URLSessionConfiguration.timeoutIntervalForRequest.
+        #expect(InnerTubeAPI.requestTimeoutInterval == 30,
+                "NW-4-FIX: timeout must be 30 s — do not lower without checking 709b3e91")
+    }
+}

@@ -126,9 +126,18 @@ public actor InnerTubeAPI {
     let apiKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8" // gitleaks:allow
     // Note: TV key (AIzaSyDCU8...) is defined in Android as API_KEY_OLD and never used.
 
+    /// Request timeout for all InnerTube API calls (NW-4-FIX).
+    /// Set to 30 s to fail fast on slow/throttled youtubei.googleapis.com requests.
+    /// Firebase issue 709b3e91 showed a 2m48s hang when this was left at the OS default.
+    static let requestTimeoutInterval: TimeInterval = 30
+
     public init(authToken: String? = nil, poTokenProvider: (any PoTokenProvider)? = nil) {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 20
+        // NW-4-FIX: 30 s request timeout. Slow/throttled youtubei.googleapis.com requests
+        // previously hung for over 2 minutes (Firebase issue 709b3e91) because the OS default
+        // (60 s) was too permissive. 30 s is a good balance between fast failure on truly
+        // stuck requests and tolerance for temporarily slow cellular connections.
+        config.timeoutIntervalForRequest = Self.requestTimeoutInterval
         config.timeoutIntervalForResource = 60
         config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)

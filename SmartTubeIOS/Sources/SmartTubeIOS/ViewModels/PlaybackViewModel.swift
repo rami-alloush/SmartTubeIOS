@@ -91,11 +91,13 @@ public final class PlaybackViewModel {
             // not actionable via Crashlytics. Logging them caused a spike in non-fatal events
             // in v2.0 — skip them.
             //   -1    = unknown (generic network failure, same signal as below)
+            //   -999  = request cancelled (AVPlayer or URLSession cancelled in-flight
+            //           request — user navigated away or a superseded task was cancelled)
             //   -1001 = request timed out (slow server or poor connectivity)
             //   -1005 = network connection lost
             //   -1009 = device offline
             //   -1202 = invalid/untrusted certificate (SSL inspection proxy, user-side issue)
-            let transientCodes = [-1, -1001, -1005, -1009, -1202]
+            let transientCodes = [-1, -999, -1001, -1005, -1009, -1202]
             guard !(nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code)) else {
                 return
             }
