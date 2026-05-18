@@ -362,6 +362,7 @@ extension PlaybackViewModel {
             playerInfo = info
             availableFormats = Self.deduplicatedVideoFormats(info.formats)
             availableCaptions = info.captionTracks
+            autoApplyCaptionPreference(tracks: info.captionTracks)
             selectedFormat = nil
 
             playerLog.notice("playerInfo: formats=\(info.formats.count) hlsURL=\(info.hlsURL?.absoluteString ?? "nil") dashURL=\(info.dashURL?.absoluteString ?? "nil")")

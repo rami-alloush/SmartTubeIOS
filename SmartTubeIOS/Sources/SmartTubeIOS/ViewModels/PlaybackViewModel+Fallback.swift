@@ -58,6 +58,7 @@ extension PlaybackViewModel {
             playerInfo = fallbackInfo
             availableFormats = Self.deduplicatedVideoFormats(fallbackInfo.formats)
             availableCaptions = fallbackInfo.captionTracks
+            autoApplyCaptionPreference(tracks: fallbackInfo.captionTracks)
             // Apply quality preference: fetch HLS variants if available, then select the correct stream.
             var fallbackURL = baseFallbackURL
             if let hlsURL = fallbackInfo.hlsURL {
@@ -149,6 +150,7 @@ extension PlaybackViewModel {
         playerInfo = info
         availableFormats = Self.deduplicatedVideoFormats(info.formats)
         availableCaptions = info.captionTracks
+        autoApplyCaptionPreference(tracks: info.captionTracks)
         playerLog.notice("Adaptive composition: video=\(videoURL.absoluteString.prefix(80)) audio=\(audioURL.absoluteString.prefix(80))")
 
         let ua = InnerTubeClients.iOS.userAgent
@@ -254,6 +256,7 @@ extension PlaybackViewModel {
             playerInfo = freshInfo
             availableFormats = Self.deduplicatedVideoFormats(freshInfo.formats)
             availableCaptions = freshInfo.captionTracks
+            autoApplyCaptionPreference(tracks: freshInfo.captionTracks)
             // Apply quality preference: fetch HLS variants if available, then select the correct stream.
             var recoveryURL = baseRecoveryURL
             if let hlsURL = freshInfo.hlsURL {

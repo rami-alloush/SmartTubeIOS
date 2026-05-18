@@ -104,6 +104,11 @@ public struct AppSettings: Codable {
     /// `nil` means use the HLS default. Set implicitly when the user picks a track in the player.
     public var preferredAudioLanguage: String?
 
+    /// BCP 47 language code of the user's last selected caption track (e.g. "en", "es").
+    /// `nil` means captions are off. Set implicitly when the user picks a caption track in the player.
+    /// Applied automatically to each new video on load.
+    public var preferredCaptionLanguage: String?
+
     // MARK: DeArrow
     public var deArrowEnabled: Bool
 
@@ -226,6 +231,7 @@ public struct AppSettings: Codable {
         sponsorBlockMinSegmentDuration = 0
         sponsorBlockExcludedChannels   = [:]
         preferredAudioLanguage = nil
+        preferredCaptionLanguage = nil
         deArrowEnabled       = false
         forceIPv4            = false
         poTokenServiceURL    = nil
