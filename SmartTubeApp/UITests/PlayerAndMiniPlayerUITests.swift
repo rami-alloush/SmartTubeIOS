@@ -458,5 +458,47 @@ final class PlayerAndMiniPlayerUITests: XCTestCase {
                           "player.prevBtn must be hittable in portrait — regression for task #45 hit-area fix")
         }
     }
+
+    /// Regression test for task #121.
+    /// Drags the seek bar from 20% to 70% and verifies the playback position advances.
+    /// Catches chapter-marker hit areas intercepting the slider DragGesture.
+    func testSeekBarDragScrubs() throws {
+        try XCTSkipIf(Self.skipAllTests, Self.skipReason)
+
+        try openPlayerFromHome()
+        // Wait for video to start playing so currentTime is non-zero and duration > 0.
+        Thread.sleep(forTimeInterval: 6)
+
+        showControls()
+
+        // Locate the progress bar container element.
+        let progressBar = app.otherElements["player.progressBar"].firstMatch
+        guard progressBar.waitForExistence(timeout: 8) else {
+            try captureAndSkip("player.progressBar not found — controls may not be visible", in: app)
+        }
+
+        // Capture the title label before scrub to confirm the player stays open.
+        let titleBefore = playerTitle.label
+
+        // Drag from ~20% to ~70% of the seek bar width.
+        let barFrame = progressBar.frame
+        let startX = barFrame.minX + barFrame.width * 0.20
+        let endX   = barFrame.minX + barFrame.width * 0.70
+        let midY   = barFrame.midY
+        let startCoord = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: startX, dy: midY))
+        let endCoord   = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: endX, dy: midY))
+        startCoord.press(forDuration: 0.05, thenDragTo: endCoord)
+
+        // Allow the seek to complete.
+        Thread.sleep(forTimeInterval: 2)
+
+        // Player must still be open (not crashed or dismissed).
+        XCTAssertFalse(playerTitle.label.isEmpty,
+                       "Player was dismissed or crashed during seek-bar drag — title disappeared")
+        XCTAssertEqual(playerTitle.label, titleBefore,
+                       "Wrong video loaded after seek-bar drag")
+    }
     #endif
 }

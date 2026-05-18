@@ -486,7 +486,10 @@ extension PlayerControlsOverlay {
                 .overlay(chapterMarkers)
                 .contentShape(Rectangle())
                 #if !os(tvOS)
-                .gesture(
+                // highPriorityGesture ensures the seek-bar drag beats any child-view
+                // tap gestures (e.g. chapter-marker hit areas) so scrubbing is not
+                // interrupted by a chapter-marker onTapGesture firing mid-drag.
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             let fraction = min(max((value.location.x - hPad) / trackW, 0), 1)
@@ -499,6 +502,7 @@ extension PlayerControlsOverlay {
             }
             .frame(height: 28)
         }
+        .accessibilityIdentifier("player.progressBar")
     }
 
     // Chapter tick marks on the progress bar — small white notches at each chapter boundary.
@@ -517,7 +521,10 @@ extension PlayerControlsOverlay {
                         .frame(width: 2, height: 12)
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { vm.seek(to: chapter.startTime) }
+                .onTapGesture {
+                    guard !vm.isScrubbing else { return }
+                    vm.seek(to: chapter.startTime)
+                }
                 .position(x: x, y: geo.size.height / 2)
             }
         }
