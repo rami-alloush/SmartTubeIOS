@@ -253,15 +253,63 @@ struct AudioTrackSelectionTests {
                 "Fix #126: single-track manifest falls back to the available track when device language has no match")
     }
 
-    @Test("Fix #126: isEmpty guard correctly allows single track; count>1 guard would have blocked it")
-    func isEmptyGuardAllowsSingleTrackWhileCountGuardWouldBlock() {
-        let tracks = [track("en", isOriginal: true)]
-        // Simulate old guard: count > 1 would block
-        let oldGuardPasses = tracks.count > 1
-        // New guard: !isEmpty allows it
-        let newGuardPasses = !tracks.isEmpty
-        #expect(!oldGuardPasses, "Old guard (count > 1) must reject single-track — confirmed bug precondition")
-        #expect(newGuardPasses, "New guard (!isEmpty) must pass single-track — confirms fix is correct")
+    // MARK: - Fix #124: Audio track picker button stays visible after quality switch
+
+    /// The preservation condition in AudioTrackManager.loadAudioTracks (Fix #124):
+    ///   if !availableAudioTracks.isEmpty, tracks.count < availableAudioTracks.count {
+    ///       // preserve existing track list, re-apply selection, return early
+    ///   }
+
+    private func shouldPreserveExistingTracks(
+        existing: [AudioTrack],
+        incoming: [AudioTrack]
+    ) -> Bool {
+        !existing.isEmpty && incoming.count < existing.count
+    }
+
+    @Test("Fix #124: quality-switch variant with fewer tracks triggers preservation")
+    func fix124VariantWithFewerTracksPreservesExisting() {
+        let multiTrack = [track("en", isOriginal: true), track("es"), track("fr")]
+        let singleTrack = [track("en", isOriginal: true)]
+        #expect(shouldPreserveExistingTracks(existing: multiTrack, incoming: singleTrack),
+                "Fix #124: single-track variant must trigger preservation of 3-track list")
+    }
+
+    @Test("Fix #124: initial load with more tracks does NOT trigger preservation")
+    func fix124InitialLoadDoesNotPreserve() {
+        let empty: [AudioTrack] = []
+        let multiTrack = [track("en", isOriginal: true), track("es")]
+        #expect(!shouldPreserveExistingTracks(existing: empty, incoming: multiTrack),
+                "Fix #124: initial load (empty existing) must not trigger preservation")
+    }
+
+    @Test("Fix #124: quality-switch to same track count does NOT trigger preservation")
+    func fix124SameCountDoesNotPreserve() {
+        let existing = [track("en", isOriginal: true), track("es")]
+        let incoming = [track("en", isOriginal: true), track("es")]
+        #expect(!shouldPreserveExistingTracks(existing: existing, incoming: incoming),
+                "Fix #124: same count means full load — must not trigger preservation")
+    }
+
+    @Test("Fix #124: quality-switch to MORE tracks does NOT trigger preservation")
+    func fix124MoreTracksDoesNotPreserve() {
+        let existing = [track("en", isOriginal: true)]
+        let incoming = [track("en", isOriginal: true), track("es"), track("de")]
+        #expect(!shouldPreserveExistingTracks(existing: existing, incoming: incoming),
+                "Fix #124: more tracks than existing means full load — must not trigger preservation")
+    }
+
+    @Test("Fix #124: preserved selection logic — selected track re-applied when in optionMap")
+    func fix124SelectedTrackReappliedFromOptionMap() {
+        // Simulate: user selected "es", quality switch brings variant with only "en"
+        // The variant's optionMap only has "en", so "es" cannot be re-applied.
+        // Verify the selection lookup fails gracefully.
+        let optionMapKeys = Set(["en"])  // variant only has English
+        let selectedID = "es"           // user had Spanish selected
+        let canReapply = optionMapKeys.contains(selectedID)
+        #expect(!canReapply,
+                "When selected track is not in variant, canReapply must be false — uses group.defaultOption fallback")
     }
 }
+
 

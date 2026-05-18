@@ -105,6 +105,23 @@ final class AudioTrackManager {
             }
             self.audioSelectionGroup = group
             self.audioOptionsByID = optionMap
+
+            // Fix #124: When a quality switch loads a variant playlist with fewer
+            // audio renditions than the original HLS master (e.g., a variant URL that
+            // lacks EXT-X-MEDIA entries for alternate languages), preserve the existing
+            // track list so the picker button stays visible. Re-apply the current
+            // selection to the new item so audio continues correctly.
+            if !self.availableAudioTracks.isEmpty, tracks.count < self.availableAudioTracks.count {
+                let selectedID = self.selectedAudioTrack?.id
+                if let selectedID, let option = optionMap[selectedID] {
+                    item.select(option, in: group)
+                } else if let defaultOption = group.defaultOption {
+                    item.select(defaultOption, in: group)
+                }
+                playerLog.notice("Quality variant: \(tracks.count) audio rendition(s) vs \(self.availableAudioTracks.count) known — preserved track list, re-applied selection")
+                return
+            }
+
             self.availableAudioTracks = tracks
 
             let preferred = self.delegate?.settings.preferredAudioLanguage
