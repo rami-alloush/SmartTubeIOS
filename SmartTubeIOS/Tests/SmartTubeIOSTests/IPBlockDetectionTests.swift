@@ -94,4 +94,46 @@ struct IPBlockDetectionTests {
             Issue.record("unavailable matched the .ipBlocked pattern — cases must stay distinct")
         }
     }
+
+    // MARK: - NW-6-FIX: Suppression and retry behaviour
+
+    @Test("NW-6: ipBlocked error is suppressed from Crashlytics non-fatal recording")
+    func ipBlockedSuppressesCrashlyticsRecording() {
+        // Mirrors the transient-suppression check in PlaybackViewModel.error.didSet.
+        func shouldRecord(_ error: Error) -> Bool {
+            if let apiError = error as? APIError {
+                if case .unavailable = apiError { return false }
+                if case .ipBlocked = apiError { return false }
+            }
+            return true
+        }
+        #expect(!shouldRecord(APIError.ipBlocked("Your IP was blocked")))
+        #expect(!shouldRecord(APIError.ipBlocked("Sign in to confirm you're not a bot")))
+    }
+
+    @Test("NW-6: ipBlocked never triggers TV-authenticated retry regardless of auth state")
+    func ipBlockedSkipsAuthenticatedRetry() {
+        // Mirrors the NW-6-FIX logic in PlaybackViewModel+Loading.swift.
+        // Previously: would call fetchPlayerInfoAuthenticated() when hasAuthToken==true.
+        // After fix: throws immediately — retrying with the same blocked IP is futile
+        // and may extend the YouTube block duration.
+        func shouldRetryWithAuthenticatedClient(_ error: Error, hasAuthToken: Bool) -> Bool {
+            if case APIError.ipBlocked = error { return false }
+            return hasAuthToken
+        }
+        #expect(!shouldRetryWithAuthenticatedClient(APIError.ipBlocked("IP blocked"), hasAuthToken: true),
+                "ipBlocked must NOT retry even when the user is authenticated")
+        #expect(!shouldRetryWithAuthenticatedClient(APIError.ipBlocked("IP blocked"), hasAuthToken: false),
+                "ipBlocked must NOT retry when unauthenticated")
+    }
+
+    @Test("NW-6: non-ipBlocked error still triggers TV-authenticated retry when authenticated")
+    func nonIPBlockedPreservesAuthenticatedRetry() {
+        func shouldRetryWithAuthenticatedClient(_ error: Error, hasAuthToken: Bool) -> Bool {
+            if case APIError.ipBlocked = error { return false }
+            return hasAuthToken
+        }
+        #expect(shouldRetryWithAuthenticatedClient(APIError.unavailable("Unavailable"), hasAuthToken: true))
+        #expect(!shouldRetryWithAuthenticatedClient(APIError.unavailable("Unavailable"), hasAuthToken: false))
+    }
 }

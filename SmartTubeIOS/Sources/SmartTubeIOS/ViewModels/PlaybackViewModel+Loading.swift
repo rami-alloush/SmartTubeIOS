@@ -311,23 +311,15 @@ extension PlaybackViewModel {
                     info = try await api.fetchPlayerInfo(videoId: video.id)
                 } catch {
                     if case APIError.ipBlocked(let reason) = error {
-                        // Step 2: IP-block short-circuit. Every extra /player call from a
-                        // blocked IP extends the block duration. Skip the Android fallback.
-                        // If signed in, one TV-authenticated attempt is still worthwhile
-                        // (a logged-in session carries extra credibility with YouTube).
+                        // NW-6-FIX: IP-block short-circuit. Every extra /player call from a
+                        // blocked IP can extend the block duration — skip ALL retries,
+                        // including the TV-authenticated path (an authenticated request
+                        // carries the same blocked IP and will fail too). Throw immediately
+                        // so the error banner appears with the specific VPN message and
+                        // without a "Try Again" button. Suppress Crashlytics recording —
+                        // this is a user-side network condition, not an app bug.
                         playerLog.error("⚠️ iOS client detected IP block — reason: \(reason)")
-                        // Step 5: Crashlytics tag for production measurement.
-                        playerLog.recordNonFatal(error, userInfo: [
-                            "vpn_ip_block":       "true",
-                            "playability_reason": reason,
-                            "video_id":           video.id,
-                        ])
-                        if hasAuthToken {
-                            playerLog.notice("⚠️ IP block: attempting one TV-authenticated retry")
-                            info = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
-                        } else {
-                            throw error
-                        }
+                        throw error
                     } else if case APIError.unavailable = error, hasAuthToken {
                         playerLog.notice("⚠️ iOS client returned unavailable — retrying with authenticated TV client")
                         do {

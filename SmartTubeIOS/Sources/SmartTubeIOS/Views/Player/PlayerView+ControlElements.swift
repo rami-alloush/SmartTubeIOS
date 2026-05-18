@@ -595,7 +595,13 @@ extension PlayerView {
     }
 
     func errorBanner(_ err: Error) -> some View {
-        VStack(spacing: 12) {
+        // IP-block errors show a specific message and no retry button — retrying
+        // with the same IP will also fail and may extend the YouTube block duration.
+        let isIPBlock: Bool = {
+            if let apiError = err as? APIError, case .ipBlocked = apiError { return true }
+            return false
+        }()
+        return VStack(spacing: 12) {
             HStack {
                 Image(systemName: AppSymbol.warning)
                     .foregroundStyle(.yellow)
@@ -603,24 +609,26 @@ extension PlayerView {
                     .font(.callout)
                     .foregroundStyle(.white)
             }
-            Button {
-                vm.retryLoad()
-            } label: {
-                Text("Try Again")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color.white)
-                    .clipShape(Capsule())
+            if !isIPBlock {
+                Button {
+                    vm.retryLoad()
+                } label: {
+                    Text("Try Again")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .clipShape(Capsule())
+                }
+                .accessibilityIdentifier("player.retryButton")
             }
-            .accessibilityIdentifier("player.retryButton")
         }
         .padding()
         .background(.black.opacity(0.75))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .padding()
-        .accessibilityIdentifier("player.errorBanner")
+        .accessibilityIdentifier(isIPBlock ? "player.ipBlockBanner" : "player.errorBanner")
     }
 }
 
