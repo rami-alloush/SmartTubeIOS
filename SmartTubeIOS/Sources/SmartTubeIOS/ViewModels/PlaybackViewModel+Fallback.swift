@@ -325,19 +325,29 @@ extension PlaybackViewModel {
     /// When `preferredQuality != .auto`, filters to formats at or below `maxHeight`, sorts
     /// by height descending then bitrate descending. Falls back to highest bitrate when no
     /// format meets the height cap.
+    ///
+    /// H.264 (avc1) is preferred over AV1 (av01) at any given resolution because Android-client
+    /// AV1 streams require a proof-of-origin token (pot) that the app does not supply, causing
+    /// systematic HTTP 403 errors on adaptive composition. H.264 streams are served without
+    /// that restriction and are well-supported by AVFoundation.
     private func qualityCapVideoURL(from formats: [VideoFormat]) -> URL? {
         let videoOnly = formats.filter {
             $0.mimeType.hasPrefix("video/mp4") && !$0.mimeType.contains(", ") && $0.url != nil
         }
+        // Sort key: H.264 (avc1) before AV1/other codecs, then by height desc, then bitrate desc.
+        func preferH264(_ lhs: VideoFormat, _ rhs: VideoFormat) -> Bool {
+            let lH264 = lhs.mimeType.contains("avc1")
+            let rH264 = rhs.mimeType.contains("avc1")
+            if lH264 != rH264 { return lH264 }
+            if lhs.height != rhs.height { return lhs.height > rhs.height }
+            return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+        }
         guard settings.preferredQuality != .auto,
               let maxH = settings.preferredQuality.maxHeight else {
-            return videoOnly.sorted { ($0.bitrate ?? 0) > ($1.bitrate ?? 0) }.first?.url
+            return videoOnly.sorted(by: preferH264).first?.url
         }
         let capped = videoOnly.filter { $0.height <= maxH }
-        let sorted = capped.sorted {
-            if $0.height != $1.height { return $0.height > $1.height }
-            return ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
-        }
-        return sorted.first?.url ?? videoOnly.sorted { ($0.bitrate ?? 0) > ($1.bitrate ?? 0) }.first?.url
+        return capped.sorted(by: preferH264).first?.url
+            ?? videoOnly.sorted(by: preferH264).first?.url
     }
 }

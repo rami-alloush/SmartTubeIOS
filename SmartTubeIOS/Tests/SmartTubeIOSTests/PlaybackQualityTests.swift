@@ -237,15 +237,19 @@ struct PlaybackQualityTests {
         let videoOnly = formats.filter {
             $0.mimeType.hasPrefix("video/mp4") && !$0.mimeType.contains(", ") && $0.url != nil
         }
+        func preferH264(_ lhs: VideoFormat, _ rhs: VideoFormat) -> Bool {
+            let lH264 = lhs.mimeType.contains("avc1")
+            let rH264 = rhs.mimeType.contains("avc1")
+            if lH264 != rH264 { return lH264 }
+            if lhs.height != rhs.height { return lhs.height > rhs.height }
+            return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+        }
         guard let maxH = preferredMaxHeight else {
-            return videoOnly.sorted { ($0.bitrate ?? 0) > ($1.bitrate ?? 0) }.first?.url
+            return videoOnly.sorted(by: preferH264).first?.url
         }
         let capped = videoOnly.filter { $0.height <= maxH }
-        let sorted = capped.sorted {
-            if $0.height != $1.height { return $0.height > $1.height }
-            return ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
-        }
-        return sorted.first?.url ?? videoOnly.sorted { ($0.bitrate ?? 0) > ($1.bitrate ?? 0) }.first?.url
+        return capped.sorted(by: preferH264).first?.url
+            ?? videoOnly.sorted(by: preferH264).first?.url
     }
 
     @Test func adaptiveComposition_qualityCapFiltersHigherFormats() {
@@ -258,5 +262,62 @@ struct PlaybackQualityTests {
         ]
         let selectedURL = qualityCapVideoURL(from: formats, preferredMaxHeight: 1080)
         #expect(selectedURL == url1080, "Quality cap of 1080p should return 1080p even though 2160p has higher bitrate")
+    }
+
+    /// Regression test for the Android-client AV1 HTTP 403 bug.
+    /// `qualityCapVideoURL` must prefer H.264 (avc1) over AV1 (av01) even when AV1 has
+    /// higher bitrate, because Android-client AV1 streams require a pot token and 403.
+    @Test func qualityCapVideoURL_prefersH264OverAV1_forAutoQuality() {
+        let urlAV1_2160 = URL(string: "https://cdn.example.com/av1_2160p.mp4")!
+        let urlH264_1080 = URL(string: "https://cdn.example.com/h264_1080p.mp4")!
+        let formats = [
+            VideoFormat(label: "2160p", width: 3840, height: 2160, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.12M.08\"",
+                        url: urlAV1_2160, bitrate: 20_000_000),
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                        url: urlH264_1080, bitrate: 8_000_000),
+        ]
+        // Auto quality (nil cap): H.264 1080p must win over AV1 2160p.
+        let selected = qualityCapVideoURL(from: formats, preferredMaxHeight: nil)
+        #expect(selected == urlH264_1080,
+                "H.264 must be preferred over AV1 to avoid Android-client HTTP 403")
+    }
+
+    @Test func qualityCapVideoURL_picksHighestH264WhenMultipleAvailable() {
+        let url1080 = URL(string: "https://cdn.example.com/h264_1080p.mp4")!
+        let url720  = URL(string: "https://cdn.example.com/h264_720p.mp4")!
+        let urlAV1  = URL(string: "https://cdn.example.com/av1_2160p.mp4")!
+        let formats = [
+            VideoFormat(label: "2160p", width: 3840, height: 2160, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.12M.08\"",
+                        url: urlAV1, bitrate: 20_000_000),
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                        url: url1080, bitrate: 8_000_000),
+            VideoFormat(label: "720p",  width: 1280, height: 720,  fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.4d401f\"",
+                        url: url720,  bitrate: 4_000_000),
+        ]
+        let selected = qualityCapVideoURL(from: formats, preferredMaxHeight: nil)
+        #expect(selected == url1080,
+                "Among H.264 formats, the highest resolution (1080p) must be picked")
+    }
+
+    @Test func qualityCapVideoURL_fallsBackToAV1WhenNoH264Available() {
+        let urlAV1_2160 = URL(string: "https://cdn.example.com/av1_2160p.mp4")!
+        let urlAV1_1080 = URL(string: "https://cdn.example.com/av1_1080p.mp4")!
+        let formats = [
+            VideoFormat(label: "2160p", width: 3840, height: 2160, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.12M.08\"",
+                        url: urlAV1_2160, bitrate: 20_000_000),
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.09M.08\"",
+                        url: urlAV1_1080, bitrate: 8_000_000),
+        ]
+        // When only AV1 is available, picks the best (highest resolution) AV1.
+        let selected = qualityCapVideoURL(from: formats, preferredMaxHeight: nil)
+        #expect(selected == urlAV1_2160,
+                "When no H.264 is available, highest-resolution AV1 should be picked")
     }
 }
