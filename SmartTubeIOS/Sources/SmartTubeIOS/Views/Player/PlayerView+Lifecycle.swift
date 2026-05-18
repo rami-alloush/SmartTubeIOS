@@ -500,6 +500,16 @@ extension PlayerView {
                     showMoreMenu = true
                 }
             }
+            // UI testing only: force-show controls and cancel the auto-hide timer so
+            // the controls overlay stays on screen for the duration of the test.
+            // Works correctly because vm.load() was already called from PlayerStateStore.play()
+            // before this view appears, so controlsVisible was reset to false by load()
+            // and we can unconditionally restore it here.
+            if ProcessInfo.processInfo.arguments.contains("--uitesting-show-controls") {
+                swipeLog.notice("[PlayerView] --uitesting-show-controls launch arg detected — showing controls")
+                vm.showControls()
+                vm.cancelControlsHide()
+            }
             #else
             if vm.currentVideoId == video.id {
                 // Spurious appear (e.g. a sheet temporarily covered us) — only resume

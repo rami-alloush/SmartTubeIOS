@@ -685,6 +685,7 @@ extension PlayerControlsOverlay {
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("player.quickAccessRow")
     }
 
