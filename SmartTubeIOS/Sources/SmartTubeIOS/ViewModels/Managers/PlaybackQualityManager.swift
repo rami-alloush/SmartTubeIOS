@@ -123,26 +123,31 @@ final class PlaybackQualityManager {
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
-                    let nsErr = item.error as? NSError
-                    let is403 = nsErr?.domain == NSURLErrorDomain && nsErr?.code == -1102
-                    if is403, let video = self.delegate?.currentVideo {
-                        playerLog.notice("Quality-switch 403 — invalidating cache and re-fetching player info")
-                        await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
-                        self.selectedFormat = nil
-                        await self.delegate?.retryWith403Recovery(video: video, originalError: item.error)
-                    } else if qualityCap != nil {
+                    let nsErr = (item.error as? NSError) ?? NSError(domain: "", code: 0)
+                    let action = qualityRecoveryAction(
+                        for: nsErr,
+                        qualityCap: qualityCap,
+                        hasAppliedH264Cap: self.hasAppliedH264Cap
+                    )
+                    switch action {
+                    case .retry403Recovery:
+                        if let video = self.delegate?.currentVideo {
+                            playerLog.notice("Quality-switch 403 — invalidating cache and re-fetching player info")
+                            await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                            self.selectedFormat = nil
+                            await self.delegate?.retryWith403Recovery(video: video, originalError: item.error)
+                        }
+                    case .revertToAuto:
                         playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
                         self.selectedFormat = nil
                         self.delegate?.toastMessage = "Quality unavailable — reverting to Auto"
                         await self.reloadHLSItem(seekTo: self.delegate?.currentTime ?? 0, qualityCap: nil)
-                    } else if !self.hasAppliedH264Cap,
-                              nsErr?.domain == AVFoundationErrorDomain,
-                              nsErr?.code == -11833 {
+                    case .retryWithH264Cap:
                         playerLog.notice("Auto HLS Cannot Decode — retrying with H.264 bitrate cap")
                         self.hasAppliedH264Cap = true
                         self.delegate?.toastMessage = "Adjusting quality for this device…"
                         await self.reloadHLSItemH264Capped(seekTo: self.delegate?.currentTime ?? 0)
-                    } else {
+                    case .fail:
                         self.delegate?.error = item.error
                     }
                 case .unknown:

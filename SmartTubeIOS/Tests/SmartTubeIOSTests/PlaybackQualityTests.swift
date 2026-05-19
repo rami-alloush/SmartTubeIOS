@@ -400,4 +400,67 @@ struct PlaybackQualityTests {
         let result = parseHLSMasterManifest(text, baseURL: URL(string: "https://example.com/")!)
         #expect(result.isEmpty, "Empty response body must produce empty variant map")
     }
+
+    // MARK: - Quality recovery policy (#141)
+
+    private func make403Error() -> NSError {
+        NSError(domain: NSURLErrorDomain, code: -1102, userInfo: nil)
+    }
+
+    private func makeH264DecodeError() -> NSError {
+        NSError(domain: "AVFoundationErrorDomain", code: -11833, userInfo: nil)
+    }
+
+    private func makeGenericError() -> NSError {
+        NSError(domain: NSURLErrorDomain, code: -1001, userInfo: nil)
+    }
+
+    @Test func recoveryAction_403_returnsRetry403Recovery() {
+        let action = qualityRecoveryAction(for: make403Error(), qualityCap: nil, hasAppliedH264Cap: false)
+        guard case .retry403Recovery = action else {
+            Issue.record("Expected .retry403Recovery, got \(action)")
+            return
+        }
+    }
+
+    @Test func recoveryAction_qualityCapFailed_returnsRevertToAuto() {
+        let action = qualityRecoveryAction(for: makeGenericError(), qualityCap: 1080, hasAppliedH264Cap: false)
+        guard case .revertToAuto = action else {
+            Issue.record("Expected .revertToAuto, got \(action)")
+            return
+        }
+    }
+
+    @Test func recoveryAction_h264DecodeError_returnsRetryWithH264Cap() {
+        let action = qualityRecoveryAction(for: makeH264DecodeError(), qualityCap: nil, hasAppliedH264Cap: false)
+        guard case .retryWithH264Cap = action else {
+            Issue.record("Expected .retryWithH264Cap, got \(action)")
+            return
+        }
+    }
+
+    @Test func recoveryAction_h264DecodeErrorAfterCapAlreadyApplied_returnsFail() {
+        let action = qualityRecoveryAction(for: makeH264DecodeError(), qualityCap: nil, hasAppliedH264Cap: true)
+        guard case .fail = action else {
+            Issue.record("Expected .fail, got \(action)")
+            return
+        }
+    }
+
+    @Test func recoveryAction_unknownError_returnsFail() {
+        let action = qualityRecoveryAction(for: makeGenericError(), qualityCap: nil, hasAppliedH264Cap: false)
+        guard case .fail = action else {
+            Issue.record("Expected .fail, got \(action)")
+            return
+        }
+    }
+
+    @Test func recoveryAction_403_takesPriorityOverQualityCap() {
+        // 403 + non-nil qualityCap → 403 wins (priority 1 > priority 2)
+        let action = qualityRecoveryAction(for: make403Error(), qualityCap: 720, hasAppliedH264Cap: false)
+        guard case .retry403Recovery = action else {
+            Issue.record("Expected .retry403Recovery (403 priority), got \(action)")
+            return
+        }
+    }
 }
