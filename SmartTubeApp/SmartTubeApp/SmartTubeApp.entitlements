@@ -6,8 +6,6 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<key>com.apple.security.network.local</key>
-	<true/>
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
 	<key>com.apple.security.application-groups</key>
