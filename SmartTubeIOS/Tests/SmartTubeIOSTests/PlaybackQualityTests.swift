@@ -339,6 +339,44 @@ struct PlaybackQualityTests {
                 "When no H.264 is available, highest-resolution AV1 should be picked")
     }
 
+    // MARK: - selectBestVideoFormat coverage (#138)
+    // These tests validate the shared algorithm via the local structural mirror.
+
+    @Test func selectBestVideoFormat_returnsNilForEmptyFormats() {
+        let result = qualityCapVideoURL(from: [], preferredMaxHeight: nil)
+        #expect(result == nil, "Empty format list must return nil")
+    }
+
+    @Test func selectBestVideoFormat_ignoresNonMP4Formats() {
+        let hlsURL = URL(string: "https://example.com/master.m3u8")!
+        let mp4URL = URL(string: "https://example.com/1080p.mp4")!
+        let formats = [
+            VideoFormat(label: "1080p HLS", width: 1920, height: 1080, fps: 30,
+                        mimeType: "application/x-mpegURL", url: hlsURL, bitrate: 8_000_000),
+            VideoFormat(label: "1080p MP4", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                        url: mp4URL, bitrate: 8_000_000),
+        ]
+        let result = qualityCapVideoURL(from: formats, preferredMaxHeight: nil)
+        #expect(result == mp4URL, "Non-mp4 formats (HLS, WebM, etc.) must be excluded from adaptive selection")
+    }
+
+    @Test func selectBestVideoFormat_fallsBackWhenCapExcludesAll() {
+        // Cap is 480p but only 1080p and 720p are available — fall back to best available.
+        let url720 = URL(string: "https://example.com/720p.mp4")!
+        let url1080 = URL(string: "https://example.com/1080p.mp4")!
+        let formats = [
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                        url: url1080, bitrate: 8_000_000),
+            VideoFormat(label: "720p",  width: 1280, height: 720,  fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.4d401f\"",
+                        url: url720,  bitrate: 4_000_000),
+        ]
+        let result = qualityCapVideoURL(from: formats, preferredMaxHeight: 480)
+        #expect(result == url1080, "When cap excludes all formats, fall back to highest available")
+    }
+
     // MARK: - cancel() / reset() H264 cap flag contract (#136)
 
     /// Structural test: validates that cancel() clears hasAppliedH264Cap,

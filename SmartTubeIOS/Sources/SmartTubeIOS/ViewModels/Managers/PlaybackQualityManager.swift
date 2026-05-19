@@ -228,6 +228,42 @@ final class PlaybackQualityManager {
         return result
     }
 
+    /// Returns the best video-only MP4 format for adaptive composition.
+    ///
+    /// Shared by `qualityCapVideoURL(from:)` in `PlaybackViewModel+Fallback` and any other
+    /// caller that needs to pick the best adaptive MP4 stream with an optional resolution cap.
+    ///
+    /// - Parameters:
+    ///   - formats: The full candidate list (all mimeTypes accepted; non-mp4 are filtered out).
+    ///   - preferredMaxHeight: Height cap in pixels, or `nil` for Auto (best available).
+    ///   - preferH264: When `true` (default), sorts H.264 (`avc1`) variants before AV1/other
+    ///     codecs to avoid the Android-client `pot` token requirement that causes HTTP 403.
+    /// - Returns: The best matching `VideoFormat`, or `nil` if no suitable format is found.
+    static func selectBestVideoFormat(
+        from formats: [VideoFormat],
+        preferredMaxHeight: Int?,
+        preferH264: Bool = true
+    ) -> VideoFormat? {
+        let videoOnly = formats.filter {
+            $0.mimeType.hasPrefix("video/mp4") && !$0.mimeType.contains(", ") && $0.url != nil
+        }
+        func sortKey(_ lhs: VideoFormat, _ rhs: VideoFormat) -> Bool {
+            if preferH264 {
+                let lH264 = lhs.mimeType.contains("avc1")
+                let rH264 = rhs.mimeType.contains("avc1")
+                if lH264 != rH264 { return lH264 }
+            }
+            if lhs.height != rhs.height { return lhs.height > rhs.height }
+            return (lhs.bitrate ?? 0) > (rhs.bitrate ?? 0)
+        }
+        guard let maxH = preferredMaxHeight else {
+            return videoOnly.sorted(by: sortKey).first
+        }
+        let capped = videoOnly.filter { $0.height <= maxH }
+        return capped.sorted(by: sortKey).first
+            ?? videoOnly.sorted(by: sortKey).first
+    }
+
     static let bitRateCaps: [Int: Double] = [
         2160: 45_000_000,
         1440: 20_000_000,
