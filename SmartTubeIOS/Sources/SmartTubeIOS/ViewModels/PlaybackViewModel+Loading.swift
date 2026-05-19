@@ -386,21 +386,27 @@ extension PlaybackViewModel {
             let channelIsExcluded = video.channelId.map {
                 settings.sponsorBlockExcludedChannels.keys.contains($0)
             } ?? false
+            playerLog.notice("[sponsorBlock] enabled=\(settings.sponsorBlockEnabled) channelExcluded=\(channelIsExcluded) categories=\(settings.activeSponsorCategories.count)")
             var sponsorCached = false
             if settings.sponsorBlockEnabled, !channelIsExcluded {
                 if let cachedSegments = cached.sponsorSegments {
                     // Cache hit (fresh or stale) — apply immediately.
                     let isStaleSponsor = cached.staleFields.contains(.sponsorSegments)
-                    playerLog.notice("cache \(isStaleSponsor ? "STALE" : "HIT"): sponsorSegments")
                     let minDur = settings.sponsorBlockMinSegmentDuration
-                    sponsorSegments = minDur > 0
+                    let filtered = minDur > 0
                         ? cachedSegments.filter { ($0.end - $0.start) >= minDur }
                         : cachedSegments
+                    sponsorSegments = filtered
+                    let sbCacheLabel = isStaleSponsor ? "STALE" : "HIT"
+                    playerLog.notice("[sponsorBlock] cache \(sbCacheLabel): \(cachedSegments.count) raw -> \(filtered.count) applied")
                     // Mark as "not fully cached" only when stale so Phase 2 revalidates.
                     sponsorCached = !isStaleSponsor
+                } else {
+                    playerLog.notice("[sponsorBlock] cache MISS — will fetch in phase2")
                 }
                 // Full miss or stale: Phase 2 will fetch or revalidate.
             } else {
+                playerLog.notice("[sponsorBlock] skipped (disabled or channel excluded)")
                 sponsorCached = true  // disabled/excluded — no fetch needed in Phase 2
             }
 
@@ -447,7 +453,7 @@ extension PlaybackViewModel {
             // to exit early and produce silent audio when a non-auto quality is preferred.
             // Quality is steered via AVPlayerItem hints (preferredMaximumResolution /
             // preferredPeakBitRate) which AVPlayer honours during ABR adaptation.
-            var initialStreamURL = masterStreamURL
+            let initialStreamURL = masterStreamURL
             if settings.preferredQuality != .auto, let maxH = settings.preferredQuality.maxHeight {
                 let matchingFormat = availableFormats.first { $0.height <= maxH }
                 selectedFormat = matchingFormat
@@ -489,6 +495,16 @@ extension PlaybackViewModel {
                     switch status {
                     case .readyToPlay:
                         playerLog.notice("✅ AVPlayerItem readyToPlay — video=\(self.currentVideo?.id ?? "nil") rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue) isAudioOnlyMode=\(self.isAudioOnlyMode)")
+                        // Refresh duration from the AVPlayerItem now that it is
+                        // ready — the API metadata may have been absent (nil) or
+                        // inaccurate, which would leave duration=0 and break scrubbing
+                        // (every seekBar drag computes fraction*0 = 0).
+                        let itemDur = item.duration.seconds
+                        if itemDur.isFinite && itemDur > 0 {
+                            let prevDur = self.duration
+                            self.duration = itemDur
+                            playerLog.notice("[duration] updated from AVPlayerItem: \(String(format: "%.1f", itemDur))s (was \(String(format: "%.1f", prevDur))s from metadata)")
+                        }
                         if let pos = self.savedPositionToRestore, pos > 0 {
                             self.savedPositionToRestore = nil
                             self.seek(to: pos)
@@ -680,6 +696,7 @@ extension PlaybackViewModel {
                     guard !Task.isCancelled else { return }
                     if minDur > 0 { segments = segments.filter { ($0.end - $0.start) >= minDur } }
                     sponsorSegments = segments
+                    playerLog.notice("[sponsorBlock] phase2 applied \(segments.count) segments for \(videoId)")
                 }
             }
         }
@@ -708,10 +725,10 @@ extension PlaybackViewModel {
         // Full miss: live blocking fetch so relatedVideos is populated before the panel opens.
         let nextInfo: NextInfo?
         if let cachedNext = cached.nextInfo, !cached.staleFields.contains(.nextInfo) {
-            playerLog.notice("cache HIT: nextInfo (skipping network)")
+            playerLog.notice("cache HIT: nextInfo chapters=\(cachedNext.chapters.count) (skipping network)")
             nextInfo = cachedNext
         } else if let staleNext = cached.nextInfo, cached.staleFields.contains(.nextInfo) {
-            playerLog.notice("SWR: nextInfo stale — using cached, revalidating in background")
+            playerLog.notice("SWR: nextInfo stale chapters=\(staleNext.chapters.count) — using cached, revalidating in background")
             nextInfo = staleNext
             let videoId = video.id
             Task(priority: .background) { [api = self.api] in
@@ -738,7 +755,12 @@ extension PlaybackViewModel {
             }
         }
         if let status = nextInfo?.likeStatus { likeStatus = status }
-        if let ch = nextInfo?.chapters, !ch.isEmpty { chapters = ch }
+        if let ch = nextInfo?.chapters, !ch.isEmpty {
+            chapters = ch
+            playerLog.notice("[chapters] applied \(ch.count) chapters for \(video.id)")
+        } else {
+            playerLog.notice("[chapters] none for \(video.id) (nextInfo chapters=\(nextInfo?.chapters.count ?? -1))")
+        }
 
         } // end of non-inject related-videos branch
 

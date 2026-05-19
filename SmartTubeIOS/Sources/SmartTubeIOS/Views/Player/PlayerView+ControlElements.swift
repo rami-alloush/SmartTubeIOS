@@ -252,9 +252,11 @@ struct PlayerControlsOverlay: View {
                     #if !os(tvOS)
                     Text(formatDuration(vm.currentTime))
                         .padding(.leading, 6)
+                        .accessibilityIdentifier("player.currentTimeLabel")
                     Spacer()
                     Text(formatDuration(vm.duration))
                         .padding(.trailing, 6)
+                        .accessibilityIdentifier("player.durationLabel")
                     #else
                     Spacer()
                     #endif
@@ -521,8 +523,10 @@ extension PlayerControlsOverlay {
     // Each tick has a 24×44 pt transparent tap area so the user can tap to jump to it.
     var chapterMarkers: some View {
         GeometryReader { geo in
+            let hPad: CGFloat = 20
+            let trackW = geo.size.width - hPad * 2
             ForEach(vm.chapters) { chapter in
-                let x = geo.size.width * CGFloat(chapter.startTime / max(vm.duration, 1))
+                let x = hPad + trackW * CGFloat(chapter.startTime / max(vm.duration, 1))
                 ZStack {
                     // Invisible enlarged hit area
                     Color.clear
@@ -545,9 +549,11 @@ extension PlayerControlsOverlay {
     // SponsorBlock segment markers on the progress bar
     var sponsorBlockMarkers: some View {
         GeometryReader { geo in
+            let hPad: CGFloat = 20
+            let trackW = geo.size.width - hPad * 2
             ForEach(vm.sponsorSegments) { seg in
-                let x = geo.size.width * CGFloat(seg.start / max(vm.duration, 1))
-                let w = geo.size.width * CGFloat((seg.end - seg.start) / max(vm.duration, 1))
+                let x = hPad + trackW * CGFloat(seg.start / max(vm.duration, 1))
+                let w = trackW * CGFloat((seg.end - seg.start) / max(vm.duration, 1))
                 Rectangle()
                     .fill(seg.category.color.opacity(0.8))
                     .frame(width: max(w, 2), height: 4)

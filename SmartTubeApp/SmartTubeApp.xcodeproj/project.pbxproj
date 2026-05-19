@@ -53,6 +53,8 @@
 		AA1100000000000000001A02 /* HideShortsHomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001A01 /* HideShortsHomeUITests.swift */; };
 		AA1100000000000000001B02 /* OrientationCrashRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001B01 /* OrientationCrashRegressionUITests.swift */; };
 		AA1100000000000000001C02 /* QuickAccessRowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001C01 /* QuickAccessRowUITests.swift */; };
+		AA1100000000000000001D02 /* SIDAudioTrackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001D01 /* SIDAudioTrackUITests.swift */; };
+		AA1100000000000000001E02 /* ScrubberUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001E01 /* ScrubberUITests.swift */; };
 		AB01CD23EF456789AB01CD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB01CD23EF456789AB01CD24 /* AppDelegate.swift */; };
 		AP000000000000000000001B /* AirPlayUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AP000000000000000000001A /* AirPlayUITests.swift */; };
 		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
@@ -187,6 +189,8 @@
 		AA1100000000000000001A01 /* HideShortsHomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HideShortsHomeUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001B01 /* OrientationCrashRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationCrashRegressionUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001C01 /* QuickAccessRowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAccessRowUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001D01 /* SIDAudioTrackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SIDAudioTrackUITests.swift; sourceTree = "<group>"; };
+		AA1100000000000000001E01 /* ScrubberUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrubberUITests.swift; sourceTree = "<group>"; };
 		AB01CD23EF456789AB01CD24 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AP000000000000000000001A /* AirPlayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayUITests.swift; sourceTree = "<group>"; };
@@ -318,6 +322,8 @@
 				AA11000000000000000009A1 /* PlayerControlsUITests.swift */,
 				AA1100000000000000000AA1 /* AudioGhostStreamRegressionUITests.swift */,
 				AA1100000000000000000BA1 /* AudioOriginalTrackSelectionUITests.swift */,
+				AA1100000000000000001D01 /* SIDAudioTrackUITests.swift */,
+				AA1100000000000000001E01 /* ScrubberUITests.swift */,
 				AA1100000000000000000CA1 /* RecommendedChipUITests.swift */,
 				AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */,
 				AA1100000000000000001201 /* TVSettingsUITests.swift */,
@@ -797,6 +803,8 @@
 				AA11000000000000000009A2 /* PlayerControlsUITests.swift in Sources */,
 				AA1100000000000000000AA2 /* AudioGhostStreamRegressionUITests.swift in Sources */,
 				AA1100000000000000000BA2 /* AudioOriginalTrackSelectionUITests.swift in Sources */,
+				AA1100000000000000001D02 /* SIDAudioTrackUITests.swift in Sources */,
+				AA1100000000000000001E02 /* ScrubberUITests.swift in Sources */,
 				AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */,
 				AA1100000000000000000EA2 /* AudioOnlyModeUITests.swift in Sources */,
 				AA1100000000000000000FA2 /* PlayerMoreMenuLayoutUITests.swift in Sources */,
@@ -983,7 +991,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1413,7 +1421,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;

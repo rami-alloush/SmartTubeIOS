@@ -76,6 +76,12 @@ extension PlaybackViewModel {
     /// Tries HLS → adaptive composition → muxed direct from one PlayerInfo.
     /// Returns true if any stream starts playing successfully.
     private func tryAllStreams(video: Video, info: PlayerInfo, label: String) async -> Bool {
+        let hasHLS = info.hlsURL != nil
+        let hasAdaptiveVideo = qualityCapVideoURL(from: info.formats) != nil
+        let hasAdaptiveAudio = info.bestAdaptiveAudioURL != nil
+        let hasMuxed = info.bestMuxedDownloadURL != nil
+        playerLog.notice("[\(label)] streams available: HLS=\(hasHLS) adaptiveVideo=\(hasAdaptiveVideo) adaptiveAudio=\(hasAdaptiveAudio) muxed=\(hasMuxed)")
+
         // 1. HLS manifest — best quality, native AVPlayer ABR, alternate audio renditions
         if let hlsURL = info.hlsURL {
             playerLog.notice("[\(label)] Trying HLS")
@@ -90,6 +96,15 @@ extension PlaybackViewModel {
             if await attemptComposition(videoURL: videoURL, audioURL: audioURL,
                                         for: video, info: info, label: label) {
                 return true
+            }
+            // A background prefetch may have stored an HLS URL in the cache while adaptive
+            // was running (confirmed in logs: hls=true stored mid-retry for LSMQ3U1Thzw).
+            // Check before falling through to muxed — HLS gives us multi-audio track support.
+            let freshCachedInfo = await VideoPreloadCache.shared.consume(videoId: video.id).playerInfo
+            if let freshHLSURL = freshCachedInfo?.hlsURL, freshHLSURL != info.hlsURL {
+                playerLog.notice("[\(label)] HLS URL appeared in cache after adaptive failed — trying HLS")
+                if await attemptURL(freshHLSURL, for: video, info: freshCachedInfo!,
+                                    label: "\(label)/HLS-late") { return true }
             }
             playerLog.notice("[\(label)] Adaptive composition failed — trying muxed")
         }
@@ -116,18 +131,34 @@ extension PlaybackViewModel {
         availableCaptions = info.captionTracks
         autoApplyCaptionPreference(tracks: info.captionTracks)
 
-        var effectiveURL = url
+        let effectiveURL = url
+        var applyHLSHints = false
         if let hlsURL = info.hlsURL, url == hlsURL {
             let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
+            playerLog.notice("[\(label)] HLS: hlsURL=yes variantCount=\(variantURLs.count) preferredQuality=\(settings.preferredQuality)")
             if !variantURLs.isEmpty {
                 hlsVariantURLs = variantURLs
                 availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
+            } else {
+                playerLog.notice("[\(label)] HLS manifest fetch returned 0 variants — using master as-is")
             }
-            effectiveURL = applyQualityPreference(to: url)
+            // Keep the master HLS URL so AVPlayer receives EXT-X-MEDIA alternate audio renditions.
+            // Variant playlist URLs strip EXT-X-MEDIA (same reason as primary load path).
+            // Call applyQualityPreference only for its selectedFormat side-effect; discard the URL.
+            _ = applyQualityPreference(to: url)
+            applyHLSHints = true
+        } else {
+            playerLog.notice("[\(label)] non-HLS URL — no EXT-X-MEDIA, audio tracks will be unavailable")
         }
 
         lastAttemptedStreamURL = effectiveURL
         let item = AVPlayerItem(url: effectiveURL)
+        if applyHLSHints, settings.preferredQuality != .auto,
+           let maxH = settings.preferredQuality.maxHeight {
+            item.preferredMaximumResolution = CGSize(width: CGFloat(maxH) * 4, height: CGFloat(maxH))
+            item.preferredPeakBitRate = peakBitRate(for: maxH)
+            playerLog.notice("[\(label)] HLS ABR hints: maxH=\(maxH)p peakBitRate=\(peakBitRate(for: maxH) / 1_000_000)Mbps (master URL preserved)")
+        }
         player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()
 
@@ -135,6 +166,12 @@ extension PlaybackViewModel {
             switch status {
             case .readyToPlay:
                 playerLog.notice("✅ [\(label)] readyToPlay")
+                let itemDur = item.duration.seconds
+                if itemDur.isFinite && itemDur > 0 {
+                    let prevDur = self.duration
+                    self.duration = itemDur
+                    playerLog.notice("[duration] updated from AVPlayerItem: \(String(format: "%.1f", itemDur))s (was \(String(format: "%.1f", prevDur))s from metadata)")
+                }
                 if let pos = savedPositionToRestore, pos > 0 {
                     savedPositionToRestore = nil
                     seek(to: pos)
@@ -216,6 +253,12 @@ extension PlaybackViewModel {
                 switch status {
                 case .readyToPlay:
                     playerLog.notice("✅ [\(label)/adaptive] readyToPlay")
+                    let compDur = compositeItem.duration.seconds
+                    if compDur.isFinite && compDur > 0 {
+                        let prevDur = self.duration
+                        self.duration = compDur
+                        playerLog.notice("[duration] updated from composition AVPlayerItem: \(String(format: "%.1f", compDur))s (was \(String(format: "%.1f", prevDur))s from metadata)")
+                    }
                     if let pos = savedPositionToRestore, pos > 0 {
                         savedPositionToRestore = nil
                         seek(to: pos)
