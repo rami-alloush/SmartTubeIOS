@@ -358,14 +358,11 @@ extension PlayerView {
 
     @ViewBuilder private var moreMenuQualityRow: some View {
         if !vm.availableFormats.isEmpty && !vm.isAudioOnlyMode {
-            Button {
-                showMoreMenu = false
-                showQualityPicker = true
-            } label: {
+            Button { } label: {
                 HStack {
                     Label("Quality", systemImage: "4k.tv")
                     Spacer()
-                    Text(vm.selectedFormat?.qualityLabel ?? "Auto")
+                    Text("Auto")
                         .foregroundStyle(.secondary)
                 }
                 .padding()
@@ -373,11 +370,11 @@ extension PlayerView {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
+            .disabled(true)
             .accessibilityIdentifier("player.moreMenu.qualityRow")
             #if os(tvOS)
-            .background(moreMenuFocusedRow == .quality ? Color.white.opacity(0.15) : .clear)
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .focused($moreMenuFocusedRow, equals: .quality)
             #endif
             Divider()
         }

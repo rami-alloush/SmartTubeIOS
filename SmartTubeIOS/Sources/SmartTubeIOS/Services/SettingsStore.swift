@@ -27,7 +27,9 @@ public final class SettingsStore {
 
     public init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
-           let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
+           var decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            // Quality selection is disabled in this version — always use Auto.
+            decoded.preferredQuality = .auto
             self.settings = decoded
         } else {
             self.settings = AppSettings()

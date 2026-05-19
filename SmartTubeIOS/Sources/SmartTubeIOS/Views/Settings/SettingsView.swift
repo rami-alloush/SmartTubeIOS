@@ -96,6 +96,8 @@ public struct SettingsView: View {
                 }
             }
             .accessibilityIdentifier("settings.preferredQualityPicker")
+            .disabled(true)
+            // Quality selection is disabled in this version; always uses Auto.
 
             Picker("Preferred Audio Language", selection: $store.settings.preferredAudioLanguage) {
                 Text("System Default").tag(nil as String?)
