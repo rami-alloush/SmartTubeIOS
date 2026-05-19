@@ -266,29 +266,34 @@ public struct HomeView: View {
                 let regularVideos = homeVM.homeRegularVideos
                 let shortsVideos = hideShorts ? [] : homeVM.homeShortsVideos
                 ScrollView {
-                    if !shortsVideos.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Shorts")
-                                .font(.headline)
-                                .padding(.horizontal)
-                                .padding(.top, 16)
-                                .padding(.bottom, 4)
-                            ShortsRowSection(
-                                videos: shortsVideos,
-                                onSelect: { selectVideo($0, from: shortsVideos) },
-                                accessibilityID: "home.shortsRow",
-                                loadMore: { homeVM.loadNextShortsPage() }
-                            )
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !shortsVideos.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Shorts")
+                                    .font(.headline)
+                                    .padding(.horizontal)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 4)
+                                ShortsRowSection(
+                                    videos: shortsVideos,
+                                    onSelect: { selectVideo($0, from: shortsVideos) },
+                                    accessibilityID: "home.shortsRow",
+                                    loadMore: { homeVM.loadNextShortsPage() }
+                                )
+                            }
+                            #if os(tvOS)
+                            .focusSection()
+                            #endif
                         }
-                    }
-                    VideoGridSection(
-                        videos: regularVideos,
-                        onSelect: { selectVideo($0, from: regularVideos) },
-                        loadMore: { homeVM.loadMoreMerged() }
-                    )
-                    let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }
-                    if isLoadingMore {
-                        ProgressView().frame(maxWidth: .infinity).padding()
+                        VideoGridSection(
+                            videos: regularVideos,
+                            onSelect: { selectVideo($0, from: regularVideos) },
+                            loadMore: { homeVM.loadMoreMerged() }
+                        )
+                        let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }
+                        if isLoadingMore {
+                            ProgressView().frame(maxWidth: .infinity).padding()
+                        }
                     }
                 }
                 .refreshable { homeVM.load() }
@@ -350,6 +355,9 @@ public struct HomeView: View {
                             accessibilityID: "recommended.shortsRow"
                         )
                     }
+                    #if os(tvOS)
+                    .focusSection()
+                    #endif
                 }
                 ForEach(rowGroups) { group in
                     if let title = group.title, !title.isEmpty {

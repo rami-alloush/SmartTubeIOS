@@ -90,14 +90,16 @@ public struct SettingsView: View {
                 }
             }
 
-            Picker("Max Resolution", selection: $store.settings.preferredQuality) {
-                ForEach(AppSettings.VideoQuality.allCases, id: \.self) { q in
-                    Text(q == .auto ? "Auto" : q.rawValue).tag(q)
-                }
+            // Quality selection is disabled in this version — always Auto.
+            // Replaced with a static row so the popover cannot be opened.
+            HStack {
+                Text("Max Resolution")
+                Spacer()
+                Text("Auto")
+                    .foregroundStyle(.secondary)
             }
             .accessibilityIdentifier("settings.preferredQualityPicker")
-            .disabled(true)
-            // Quality selection is disabled in this version; always uses Auto.
+            .foregroundStyle(.primary)
 
             Picker("Preferred Audio Language", selection: $store.settings.preferredAudioLanguage) {
                 Text("System Default").tag(nil as String?)

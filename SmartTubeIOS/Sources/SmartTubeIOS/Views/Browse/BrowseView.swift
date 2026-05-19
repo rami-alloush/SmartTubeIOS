@@ -261,6 +261,7 @@ struct VideoGridSection: View {
                             if video.id == videos.last?.id { loadMore?() }
                         }
                     #else
+
                     VideoCardView(video: video, compact: true)
                         .padding(.horizontal)
                         .padding(.vertical, 6)
@@ -274,6 +275,9 @@ struct VideoGridSection: View {
                     Divider().padding(.horizontal)
                 }
             }
+            #if os(tvOS)
+            .focusSection()
+            #endif
         } else {
             #if os(tvOS)
             // LazyVGrid on tvOS causes the first row of grid items to appear
@@ -304,6 +308,9 @@ struct VideoGridSection: View {
             }
             .padding(.horizontal, 0)
             .padding(.vertical, 8)
+            #if os(tvOS)
+            .focusSection()
+            #endif
             #else
             LazyVGrid(columns: videoGridColumns, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
@@ -374,35 +381,41 @@ struct ShortsRowSection: View {
     #endif
 
     var body: some View {
+        #if os(tvOS)
+        // On tvOS, ScrollView(.horizontal) consumes UP/DOWN directional events
+        // from the Siri remote, trapping focus inside the row and preventing
+        // navigation to the video grid below. Use a plain HStack instead.
+        // A 1920-pt screen holds ~9 cards at 200 pt each; overflow is clipped.
+        HStack(alignment: .top, spacing: videoGridRowSpacing) {
+            ForEach(Array(videos.prefix(9))) { video in
+                Button { onSelect(video) } label: {
+                    ShortsCardView(video: video, onTap: { onSelect(video) })
+                        .frame(width: cardWidth, height: cardWidth * 16 / 9)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shorts.card.\(video.id)")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+        .accessibilityIdentifier(accessibilityID)
+        .focusSection()
+        #else
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
-                    #if os(tvOS)
-                    Button { onSelect(video) } label: {
-                        ShortsCardView(video: video, onTap: { onSelect(video) })
-                            .frame(width: cardWidth, height: cardWidth * 16 / 9)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("shorts.card.\(video.id)")
-                    .onAppear {
-                        if video.id == videos.last?.id { loadMore?() }
-                    }
-                    #else
                     ShortsCardView(video: video, onTap: { onSelect(video) })
                         .frame(width: cardWidth, height: cardWidth * 16 / 9)
                         .accessibilityIdentifier("shorts.card.\(video.id)")
                         .onAppear {
                             if video.id == videos.last?.id { loadMore?() }
                         }
-                    #endif
                 }
             }
             .padding(.horizontal)
             .padding(.vertical, 4)
         }
         .accessibilityIdentifier(accessibilityID)
-        #if os(tvOS)
-        .focusSection()
         #endif
     }
 }

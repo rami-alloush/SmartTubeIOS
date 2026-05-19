@@ -424,6 +424,9 @@
         }
       }
     },
+    "%lld s" : {
+
+    },
     "%lld video%@" : {
       "localizations" : {
         "ar" : {
@@ -14870,6 +14873,9 @@
         }
       }
     },
+    "Seek Back" : {
+
+    },
     "Seek Back: %lld s" : {
       "comment" : "Settings stepper label showing seek-back duration. %lld = seconds.",
       "extractionState" : "manual",
@@ -14953,6 +14959,9 @@
           }
         }
       }
+    },
+    "Seek Forward" : {
+
     },
     "Seek Forward: %lld s" : {
       "comment" : "Settings stepper label showing seek-forward duration. %lld = seconds.",

@@ -48,6 +48,7 @@
 		AA1100000000000000001502 /* TVLibraryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001501 /* TVLibraryUITests.swift */; };
 		AA1100000000000000001602 /* TVPlayerControlsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001601 /* TVPlayerControlsUITests.swift */; };
 		AA1100000000000000001702 /* TVVideoPlaybackRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001701 /* TVVideoPlaybackRegressionUITests.swift */; };
+		BE1E910C1C5E4CFBB7475AAE /* TVShortsDownNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8937147FE98F4B8490EB7D0A /* TVShortsDownNavigationUITests.swift */; };
 		AA1100000000000000001802 /* TVAudioAndCaptionPickerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001801 /* TVAudioAndCaptionPickerUITests.swift */; };
 		AA1100000000000000001902 /* DownloadsPlaybackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001901 /* DownloadsPlaybackUITests.swift */; };
 		AA1100000000000000001A02 /* HideShortsHomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000001A01 /* HideShortsHomeUITests.swift */; };
@@ -184,6 +185,7 @@
 		AA1100000000000000001501 /* TVLibraryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVLibraryUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001601 /* TVPlayerControlsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerControlsUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001701 /* TVVideoPlaybackRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVVideoPlaybackRegressionUITests.swift; sourceTree = "<group>"; };
+		8937147FE98F4B8490EB7D0A /* TVShortsDownNavigationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVShortsDownNavigationUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001801 /* TVAudioAndCaptionPickerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAudioAndCaptionPickerUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001901 /* DownloadsPlaybackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsPlaybackUITests.swift; sourceTree = "<group>"; };
 		AA1100000000000000001A01 /* HideShortsHomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HideShortsHomeUITests.swift; sourceTree = "<group>"; };
@@ -331,6 +333,7 @@
 				AA1100000000000000001501 /* TVLibraryUITests.swift */,
 				AA1100000000000000001601 /* TVPlayerControlsUITests.swift */,
 				AA1100000000000000001701 /* TVVideoPlaybackRegressionUITests.swift */,
+				8937147FE98F4B8490EB7D0A /* TVShortsDownNavigationUITests.swift */,
 				AA1100000000000000001801 /* TVAudioAndCaptionPickerUITests.swift */,
 				AA1100000000000000000EA1 /* AudioOnlyModeUITests.swift */,
 				AA1100000000000000000FA1 /* PlayerMoreMenuLayoutUITests.swift */,
@@ -748,6 +751,7 @@
 				AA1100000000000000001502 /* TVLibraryUITests.swift in Sources */,
 				AA1100000000000000001602 /* TVPlayerControlsUITests.swift in Sources */,
 				AA1100000000000000001702 /* TVVideoPlaybackRegressionUITests.swift in Sources */,
+				BE1E910C1C5E4CFBB7475AAE /* TVShortsDownNavigationUITests.swift in Sources */,
 				AA1100000000000000001802 /* TVAudioAndCaptionPickerUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -991,7 +995,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1421,7 +1425,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;

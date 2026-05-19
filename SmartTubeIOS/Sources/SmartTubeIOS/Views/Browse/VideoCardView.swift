@@ -1,5 +1,8 @@
 import SwiftUI
 import SmartTubeIOSCore
+import os
+
+private let focusLog = Logger(subsystem: "com.smarttube", category: "focus")
 
 // MARK: - Notification names
 
@@ -201,6 +204,9 @@ public struct VideoCardView: View {
         #else
         .onTapGesture { onSelect?() }
         .focused($isFocused)
+        .onChange(of: isFocused) { _, newValue in
+            focusLog.info("[VideoCard] isFocused=\(newValue) id=\(self.video.id)")
+        }
         .shadow(color: isFocused ? .white.opacity(0.9) : .clear, radius: 18, x: 0, y: 0)
         .scaleEffect(isFocused ? 1.08 : 1.0)
         .zIndex(isFocused ? 1 : 0)
