@@ -145,6 +145,7 @@ extension PlayerView {
             moreMenuAudioTrackRow
             moreMenuDescriptionRow
             moreMenuCommentsRow
+            moreMenuStatsForNerdsRow
             moreMenuCancelRow
         }
         .frame(maxWidth: .infinity)
@@ -635,6 +636,33 @@ extension PlayerView {
         .background(moreMenuFocusedRow == .comments ? Color.white.opacity(0.15) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .focused($moreMenuFocusedRow, equals: .comments)
+        #endif
+        Divider()
+    }
+
+    @ViewBuilder private var moreMenuStatsForNerdsRow: some View {
+        Button {
+            vm.toggleStatsForNerds()
+            showMoreMenu = false
+        } label: {
+            HStack {
+                Label("Stats for Nerds", systemImage: "chart.bar.xaxis")
+                Spacer()
+                if vm.statsForNerdsVisible {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("player.moreMenu.statsForNerds")
+        #if os(tvOS)
+        .background(moreMenuFocusedRow == .cancel ? Color.white.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         #endif
         Divider()
     }
