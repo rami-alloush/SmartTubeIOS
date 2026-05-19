@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA01000000000000000000D2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA01000000000000000000D1 /* PrivacyInfo.xcprivacy */; };
 		03863DDC82B3DC452E915BF7 /* DownloadLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FAE8C7AB41057B392DF731 /* DownloadLiveActivity.swift */; };
 		06412259452CCFBF300F2D4B /* SmartTubeIOS in Frameworks */ = {isa = PBXBuildFile; productRef = B8401470D9A590E7F3685830 /* SmartTubeIOS */; };
 		1A2B3C4D5E6F1A2B3C4D5E63 /* TVFocusChainUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F1A2B3C4D5E62 /* TVFocusChainUITests.swift */; };
@@ -163,6 +164,7 @@
 		AA01000000000000000000A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA01000000000000000000A3 /* SmartTubeShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SmartTubeShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA01000000000000000000C1 /* SmartTubeApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeApp.entitlements; sourceTree = "<group>"; };
+		AA01000000000000000000D1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA01000000000000000000C2 /* SmartTubeShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeShareExtension.entitlements; sourceTree = "<group>"; };
 		AA02000000000000000000B1 /* SiriShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcuts.swift; sourceTree = "<group>"; };
 		AA02000000000000000001B1 /* SiriShortcutsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcutsUITests.swift; sourceTree = "<group>"; };
@@ -369,6 +371,7 @@
 				673C1D002F7F20340021583B /* Launch Screen.storyboard */,
 				AA01000000000000000000C1 /* SmartTubeApp.entitlements */,
 				FA01000000000000000000A1 /* GoogleService-Info.plist */,
+				AA01000000000000000000D1 /* PrivacyInfo.xcprivacy */,
 			);
 			path = SmartTubeApp;
 			sourceTree = "<group>";
@@ -648,6 +651,7 @@
 				673C1D012F7F20340021583B /* Launch Screen.storyboard in Resources */,
 				494A17316084B602873D7C05 /* Assets.xcassets in Resources */,
 				FB01000000000000000000A1 /* GoogleService-Info.plist in Resources */,
+				AA01000000000000000000D2 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
