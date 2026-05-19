@@ -4,6 +4,17 @@ import SmartTubeIOSCore
 
 private let playerLog = CrashlyticsLogger(category: "Player")
 
+// MARK: - Player Abstraction
+
+/// Abstracts `AVPlayer.replaceCurrentItem(with:)` so `PlaybackQualityManager` can be
+/// tested without real network or playback. `AVPlayer` satisfies this via the extension
+/// below; tests supply a `MockPlayer`.
+protocol PlayerItemSwappable: AnyObject {
+    var rate: Float { get set }
+    func replaceCurrentItem(with item: AVPlayerItem?)
+}
+extension AVPlayer: PlayerItemSwappable {}
+
 // MARK: - QualityDelegate
 
 @MainActor
@@ -41,12 +52,12 @@ final class PlaybackQualityManager {
     // MARK: - Dependencies
 
     @ObservationIgnored weak var delegate: (any QualityDelegate)?
-    let player: AVPlayer
+    let player: any PlayerItemSwappable
     @ObservationIgnored let session: URLSession
 
     // MARK: - Init
 
-    init(player: AVPlayer, session: URLSession = .shared) {
+    init(player: any PlayerItemSwappable, session: URLSession = .shared) {
         self.player = player
         self.session = session
     }
