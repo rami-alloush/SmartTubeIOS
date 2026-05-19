@@ -168,6 +168,11 @@ final class MockInnerTubeAPI: InnerTubeAPIProtocol {
         if let e = errorToThrow { throw e }
     }
 
+    func removeFromWatchLater(videoId: String) async throws {
+        calls.append(Call(method: "removeFromWatchLater", args: [videoId]))
+        if let e = errorToThrow { throw e }
+    }
+
     func sendFeedback(token: String) async throws {
         calls.append(Call(method: "sendFeedback", args: [token]))
         if let e = errorToThrow { throw e }

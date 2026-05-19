@@ -15,22 +15,38 @@ protocol PlayerItemSwappable: AnyObject {
 }
 extension AVPlayer: PlayerItemSwappable {}
 
-// MARK: - QualityDelegate
+// MARK: - QualityContext
 
+/// Read-only (and narrowly write-accessible) context that `PlaybackQualityManager` pulls
+/// from its coordinator (`PlaybackViewModel`). ISP-1: separates state reads from callbacks.
 @MainActor
-protocol QualityDelegate: AnyObject {
+protocol QualityContext: AnyObject {
     var playerInfo: PlayerInfo? { get }
     var settings: AppSettings { get }
     var currentVideo: Video? { get }
     var currentTime: TimeInterval { get }
-    var error: Error? { get set }
     var toastMessage: String? { get set }
-    var isPlaying: Bool { get set }
     var isSwappingItem: Bool { get set }
-    func seek(to seconds: Double)
-    func loadAudioTracks(from item: AVPlayerItem)
-    func retryWith403Recovery(video: Video, originalError: Error?) async
 }
+
+// MARK: - QualityEventHandler
+
+/// Callbacks fired by `PlaybackQualityManager` when a player-item state change requires
+/// coordinator-level action (seek, audio-track load, error recovery).
+/// ISP-1: separates lifecycle callbacks from the context reads above.
+@MainActor
+protocol QualityEventHandler: AnyObject {
+    /// Called when a quality-switch `AVPlayerItem` becomes `.readyToPlay`.
+    /// The coordinator must seek to `seekTo` (if > 0), mark `isPlaying`, and load audio tracks.
+    func qualityItemDidBecomeReady(_ item: AVPlayerItem, seekTo: TimeInterval)
+    /// Called when a quality-switch `AVPlayerItem` enters `.failed` with the full error context.
+    /// The coordinator uses `qualityRecoveryAction(for:qualityCap:hasAppliedH264Cap:)` to
+    /// dispatch the appropriate recovery path.
+    func qualityItemDidFail(error: Error?, qualityCap: Int?, hasAppliedH264Cap: Bool) async
+}
+
+/// Combined alias used by `PlaybackQualityManager.delegate`.
+typealias QualityDelegate = QualityContext & QualityEventHandler
 
 // MARK: - PlaybackQualityManager
 
@@ -125,42 +141,16 @@ final class PlaybackQualityManager {
                 guard let self, !Task.isCancelled else { return }
                 switch status {
                 case .readyToPlay:
-                    if time > 0 { self.delegate?.seek(to: time) }
                     self.player.rate = Float(self.delegate?.settings.playbackSpeed ?? 1)
-                    self.delegate?.isPlaying = true
-                    if let delegate = self.delegate {
-                        delegate.loadAudioTracks(from: item)
-                    }
+                    await self.delegate?.qualityItemDidBecomeReady(item, seekTo: time)
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
-                    let nsErr = (item.error as? NSError) ?? NSError(domain: "", code: 0)
-                    let action = qualityRecoveryAction(
-                        for: nsErr,
+                    await self.delegate?.qualityItemDidFail(
+                        error: item.error,
                         qualityCap: qualityCap,
                         hasAppliedH264Cap: self.hasAppliedH264Cap
                     )
-                    switch action {
-                    case .retry403Recovery:
-                        if let video = self.delegate?.currentVideo {
-                            playerLog.notice("Quality-switch 403 — invalidating cache and re-fetching player info")
-                            await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
-                            self.selectedFormat = nil
-                            await self.delegate?.retryWith403Recovery(video: video, originalError: item.error)
-                        }
-                    case .revertToAuto:
-                        playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
-                        self.selectedFormat = nil
-                        self.delegate?.toastMessage = "Quality unavailable — reverting to Auto"
-                        await self.reloadHLSItem(seekTo: self.delegate?.currentTime ?? 0, qualityCap: nil)
-                    case .retryWithH264Cap:
-                        playerLog.notice("Auto HLS Cannot Decode — retrying with H.264 bitrate cap")
-                        self.hasAppliedH264Cap = true
-                        self.delegate?.toastMessage = "Adjusting quality for this device…"
-                        await self.reloadHLSItemH264Capped(seekTo: self.delegate?.currentTime ?? 0)
-                    case .fail:
-                        self.delegate?.error = item.error
-                    }
                 case .unknown:
                     break
                 @unknown default:
@@ -296,17 +286,17 @@ final class PlaybackQualityManager {
                 guard let self, !Task.isCancelled else { return }
                 switch status {
                 case .readyToPlay:
-                    if time > 0 { self.delegate?.seek(to: time) }
                     self.player.rate = Float(self.delegate?.settings.playbackSpeed ?? 1)
-                    self.delegate?.isPlaying = true
-                    if let delegate = self.delegate {
-                        delegate.loadAudioTracks(from: item)
-                    }
+                    await self.delegate?.qualityItemDidBecomeReady(item, seekTo: time)
                     playerLog.notice("✅ H.264-capped AVPlayerItem readyToPlay")
                 case .failed:
                     let err = item.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ H.264-capped AVPlayerItem also failed: \(err)")
-                    self.delegate?.error = item.error
+                    await self.delegate?.qualityItemDidFail(
+                        error: item.error,
+                        qualityCap: nil,
+                        hasAppliedH264Cap: self.hasAppliedH264Cap
+                    )
                 case .unknown:
                     break
                 @unknown default:

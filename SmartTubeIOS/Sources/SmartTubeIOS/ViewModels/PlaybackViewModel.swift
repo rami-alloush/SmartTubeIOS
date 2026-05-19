@@ -369,9 +369,47 @@ extension PlaybackViewModel: SponsorBlockDelegate {
     public func snapCurrentTime(to seconds: Double) { currentTime = seconds }
 }
 
-extension PlaybackViewModel: QualityDelegate {
+extension PlaybackViewModel: QualityContext {}
+
+extension PlaybackViewModel: QualityEventHandler {
     func loadAudioTracks(from item: AVPlayerItem) {
         audioManager.loadAudioTracks(from: item)
+    }
+
+    func qualityItemDidBecomeReady(_ item: AVPlayerItem, seekTo time: TimeInterval) {
+        if time > 0 { seek(to: time) }
+        isPlaying = true
+        loadAudioTracks(from: item)
+    }
+
+    func qualityItemDidFail(error: Error?, qualityCap: Int?, hasAppliedH264Cap: Bool) async {
+        let nsErr = (error as? NSError) ?? NSError(domain: "", code: 0)
+        let action = qualityRecoveryAction(
+            for: nsErr,
+            qualityCap: qualityCap,
+            hasAppliedH264Cap: hasAppliedH264Cap
+        )
+        switch action {
+        case .retry403Recovery:
+            if let video = currentVideo {
+                playerLog.notice("Quality-switch 403 — invalidating cache and re-fetching player info")
+                await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                qualityManager.selectedFormat = nil
+                await retryWith403Recovery(video: video, originalError: error)
+            }
+        case .revertToAuto:
+            playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
+            qualityManager.selectedFormat = nil
+            toastMessage = "Quality unavailable — reverting to Auto"
+            await qualityManager.reloadHLSItem(seekTo: currentTime, qualityCap: nil)
+        case .retryWithH264Cap:
+            playerLog.notice("Auto HLS Cannot Decode — retrying with H.264 bitrate cap")
+            qualityManager.hasAppliedH264Cap = true
+            toastMessage = "Adjusting quality for this device…"
+            await qualityManager.reloadHLSItemH264Capped(seekTo: currentTime)
+        case .fail(let e):
+            self.error = e
+        }
     }
 }
 
