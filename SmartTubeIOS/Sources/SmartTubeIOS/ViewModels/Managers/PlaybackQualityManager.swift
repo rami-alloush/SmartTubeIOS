@@ -42,11 +42,13 @@ final class PlaybackQualityManager {
 
     @ObservationIgnored weak var delegate: (any QualityDelegate)?
     let player: AVPlayer
+    @ObservationIgnored let session: URLSession
 
     // MARK: - Init
 
-    init(player: AVPlayer) {
+    init(player: AVPlayer, session: URLSession = .shared) {
         self.player = player
+        self.session = session
     }
 
     // MARK: - Interface
@@ -179,7 +181,7 @@ final class PlaybackQualityManager {
         var request = URLRequest(url: url)
         request.setValue(InnerTubeClients.iOS.userAgent, forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 8
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+        guard let (data, _) = try? await self.session.data(for: request),
               let text = String(data: data, encoding: .utf8) else {
             playerLog.notice("HLS manifest fetch failed — showing all quality options")
             return [:]

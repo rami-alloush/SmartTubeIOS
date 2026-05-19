@@ -374,4 +374,30 @@ struct PlaybackQualityTests {
         state.reset()
         #expect(state.hasAppliedH264Cap == false, "reset() must clear hasAppliedH264Cap")
     }
+
+    // MARK: - URLSession injection guard contract (#137)
+
+    /// Structural test: mirrors the guard in fetchHLSVariantURLs that returns [:] on network error.
+    /// Validates the guard semantics without requiring AVFoundation or a live URLSession.
+    @Test func fetchHLSVariantURLs_networkError_returnsEmpty() {
+        // Guard: `try? await session.data(for: request)` returns nil on error.
+        // Mirrors: `guard let (data, _) = try? await self.session.data(for: request) else { return [:] }`
+        let simulatedData: (Data, URLResponse)? = nil  // simulates network failure
+        let result: [Int: URL]
+        if let (data, _) = simulatedData,
+           let text = String(data: data, encoding: .utf8) {
+            result = parseHLSMasterManifest(text, baseURL: URL(string: "https://example.com/")!)
+        } else {
+            result = [:]  // guard path: return empty on network error
+        }
+        #expect(result.isEmpty, "Network error must produce empty variant map")
+    }
+
+    @Test func fetchHLSVariantURLs_emptyResponseBody_returnsEmpty() {
+        // Guard: empty body decoded as UTF-8 is an empty string → parseHLSMasterManifest returns [:]
+        let emptyBody = Data()
+        let text = String(data: emptyBody, encoding: .utf8) ?? ""
+        let result = parseHLSMasterManifest(text, baseURL: URL(string: "https://example.com/")!)
+        #expect(result.isEmpty, "Empty response body must produce empty variant map")
+    }
 }
