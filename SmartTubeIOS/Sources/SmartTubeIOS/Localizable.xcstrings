@@ -170,6 +170,9 @@
         }
       }
     },
+    "\"%@\" was removed from your Watch Later playlist." : {
+
+    },
     "%.2g×" : {
       "localizations" : {
         "ar" : {
@@ -4268,6 +4271,9 @@
           }
         }
       }
+    },
+    "Could Not Remove" : {
+
     },
     "Could Not Save" : {
       "localizations" : {
@@ -13029,6 +13035,9 @@
         }
       }
     },
+    "Remove from Watch Later" : {
+
+    },
     "Remove SponsorBlock Exclusion" : {
       "comment" : "Channel toolbar button — removes channel from SponsorBlock exclusion list",
       "extractionState" : "manual",
@@ -13112,6 +13121,9 @@
           }
         }
       }
+    },
+    "Removed from Watch Later" : {
+
     },
     "Replace clickbait titles and thumbnails with community-sourced alternatives." : {
       "comment" : "DeArrow settings section footer",
@@ -17558,6 +17570,9 @@
           }
         }
       }
+    },
+    "Stats for Nerds" : {
+
     },
     "Subscriptions" : {
       "comment" : "Library section tab label",
