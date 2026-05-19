@@ -184,56 +184,7 @@ final class PlaybackQualityManager {
             playerLog.notice("HLS manifest fetch failed — showing all quality options")
             return [:]
         }
-        var variants: [Int: URL] = [:]
-        var variantIsH264: [Int: Bool] = [:]
-        let baseURL = url.deletingLastPathComponent()
-        let lines = text.components(separatedBy: .newlines)
-        var pendingHeight: Int? = nil
-        var pendingIsH264: Bool = false
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("#EXT-X-STREAM-INF") {
-                pendingHeight = nil
-                pendingIsH264 = false
-                if let range = trimmed.range(of: #"RESOLUTION=\d+x(\d+)"#, options: .regularExpression) {
-                    let match = String(trimmed[range])
-                    if let xIdx = match.firstIndex(of: "x"),
-                       let height = Int(match[match.index(after: xIdx)...]) {
-                        pendingHeight = height
-                    }
-                }
-                if let codecsRange = trimmed.range(of: #"CODECS="[^"]*""#, options: .regularExpression) {
-                    pendingIsH264 = trimmed[codecsRange].contains("avc1")
-                }
-            } else if !trimmed.hasPrefix("#"), !trimmed.isEmpty, let height = pendingHeight {
-                let variantURL: URL?
-                if trimmed.hasPrefix("http") {
-                    variantURL = URL(string: trimmed)
-                } else {
-                    variantURL = URL(string: trimmed, relativeTo: baseURL).map { URL(string: $0.absoluteString) } ?? nil
-                }
-                if let resolvedURL = variantURL {
-                    if variants[height] == nil {
-                        variants[height] = resolvedURL
-                        variantIsH264[height] = pendingIsH264
-                    } else {
-#if !os(tvOS)
-                        if !(variantIsH264[height] ?? false) && pendingIsH264 {
-                            variants[height] = resolvedURL
-                            variantIsH264[height] = true
-                        }
-#endif
-                    }
-                }
-                pendingHeight = nil
-                pendingIsH264 = false
-            } else if trimmed.hasPrefix("#") {
-                if pendingHeight != nil, !trimmed.hasPrefix("#EXT-X-STREAM-INF") {
-                    pendingHeight = nil
-                    pendingIsH264 = false
-                }
-            }
-        }
+        let variants = parseHLSMasterManifest(text, baseURL: url.deletingLastPathComponent())
         playerLog.notice("HLS manifest parsed: heights=\(variants.keys.sorted().reversed())")
         return variants
     }
