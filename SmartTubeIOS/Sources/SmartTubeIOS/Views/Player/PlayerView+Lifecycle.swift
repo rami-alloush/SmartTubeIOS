@@ -82,6 +82,13 @@ extension PlayerView {
                 if vm.isAudioOnlyMode {
                     audioOnlyThumbnailOverlay
                 }
+                #elseif os(macOS)
+                PlayerNSLayerView(player: vm.player, videoGravity: store.settings.videoGravityMode.avGravity)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+                if vm.isAudioOnlyMode {
+                    audioOnlyThumbnailOverlay
+                }
                 #else
                 Color.black.ignoresSafeArea()
                 #endif

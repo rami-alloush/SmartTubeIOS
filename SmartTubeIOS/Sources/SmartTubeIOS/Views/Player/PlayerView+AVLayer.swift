@@ -4,6 +4,9 @@ import AVKit
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Platform-specific AVKit / UIKit views
 //
@@ -275,3 +278,41 @@ struct PlayerSwipeGestureOverlay: UIViewRepresentable {
 }
 #endif // os(iOS)
 #endif // os(iOS) || os(tvOS)
+
+// MARK: - PlayerNSLayerView (macOS)
+
+#if os(macOS)
+/// NSViewRepresentable wrapping an AVPlayerLayer directly — the AppKit
+/// equivalent of PlayerAVLayerView on iOS/tvOS.
+struct PlayerNSLayerView: NSViewRepresentable {
+    let player: AVPlayer?
+    var videoGravity: AVLayerVideoGravity = .resizeAspect
+
+    func makeNSView(context: Context) -> _PlayerNSView {
+        let view = _PlayerNSView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = videoGravity
+        return view
+    }
+
+    func updateNSView(_ nsView: _PlayerNSView, context: Context) {
+        nsView.playerLayer.player = player
+        nsView.playerLayer.videoGravity = videoGravity
+    }
+
+    final class _PlayerNSView: NSView {
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer = AVPlayerLayer()
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+
+        override func layout() {
+            super.layout()
+            playerLayer.frame = bounds
+        }
+    }
+}
+#endif
