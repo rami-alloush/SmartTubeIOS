@@ -89,11 +89,13 @@ final class DASHQualitySwitchUITests: XCTestCase {
         //   720p(60)  → 1280×720    suffix "×720"
         //   480p      → 854×480     suffix "×480"
         //   1080p(60) → 1920×1080   suffix "×1080"
+        //   144p      → 256×144     suffix "×144"
         let cross = Self.cross
         let steps: [(quality: String, suffix: String)] = [
             ("720p",  "\(cross)720"),
             ("480p",  "\(cross)480"),
             ("1080p", "\(cross)1080"),
+            ("144p",  "\(cross)144"),
         ]
 
         for (quality, suffix) in steps {
