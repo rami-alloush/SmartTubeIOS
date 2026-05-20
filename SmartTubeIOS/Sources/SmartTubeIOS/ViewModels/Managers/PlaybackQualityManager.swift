@@ -239,14 +239,17 @@ final class PlaybackQualityManager {
 
         guard let videoURL else {
             playerLog.error("[quality] reloadDASHItem: no video URL for quality=\(label) — cannot switch")
+            selectedFormat = nil  // Revert so Stats for Nerds shows actual presentationSize
             return
         }
         guard let audioURL = info.bestAdaptiveAudioURL else {
             playerLog.error("[quality] reloadDASHItem: no adaptive audio URL — cannot rebuild composition")
+            selectedFormat = nil  // Revert so Stats for Nerds shows actual presentationSize
             return
         }
 
-        playerLog.notice("[quality] DASH switch → \(label)")
+        let codecLabel = format?.codecShortLabel ?? ""
+        playerLog.notice("[quality] DASH switch → \(label)\(codecLabel.isEmpty ? "" : " (\(codecLabel))") videoURL=\(videoURL.lastPathComponent.prefix(60))")
         await delegate?.qualitySelectDASHFormat(videoURL: videoURL, audioURL: audioURL, seekTo: time)
     }
 

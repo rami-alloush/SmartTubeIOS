@@ -1,11 +1,19 @@
 import AVFoundation
+import os
 import SmartTubeIOSCore
+
+private let qualityLog = CrashlyticsLogger(category: "Quality")
 
 // MARK: - Stream Format / HLS Quality Selection (thin wrapper — logic lives in PlaybackQualityManager)
 
 extension PlaybackViewModel {
 
     public func selectFormat(_ format: VideoFormat?) {
+        if let fmt = format {
+            qualityLog.notice("[quality] selectFormat → \(fmt.qualityLabel) (\(fmt.codecShortLabel)) \(fmt.width)×\(fmt.height)@\(fmt.fps)fps")
+        } else {
+            qualityLog.notice("[quality] selectFormat → Auto (clearing selectedFormat)")
+        }
         qualityManager.selectFormat(format)
         // Refresh Stats for Nerds immediately so the overlay shows the new quality
         // without waiting for the next periodic-observer tick (which may not fire

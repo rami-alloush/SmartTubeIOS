@@ -76,6 +76,12 @@ extension PlaybackViewModel {
         let droppedFrames = logEvent.map { $0.numberOfDroppedVideoFrames } ?? 0
         let stalls = logEvent.map { $0.numberOfStalls } ?? 0
 
+        let actualSizeStr = (presentationSize.width > 0 && presentationSize.height > 0)
+            ? "\(Int(presentationSize.width))×\(Int(presentationSize.height))"
+            : "0×0"
+        let resSource = selectedFormat != nil ? "selectedFormat(\(selectedFormat!.qualityLabel))" : "presentationSize"
+        playerLog.notice("[stats] snapshot — res=\(res) codec=\(codec) source=\(resSource) actualPresentationSize=\(actualSizeStr)")
+
         statsSnapshot = StatsForNerdsSnapshot(
             videoId: videoId,
             displayResolution: res,

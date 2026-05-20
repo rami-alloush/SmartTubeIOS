@@ -83,6 +83,11 @@ extension PlayerView {
                                 HStack {
                                     Text(fmt.qualityLabel)
                                         .foregroundStyle(.primary)
+                                    if !fmt.codecShortLabel.isEmpty {
+                                        Text(fmt.codecShortLabel)
+                                            .foregroundStyle(.secondary)
+                                            .font(.caption)
+                                    }
                                     Spacer()
                                     if vm.selectedFormat?.id == fmt.id {
                                         Image(systemName: AppSymbol.checkmark)
@@ -94,6 +99,10 @@ extension PlayerView {
                                 .padding(.vertical, 12)
                             }
                             .buttonStyle(.plain)
+                            // Explicit accessibility label keeps XCTest queries like
+                            // `label BEGINSWITH "720p"` working even when the button HStack
+                            // contains multiple Text views (e.g. the codec short label).
+                            .accessibilityLabel(fmt.qualityLabel)
                             Divider()
                         }
                     }

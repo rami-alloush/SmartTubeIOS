@@ -337,6 +337,8 @@ extension PlaybackViewModel {
             guard let sourceVideoTrack = vTracks.first,
                   let sourceAudioTrack = aTracks.first else {
                 playerLog.error("❌ [quality/DASH] no tracks in remote assets — quality switch failed")
+                selectedFormat = nil
+                if statsForNerdsVisible { updateStatsSnapshot() }
                 return
             }
 
@@ -349,6 +351,8 @@ extension PlaybackViewModel {
                   let compAudio = composition.addMutableTrack(withMediaType: .audio,
                                                               preferredTrackID: kCMPersistentTrackID_Invalid) else {
                 playerLog.error("❌ [quality/DASH] could not add composition tracks")
+                selectedFormat = nil
+                if statsForNerdsVisible { updateStatsSnapshot() }
                 return
             }
 
@@ -376,6 +380,8 @@ extension PlaybackViewModel {
                 case .failed:
                     let err = compositeItem.error.map { "\($0)" } ?? "nil"
                     playerLog.error("❌ [quality/DASH] AVPlayerItem failed: \(err)")
+                    selectedFormat = nil
+                    if statsForNerdsVisible { updateStatsSnapshot() }
                     return
                 case .unknown:
                     continue
@@ -385,6 +391,8 @@ extension PlaybackViewModel {
             }
         } catch {
             playerLog.error("❌ [quality/DASH] composition build error: \(error)")
+            selectedFormat = nil
+            if statsForNerdsVisible { updateStatsSnapshot() }
         }
     }
 
