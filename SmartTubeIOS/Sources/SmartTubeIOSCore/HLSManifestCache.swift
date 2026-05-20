@@ -17,10 +17,9 @@ public struct HLSManifestCache {
 
     // MARK: - Shared instance
 
-    /// The shared singleton. `@MainActor`-isolated callers (PlaybackQualityManager) access
-    /// this directly. Thread safety comes from the `@MainActor` context; the struct itself
-    /// is not `Sendable` and should not be accessed off the main actor.
-    nonisolated(unsafe) public static var shared = HLSManifestCache()
+    /// The shared singleton. Access is compiler-enforced to `@MainActor` at every call site.
+    /// All callers (`PlaybackQualityManager`, `PlaybackViewModel`) are already `@MainActor`.
+    @MainActor public static var shared = HLSManifestCache()
 
     // MARK: - Configuration
 
