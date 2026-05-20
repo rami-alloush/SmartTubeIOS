@@ -401,7 +401,7 @@ extension PlaybackViewModel: QualityEventHandler {
             playerLog.notice("Quality-switch failed — reverting selectedFormat to Auto")
             qualityManager.selectedFormat = nil
             toastMessage = "Quality unavailable — reverting to Auto"
-            await qualityManager.reloadHLSItem(seekTo: currentTime, qualityCap: nil)
+            await qualityManager.reloadHLSItem(seekTo: currentTime, quality: .auto)
         case .retryWithH264Cap:
             playerLog.notice("Auto HLS Cannot Decode — retrying with H.264 bitrate cap")
             qualityManager.hasAppliedH264Cap = true

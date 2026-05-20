@@ -9,8 +9,8 @@ extension PlaybackViewModel {
         qualityManager.selectFormat(format)
     }
 
-    func reloadHLSItem(seekTo time: TimeInterval, qualityCap: Int?) async {
-        await qualityManager.reloadHLSItem(seekTo: time, qualityCap: qualityCap)
+    func reloadHLSItem(seekTo time: TimeInterval, quality: AppSettings.VideoQuality) async {
+        await qualityManager.reloadHLSItem(seekTo: time, quality: quality)
     }
 
     func fetchHLSVariantURLs(url: URL) async -> [Int: URL] {

@@ -38,7 +38,8 @@ extension PlaybackViewModel {
                 audioOnlyItemActive = false
                 Task { [weak self] in
                     guard let self else { return }
-                    await self.reloadHLSItem(seekTo: savedTime, qualityCap: nil)
+                    // Restore the user's quality preference (fixes W6: passing nil dropped the preference).
+                    await self.reloadHLSItem(seekTo: savedTime, quality: settings.preferredQuality)
                 }
             }
         }

@@ -101,7 +101,7 @@ final class PlaybackQualityManager {
         itemObserverTask = nil
     }
 
-    /// Switch to a specific quality. Pass `nil` to return to Auto (no resolution cap).
+    /// Switch to a specific quality. Pass `.auto` to return to Auto (no resolution cap).
     func selectFormat(_ format: VideoFormat?) {
         selectedFormat = format
         delegate?.toastMessage = format.map { "\($0.height)p" } ?? "Auto"
@@ -109,31 +109,33 @@ final class PlaybackQualityManager {
         qualityTask = nil
         guard let delegate else { return }
         let savedTime = delegate.currentTime
+        let quality = format.flatMap { AppSettings.VideoQuality.from(height: $0.height) } ?? .auto
         qualityTask = Task { [weak self] in
-            await self?.reloadHLSItem(seekTo: savedTime, qualityCap: format?.height)
+            await self?.reloadHLSItem(seekTo: savedTime, quality: quality)
         }
     }
 
     /// Rebuilds the HLS player item from the stored `playerInfo`.
-    func reloadHLSItem(seekTo time: TimeInterval, qualityCap: Int?) async {
+    func reloadHLSItem(seekTo time: TimeInterval, quality: AppSettings.VideoQuality) async {
         guard let hlsURL = delegate?.playerInfo?.hlsURL else { return }
         guard !Task.isCancelled else { return }
         let uaOpts: [String: Any] = [
             "AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]
         ]
+        let cap = quality.maxHeight
         let streamURL: URL
-        if let cap = qualityCap, let variantURL = hlsVariantURLs[cap] {
+        if let cap, let variantURL = hlsVariantURLs[cap] {
             streamURL = variantURL
             playerLog.notice("Quality → \(cap)p via direct variant playlist")
         } else {
             streamURL = hlsURL
-            playerLog.notice("Quality → \(qualityCap.map { "\($0)p" } ?? "Auto") via HLS master (reloaded)")
+            playerLog.notice("Quality → \(cap.map { "\($0)p" } ?? "Auto") via HLS master (reloaded)")
         }
         itemObserverTask?.cancel()
         let asset = AVURLAsset(url: streamURL, options: uaOpts)
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .spectral
-        if let cap = qualityCap, hlsVariantURLs[cap] == nil {
+        if let cap, hlsVariantURLs[cap] == nil {
             let h = CGFloat(cap)
             item.preferredMaximumResolution = CGSize(width: h * 4, height: h)
             item.preferredPeakBitRate = peakBitRate(for: cap)
@@ -150,7 +152,7 @@ final class PlaybackQualityManager {
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
                     await self.delegate?.qualityItemDidFail(
                         error: item.error,
-                        qualityCap: qualityCap,
+                        qualityCap: cap,
                         hasAppliedH264Cap: self.hasAppliedH264Cap
                     )
                 case .unknown:
