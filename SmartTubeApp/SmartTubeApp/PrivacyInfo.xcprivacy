@@ -5,10 +5,7 @@
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
-	<array>
-		<string>googlevideo.com</string>
-		<string>youtube.com</string>
-	</array>
+	<array/>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>
