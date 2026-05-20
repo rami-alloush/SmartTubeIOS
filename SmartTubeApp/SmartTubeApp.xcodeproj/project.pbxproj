@@ -164,6 +164,7 @@
 		AA01000000000000000000A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA01000000000000000000A3 /* SmartTubeShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SmartTubeShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA01000000000000000000C1 /* SmartTubeApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeApp.entitlements; sourceTree = "<group>"; };
+		AA01000000000000000000C2 /* SmartTubeApp-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SmartTubeApp-macOS.entitlements"; sourceTree = "<group>"; };
 		AA01000000000000000000C2 /* SmartTubeShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartTubeShareExtension.entitlements; sourceTree = "<group>"; };
 		AA01000000000000000000D1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA02000000000000000000B1 /* SiriShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcuts.swift; sourceTree = "<group>"; };
@@ -371,6 +372,7 @@
 				AE55B486AFD7F51FEF1874FF /* Assets.xcassets */,
 				673C1D002F7F20340021583B /* Launch Screen.storyboard */,
 				AA01000000000000000000C1 /* SmartTubeApp.entitlements */,
+				AA01000000000000000000C2 /* SmartTubeApp-macOS.entitlements */,
 				FA01000000000000000000A1 /* GoogleService-Info.plist */,
 				AA01000000000000000000D1 /* PrivacyInfo.xcprivacy */,
 				CA34C2AD8A70726C11C5F852 /* Info-macOS.plist */,
@@ -897,6 +899,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = SmartTubeApp/SmartTubeApp.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = SmartTubeApp/SmartTubeApp-macOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -905,7 +908,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = SmartTubeApp/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = SmartTubeApp/Info-macOS.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "SmartTubeApp/Info-macOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Smart Tube";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1007,7 +1010,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1374,6 +1377,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = SmartTubeApp/SmartTubeApp.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = SmartTubeApp/SmartTubeApp-macOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -1382,7 +1386,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = SmartTubeApp/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = SmartTubeApp/Info-macOS.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "SmartTubeApp/Info-macOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Smart Tube";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1439,7 +1443,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
