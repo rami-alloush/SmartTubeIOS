@@ -178,8 +178,7 @@ struct PlaybackQualityTests {
                            fps: 30, mimeType: "video/mp4", url: url, bitrate: bitrate)
     }
 
-    /// Mirrors applyQualityPreference(to:) in PlaybackQualityManager — finds best format
-    /// at or below maxHeight and returns the variant URL if present.
+    /// Test helper: finds best format at or below maxHeight and returns the variant URL if present.
     private func applyQualityPreference(
         availableFormats: [VideoFormat],
         hlsVariantURLs: [Int: URL],
