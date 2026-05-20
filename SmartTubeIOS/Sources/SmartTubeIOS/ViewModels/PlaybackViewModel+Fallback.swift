@@ -134,7 +134,17 @@ extension PlaybackViewModel {
         let effectiveURL = url
         var applyHLSHints = false
         if let hlsURL = info.hlsURL, url == hlsURL {
-            let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
+            let videoId = video.id
+            let variantURLs: [Int: URL]
+            if let cached = PlaybackQualityManager.cachedHLSVariants(for: videoId) {
+                playerLog.notice("[\(label)] HLS: using cached manifest for \(videoId) variantCount=\(cached.count)")
+                variantURLs = cached
+            } else {
+                variantURLs = await fetchHLSVariantURLs(url: hlsURL)
+                if !variantURLs.isEmpty {
+                    PlaybackQualityManager.cacheHLSVariants(variantURLs, for: videoId)
+                }
+            }
             playerLog.notice("[\(label)] HLS: hlsURL=yes variantCount=\(variantURLs.count) preferredQuality=\(settings.preferredQuality)")
             if !variantURLs.isEmpty {
                 hlsVariantURLs = variantURLs

@@ -536,6 +536,40 @@ struct PlaybackQualityTests {
     // import it here. These structural tests document the protocol contract using local
     // mirror types.
 
+    // MARK: - HLS manifest cache (#163)
+
+    /// Task #163: cached variants are returned for the same videoId within the TTL window.
+    @Test func hlsManifestCache_returnsStoredVariantsWithinTTL() {
+        var cache = HLSManifestCache()
+        let videoId = "test-video-abc"
+        let variants: [Int: URL] = [
+            1080: URL(string: "https://example.com/1080.m3u8")!,
+            720:  URL(string: "https://example.com/720.m3u8")!
+        ]
+        cache.store(variants, for: videoId)
+        let result = cache.variants(for: videoId)
+        #expect(result != nil, "Cache must return variants immediately after storing them")
+        #expect(result?[1080] == variants[1080], "1080p URL must be preserved in cache")
+        #expect(result?[720]  == variants[720],  "720p URL must be preserved in cache")
+    }
+
+    /// Task #163: a different videoId must not be served from the cache.
+    @Test func hlsManifestCache_missForUnknownVideoId() {
+        var cache = HLSManifestCache()
+        let result = cache.variants(for: "video-that-was-never-cached-xyz")
+        #expect(result == nil, "Unknown videoId must return nil — no cross-contamination between videos")
+    }
+
+    /// Task #163: invalidating a videoId removes it from the cache.
+    @Test func hlsManifestCache_invalidateRemovesEntry() {
+        var cache = HLSManifestCache()
+        let videoId = "video-to-invalidate"
+        cache.store([1080: URL(string: "https://example.com/1080.m3u8")!], for: videoId)
+        cache.invalidate(for: videoId)
+        #expect(cache.variants(for: videoId) == nil, "Invalidated entry must not be returned")
+    }
+
+
     @Test @MainActor func playerItemSwappable_replaceCurrentItem_calledOnce() async {
         // Structural: documents that PlaybackQualityManager calls replaceCurrentItem exactly
         // once per reload path (both reloadHLSItem and reloadHLSItemH264Capped).

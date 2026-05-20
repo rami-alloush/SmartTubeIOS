@@ -71,6 +71,19 @@ final class PlaybackQualityManager {
     @ObservationIgnored var qualityTask: Task<Void, Never>? = nil
     @ObservationIgnored private var itemObserverTask: Task<Void, Never>? = nil
 
+    // MARK: - Cross-load HLS manifest cache
+    //
+    // Delegated to HLSManifestCache.shared (SmartTubeIOSCore). Survives reset() so
+    // revisited videos skip the manifest fetch. See HLSManifestCache for TTL / capacity.
+
+    static func cachedHLSVariants(for videoId: String) -> [Int: URL]? {
+        HLSManifestCache.shared.variants(for: videoId)
+    }
+
+    static func cacheHLSVariants(_ variants: [Int: URL], for videoId: String) {
+        HLSManifestCache.shared.store(variants, for: videoId)
+    }
+
     // MARK: - Dependencies
 
     @ObservationIgnored weak var delegate: (any QualityDelegate)?
