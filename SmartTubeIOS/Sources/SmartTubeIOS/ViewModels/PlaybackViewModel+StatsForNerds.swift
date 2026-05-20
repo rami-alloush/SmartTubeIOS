@@ -21,18 +21,14 @@ extension PlaybackViewModel {
         let logEvent = item.accessLog()?.events.last
         let videoId = playerInfo?.video.id ?? currentVideo?.id ?? ""
 
-        // Resolution – when the user has explicitly selected a quality format, show that
-        // format's dimensions immediately (the HLS adaptive stream may take many seconds to
-        // deliver the first segment at the new resolution, making presentationSize stale).
-        // Fall back to presentationSize for Auto mode, then to "—" if unavailable.
+        // Resolution — always derived from AVPlayer's presentationSize (the actual decoded
+        // video dimensions). This is the ground truth: if a quality switch is in flight the
+        // old resolution is shown until the new composition becomes readyToPlay, which is
+        // honest. Showing selectedFormat metadata here caused stats to report 256×144 while
+        // the player was actually decoding 640×360 (the VP9 WebM quality-switch failure).
         let presentationSize = item.presentationSize
         let res: String
-        if let fmt = selectedFormat, fmt.height > 0 {
-            // Show the selected quality's pixel dimensions. When width is not available
-            // from the API, emit "×height" so downstream consumers (e.g. stats text,
-            // UI tests) can still match on the height value.
-            res = fmt.width > 0 ? "\(fmt.width)×\(fmt.height)" : "×\(fmt.height)"
-        } else if presentationSize.width > 0 && presentationSize.height > 0 {
+        if presentationSize.width > 0 && presentationSize.height > 0 {
             res = "\(Int(presentationSize.width))×\(Int(presentationSize.height))"
         } else {
             res = "—"
@@ -76,11 +72,8 @@ extension PlaybackViewModel {
         let droppedFrames = logEvent.map { $0.numberOfDroppedVideoFrames } ?? 0
         let stalls = logEvent.map { $0.numberOfStalls } ?? 0
 
-        let actualSizeStr = (presentationSize.width > 0 && presentationSize.height > 0)
-            ? "\(Int(presentationSize.width))×\(Int(presentationSize.height))"
-            : "0×0"
         let resSource = selectedFormat != nil ? "selectedFormat(\(selectedFormat!.qualityLabel))" : "presentationSize"
-        playerLog.notice("[stats] snapshot — res=\(res) codec=\(codec) source=\(resSource) actualPresentationSize=\(actualSizeStr)")
+        playerLog.notice("[stats] snapshot — res=\(res) codec=\(codec) source=\(resSource)")
 
         statsSnapshot = StatsForNerdsSnapshot(
             videoId: videoId,

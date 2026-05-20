@@ -720,7 +720,8 @@ extension PlayerControlsOverlay {
     }
 
     private var qualityLabel: String {
-        vm.selectedFormat?.qualityLabel ?? "Auto"
+        vm.selectedFormat?.qualityLabel
+            ?? (vm.pendingQualityLabel.isEmpty ? "Auto" : vm.pendingQualityLabel)
     }
 
     private var audioTrackLabel: String {

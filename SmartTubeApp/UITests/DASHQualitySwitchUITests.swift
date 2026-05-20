@@ -50,6 +50,11 @@ final class DASHQualitySwitchUITests: XCTestCase {
     ///   playerInfo: formats=128 hlsURL=nil dashURL=nil
     private static let videoID = "55pSC5R6Kl8"
 
+    /// Second test video from real-device log.txt (recorded during quality-revert investigation).
+    ///   [store] playerInfo GZzsJMSQKAs formats=28 hls=false
+    /// Confirms quality switching + pendingQualityLabel persistence on a different video.
+    private static let videoID_logTxt = "GZzsJMSQKAs"
+
     /// Resolution label separator character: U+00D7 MULTIPLICATION SIGN, as used in
     /// PlaybackViewModel+StatsForNerds.swift: "\(width)×\(height)"
     private static let cross = "\u{00D7}"
@@ -61,9 +66,14 @@ final class DASHQualitySwitchUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+    }
+
+    /// Terminates any running instance and launches fresh with the given video deeplink.
+    private func launchWithVideo(_ videoID: String) {
+        app.terminate()
         app.launchArguments = [
             "--uitesting",
-            "--uitesting-deeplink-video=\(Self.videoID)",
+            "--uitesting-deeplink-video=\(videoID)",
             "--uitesting-show-controls",
             "--uitesting-disable-sponsorblock"
         ]
@@ -76,19 +86,33 @@ final class DASHQualitySwitchUITests: XCTestCase {
 
     // MARK: - Test
 
-    /// Cycles through all common quality levels on the DASH-only video, verifying via
-    /// the Stats for Nerds "Selected" row that each quality switch records `selectFormat`
-    /// was called with the correct quality.
+    /// Cycles through all common quality levels on the DASH-only video (55pSC5R6Kl8, formats=128).
+    func testQualityCycleOnDASHVideo() throws {
+        launchWithVideo(Self.videoID)
+        try runQualityCycle()
+    }
+
+    /// Same quality cycle on the real-device video from log.txt (GZzsJMSQKAs, formats=28).
+    /// Confirms quality-button persistence fix works across different videos.
+    func testQualityCycleOnDASHVideo_GZzsJMSQKAs() throws {
+        launchWithVideo(Self.videoID_logTxt)
+        try runQualityCycle()
+    }
+
+    // MARK: - Shared quality cycle
+
+    /// Shared body for all DASH quality-cycle tests.
     ///
-    /// Verification is CDN-independent: `pendingQualityLabel` in the Stats overlay is set
-    /// immediately when the user taps a quality option and is NOT cleared if the DASH
-    /// composition fails (CDN 403 in simulator). This means the test passes in both
-    /// simulator (CDN blocked) and on a real device (CDN delivers).
+    /// Verifies via the Stats for Nerds "Selected" row that each quality switch records
+    /// `selectFormat` was called with the correct quality, and that the quick-access quality
+    /// button label persists after a CDN 403 failure (pendingQualityLabel fix).
+    ///
+    /// CDN-independent: `pendingQualityLabel` is set synchronously and never cleared on failure.
     ///
     /// Per-step behaviour:
-    ///  - Quality not in picker → step is skipped via `continueAfterFailure` note, test continues.
+    ///  - Quality not in picker → step is silently skipped (not a failure).
     ///  - Quality in picker but Stats "Selected" not updated within 5 s → XCTFail (real bug).
-    func testQualityCycleOnDASHVideo() throws {
+    private func runQualityCycle() throws {
 
         // ── Step 1: Wait for DASH playback to start ──────────────────────────
         guard app.staticTexts["player.titleLabel"].firstMatch.waitForExistence(timeout: 25) else {
@@ -142,6 +166,20 @@ final class DASHQualitySwitchUITests: XCTestCase {
                 "Stats 'Selected' row did not show '\(quality)' within 5 s — " +
                 "selectFormat() may not have been called after tapping the quality option."
             )
+
+            // Verify that the quality button label persists after CDN failure.
+            // The button should show the user's selection (via pendingQualityLabel),
+            // not revert to "Auto" when composition rebuild fails with HTTP 403.
+            showControls()
+            let qBtn = app.buttons["player.quickAccess.quality"].firstMatch
+            if qBtn.waitForExistence(timeout: 3) && qBtn.isHittable {
+                let btnLabel = qBtn.label
+                XCTAssertTrue(
+                    btnLabel.contains(quality),
+                    "Quality button shows '\(btnLabel)' after CDN failure — " +
+                    "expected '\(quality)' to persist via pendingQualityLabel (bug: revert to Auto)"
+                )
+            }
         }
     }
 

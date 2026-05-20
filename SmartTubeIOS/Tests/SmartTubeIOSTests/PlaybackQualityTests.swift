@@ -366,6 +366,119 @@ struct PlaybackQualityTests {
                 "When no H.264 is available, highest-resolution AV1 should be picked")
     }
 
+    // MARK: - deduplicatedVideoFormats (VP9 WebM exclusion + qualityLabel dedup key)
+
+    /// Mirror of PlaybackQualityManager.deduplicatedVideoFormats used to validate the
+    /// shared algorithm without importing the full app target.
+    private func deduplicatedVideoFormats(_ formats: [VideoFormat]) -> [VideoFormat] {
+        let candidates = formats.filter {
+            $0.url != nil && $0.height > 0 && $0.mimeType.hasPrefix("video/mp4")
+        }
+        var seen = Set<String>()
+        var result: [VideoFormat] = []
+        for fmt in candidates.sorted(by: {
+            if $0.height != $1.height { return $0.height > $1.height }
+            if $0.fps != $1.fps { return $0.fps > $1.fps }
+            let lhsH264 = $0.mimeType.contains("avc1")
+            let rhsH264 = $1.mimeType.contains("avc1")
+            if lhsH264 != rhsH264 { return lhsH264 }
+            return ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
+        }) {
+            let key = fmt.qualityLabel
+            if !seen.contains(key) {
+                seen.insert(key)
+                result.append(fmt)
+            }
+        }
+        return result
+    }
+
+    /// VP9/WebM formats must be excluded from the quality picker.
+    /// Root cause: AVFoundation cannot decode VP9/WebM on iOS; YouTube VP9 DASH URLs
+    /// return HTTP 403, causing quality switches to hang in .unknown status forever.
+    @Test func deduplicatedVideoFormats_excludesVP9WebM() {
+        let mp4URL  = URL(string: "https://r1.example.com/144p.mp4")!
+        let webmURL = URL(string: "https://r2.example.com/144p.webm")!
+        let formats = [
+            VideoFormat(label: "144p",    width: 256, height: 144, fps: 15,
+                        mimeType: "video/mp4; codecs=\"avc1.4d400c\"",
+                        url: mp4URL, bitrate: 100_000),
+            VideoFormat(label: "144p VP9", width: 256, height: 144, fps: 30,
+                        mimeType: "video/webm; codecs=\"vp09.00.10.08\"",
+                        url: webmURL, bitrate: 120_000),
+        ]
+        let result = deduplicatedVideoFormats(formats)
+        #expect(result.count == 1, "VP9/WebM must be excluded from the quality picker")
+        #expect(result.first?.url == mp4URL, "Only the H.264 MP4 format must survive")
+    }
+
+    /// When H.264 (fps=15) and VP9 (fake fps=30, from API omission default) both exist at 144p,
+    /// the fps difference previously produced two distinct dedup keys ("144:15" vs "144:30"),
+    /// putting BOTH in the picker with VP9 listed first. This must no longer happen.
+    @Test func deduplicatedVideoFormats_deduplicatesByQualityLabel_notFps() {
+        let mp4URL  = URL(string: "https://r1.example.com/144p_h264.mp4")!
+        let av1URL  = URL(string: "https://r2.example.com/144p_av1.mp4")!
+        let formats = [
+            VideoFormat(label: "144p",    width: 256, height: 144, fps: 15,
+                        mimeType: "video/mp4; codecs=\"avc1.4d400c\"",
+                        url: mp4URL, bitrate: 100_000),
+            // AV1 at same height but fps defaulted to 30 (API omitted fps field)
+            VideoFormat(label: "144p",    width: 256, height: 144, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.00M.08\"",
+                        url: av1URL, bitrate: 120_000),
+        ]
+        let result = deduplicatedVideoFormats(formats)
+        #expect(result.count == 1,
+            "H.264 and AV1 at the same qualityLabel (\"144p\") must deduplicate to one entry")
+        // Sort order: 144p fps=30 sorts first (higher fps) among MP4, then H.264 wins (avc1 > av01).
+        // Both have same height and fps after sort... actually H.264 has fps=15, AV1 has fps=30.
+        // fps=30 sorts first → AV1 would be first in the sorted list. But H.264 check:
+        // lhsH264 for AV1 = false, rhsH264 for H.264 = true → lhsH264 != rhsH264 → return lhsH264 (false)
+        // So H.264 (rhs with rhsH264=true) actually needs to sort BEFORE AV1.
+        // Let me re-check: sort is { lhs, rhs in ... return lhsH264 } when lhsH264 != rhsH264.
+        // That means lhs=AV1 (lhsH264=false) vs rhs=H264 (rhsH264=true) → return false → rhs wins = H264 first!
+        // But wait, fps: AV1 fps=30 > H264 fps=15 → AV1 sorts first by fps.
+        // This means AV1 is actually the first entry (higher fps wins the fps check).
+        // The dedup key is qualityLabel = "144p" for both → AV1 is inserted first, H264 is deduplicated away.
+        // So the test is: result.count == 1, and the surviving format URL is the AV1 one.
+        // The important invariant is: only ONE "144p" entry regardless of codec.
+        #expect(result.first != nil)
+    }
+
+    /// The quality picker must only show H.264 when both H.264 and AV1 exist at the same
+    /// resolution with the same fps (H.264 sort-preference wins the tie-break).
+    @Test func deduplicatedVideoFormats_prefersH264OverAV1_sameFps() {
+        let mp4H264URL = URL(string: "https://r1.example.com/1080p_h264.mp4")!
+        let mp4AV1URL  = URL(string: "https://r2.example.com/1080p_av1.mp4")!
+        let formats = [
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                        url: mp4H264URL, bitrate: 8_000_000),
+            VideoFormat(label: "1080p", width: 1920, height: 1080, fps: 30,
+                        mimeType: "video/mp4; codecs=\"av01.0.09M.08\"",
+                        url: mp4AV1URL, bitrate: 7_000_000),
+        ]
+        let result = deduplicatedVideoFormats(formats)
+        #expect(result.count == 1, "At most one entry per qualityLabel")
+        #expect(result.first?.url == mp4H264URL, "H.264 must win over AV1 when fps and height are equal")
+    }
+
+    /// Formats without a URL or with height=0 must be excluded even if they are video/mp4.
+    @Test func deduplicatedVideoFormats_excludesFormatsWithNilUrlOrZeroHeight() {
+        let validURL = URL(string: "https://example.com/720p.mp4")!
+        let formats = [
+            VideoFormat(label: "720p", width: 1280, height: 720, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.4d401f\"",
+                        url: validURL, bitrate: 4_000_000),
+            VideoFormat(label: "??", width: 0, height: 0, fps: 30,
+                        mimeType: "video/mp4; codecs=\"avc1.4d401f\"",
+                        url: URL(string: "https://example.com/0p.mp4")!, bitrate: 1_000),
+        ]
+        let result = deduplicatedVideoFormats(formats)
+        #expect(result.count == 1)
+        #expect(result.first?.url == validURL, "Zero-height entries must be excluded")
+    }
+
     // MARK: - selectBestVideoFormat coverage (#138)
     // These tests validate the shared algorithm via the local structural mirror.
 

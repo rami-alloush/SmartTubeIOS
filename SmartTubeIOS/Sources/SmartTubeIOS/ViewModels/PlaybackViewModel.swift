@@ -46,6 +46,12 @@ public final class PlaybackViewModel {
         get { qualityManager.selectedFormat }
         set { qualityManager.selectedFormat = newValue }
     }
+
+    /// The quality label last chosen by the user — persists even after CDN failure
+    /// clears `selectedFormat`. Use this for UI labels that should show user intent.
+    public var pendingQualityLabel: String {
+        qualityManager.pendingQualityLabel
+    }
     public internal(set) var sponsorSegments: [SponsorSegment] {
         get { sponsorBlockManager.sponsorSegments }
         set { sponsorBlockManager.sponsorSegments = newValue }

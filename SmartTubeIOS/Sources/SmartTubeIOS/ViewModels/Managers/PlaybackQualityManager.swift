@@ -235,10 +235,19 @@ final class PlaybackQualityManager {
         let label = format.map { "\($0.height)p" } ?? "Auto"
 
         // For explicit quality: use the format's direct URL.
+        // Guard: if the selected format is not video/mp4 (e.g. a VP9/WebM format that
+        // somehow reached this path), fall back to the best H.264 at or below that height.
+        // This is a defensive fallback — deduplicatedVideoFormats now filters out WebM
+        // before it reaches the quality picker.
         // For Auto: fall back to the best available video-only MP4 (mirrors the initial load path).
         let videoURL: URL?
-        if let fmt = format {
+        if let fmt = format, fmt.mimeType.hasPrefix("video/mp4") {
             videoURL = fmt.url
+        } else if let fmt = format {
+            playerLog.error("[quality] reloadDASHItem: non-MP4 format selected (\(fmt.mimeType)) — falling back to best H.264 at \(fmt.height)p")
+            videoURL = PlaybackQualityManager.selectBestVideoFormat(
+                from: info.formats, preferredMaxHeight: fmt.height
+            )?.url
         } else {
             videoURL = PlaybackQualityManager.selectBestVideoFormat(
                 from: info.formats, preferredMaxHeight: nil
@@ -291,22 +300,30 @@ final class PlaybackQualityManager {
     }
 
     static func deduplicatedVideoFormats(_ formats: [VideoFormat]) -> [VideoFormat] {
-        let candidates = formats.filter { $0.url != nil && $0.height > 0 }
+        // Only video/mp4 formats are playable by AVFoundation. WebM (VP9) is excluded:
+        // - AVFoundation does not decode VP9/WebM on iOS.
+        // - YouTube's VP9 DASH streams (e.g. itag 278/598) return HTTP 403 when fetched
+        //   via AVURLAsset, causing quality switches to silently hang in .unknown status.
+        // - The fps field is often absent in the YouTube API response for adaptive formats,
+        //   defaulting to 30. This gave VP9 a different height:fps dedup key than the
+        //   H.264 format at the same resolution, causing duplicate quality-picker entries.
+        let candidates = formats.filter {
+            $0.url != nil && $0.height > 0 && $0.mimeType.hasPrefix("video/mp4")
+        }
         var seen = Set<String>()
         var result: [VideoFormat] = []
-        // Sort: height desc → fps desc → mp4 first → bitrate desc.
-        // Codec preference (H.264 first) is intentionally absent here — this list feeds the
-        // quality picker which should show all height options, not pre-filter by codec.
-        // (Compare: selectBestVideoFormat applies H.264 preference for a single best-pick.)
+        // Sort: height desc → fps desc → H.264 (avc1) first → bitrate desc.
+        // Using qualityLabel (e.g. "144p", "720p60") as the dedup key ensures at most one
+        // picker entry per visible label, regardless of fps metadata variance from the API.
         for fmt in candidates.sorted(by: {
             if $0.height != $1.height { return $0.height > $1.height }
             if $0.fps != $1.fps { return $0.fps > $1.fps }
-            let lhsMp4 = $0.mimeType.hasPrefix("video/mp4")
-            let rhsMp4 = $1.mimeType.hasPrefix("video/mp4")
-            if lhsMp4 != rhsMp4 { return lhsMp4 }
+            let lhsH264 = $0.mimeType.contains("avc1")
+            let rhsH264 = $1.mimeType.contains("avc1")
+            if lhsH264 != rhsH264 { return lhsH264 }
             return ($0.bitrate ?? 0) > ($1.bitrate ?? 0)
         }) {
-            let key = "\(fmt.height):\(fmt.fps)"
+            let key = fmt.qualityLabel
             if !seen.contains(key) {
                 seen.insert(key)
                 result.append(fmt)
