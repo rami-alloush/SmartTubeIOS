@@ -46,8 +46,7 @@ public func parseHLSMasterManifest(_ manifestText: String, baseURL: URL) -> [Int
             if trimmed.hasPrefix("http") {
                 variantURL = URL(string: trimmed)
             } else {
-                variantURL = URL(string: trimmed, relativeTo: baseURL)
-                    .map { URL(string: $0.absoluteString) } ?? nil
+                variantURL = URL(string: trimmed, relativeTo: baseURL).map { $0.absoluteURL }
             }
 
             if let resolvedURL = variantURL {
