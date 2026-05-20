@@ -26,13 +26,13 @@ struct PlayerControlsOverlay: View {
     @Binding var pipController: AVPictureInPictureController?
     @Binding var isPiPActive: Bool
     @Binding var isLandscapeLocked: Bool
-    @Binding var showQualityPicker: Bool
     @Environment(PlayerStateStore.self) private var playerState
     var vm: PlaybackViewModel { playerState.vm }
     #else
     let vm: PlaybackViewModel
     #endif
     #if !os(tvOS)
+    @Binding var showQualityPicker: Bool
     @Binding var showSpeedPicker: Bool
     @Binding var showAudioTrackPicker: Bool
     @Binding var showSleepTimerPicker: Bool
@@ -686,7 +686,10 @@ extension PlayerControlsOverlay {
                     systemImage: "4k.tv",
                     label: qualityLabel,
                     accessibilityId: "player.quickAccess.quality"
-                ) { showQualityPicker = true }
+                ) {
+                    controlsLog.notice("[quickAccess] quality tapped — current=\(qualityLabel)")
+                    showQualityPicker = true
+                }
             }
 
             if vm.availableAudioTracks.count > 1 {

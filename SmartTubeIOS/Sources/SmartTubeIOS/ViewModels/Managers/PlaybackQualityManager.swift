@@ -46,6 +46,10 @@ protocol QualityEventHandler: AnyObject {
         quality: AppSettings.VideoQuality,
         hasAppliedH264Cap: Bool  // snapshot: avoid race with qualityManager.hasAppliedH264Cap
     ) async
+    /// Called when quality needs to change for a DASH/MP4-only video (no HLS URL available).
+    /// The coordinator must rebuild the `AVMutableComposition` from `videoURL` + `audioURL`
+    /// and seek to `seekTo` once `.readyToPlay` fires.
+    func qualitySelectDASHFormat(videoURL: URL, audioURL: URL, seekTo: TimeInterval) async
     /// Written by `reloadHLSItem` around `player.replaceCurrentItem` to suppress
     /// rate-observer false positives during the item swap.
     var isSwappingItem: Bool { get set }
@@ -120,11 +124,17 @@ final class PlaybackQualityManager {
 
     /// Switch to a specific quality. Pass `.auto` to return to Auto (no resolution cap).
     func selectFormat(_ format: VideoFormat?) {
+        let previousLabel = selectedFormat.map { "\($0.height)p" } ?? "Auto"
+        let newLabel = format.map { "\($0.height)p" } ?? "Auto"
+        playerLog.notice("[quality] selectFormat: \(previousLabel) → \(newLabel)")
         selectedFormat = format
         delegate?.toastMessage = format.map { "\($0.height)p" } ?? "Auto"
         qualityTask?.cancel()
         qualityTask = nil
-        guard let delegate else { return }
+        guard let delegate else {
+            playerLog.error("[quality] selectFormat: delegate is nil — quality reload skipped")
+            return
+        }
         let savedTime = delegate.currentTime
         let quality: AppSettings.VideoQuality
         if let fmt = format {
@@ -139,13 +149,21 @@ final class PlaybackQualityManager {
             quality = .auto
         }
         qualityTask = Task { [weak self] in
-            await self?.reloadHLSItem(seekTo: savedTime, quality: quality)
+            guard let self else { return }
+            if self.delegate?.playerInfo?.hlsURL != nil {
+                await self.reloadHLSItem(seekTo: savedTime, quality: quality)
+            } else {
+                await self.reloadDASHItem(seekTo: savedTime, format: format)
+            }
         }
     }
 
     /// Rebuilds the HLS player item from the stored `playerInfo`.
     func reloadHLSItem(seekTo time: TimeInterval, quality: AppSettings.VideoQuality) async {
-        guard let hlsURL = delegate?.playerInfo?.hlsURL else { return }
+        guard let hlsURL = delegate?.playerInfo?.hlsURL else {
+            playerLog.error("[quality] reloadHLSItem: playerInfo.hlsURL is nil — video is DASH/MP4 only, HLS quality switch not possible")
+            return
+        }
         guard !Task.isCancelled else { return }
         let uaOpts: [String: Any] = [
             "AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]
@@ -161,17 +179,20 @@ final class PlaybackQualityManager {
         item.audioTimePitchAlgorithm = .spectral
         if let cap = quality.maxHeight {
             let h = CGFloat(cap)
+            let peakBR = peakBitRate(for: cap)
             item.preferredMaximumResolution = CGSize(width: h * 4, height: h)
-            item.preferredPeakBitRate = peakBitRate(for: cap)
-            playerLog.notice("Quality → \(cap)p via HLS master + ABR hints")
+            item.preferredPeakBitRate = peakBR
+            playerLog.notice("Quality → \(cap)p via HLS master + ABR hints (maxRes=\(Int(h * 4))x\(cap) peakBR=\(Int(peakBR / 1_000_000))Mbps)")
         } else {
-            playerLog.notice("Quality → Auto via HLS master")
+            playerLog.notice("Quality → Auto via HLS master (hints cleared)")
         }
         itemObserverTask = Task { [weak self] in
             for await status in item.statusStream {
                 guard let self, !Task.isCancelled else { return }
                 switch status {
                 case .readyToPlay:
+                    let size = item.presentationSize
+                    playerLog.notice("✅ Quality-switch readyToPlay — presentationSize=\(Int(size.width))x\(Int(size.height))")
                     self.player.rate = Float(self.delegate?.settings.playbackSpeed ?? 1)
                     await self.delegate?.qualityItemDidBecomeReady(item, seekTo: time)
                 case .failed:
@@ -192,6 +213,41 @@ final class PlaybackQualityManager {
         delegate?.isSwappingItem = true
         player.replaceCurrentItem(with: item)
         delegate?.isSwappingItem = false
+    }
+
+    /// Switches quality for a DASH/MP4-only video (no HLS URL) by rebuilding the composition
+    /// from the selected format's video URL and the best available adaptive audio URL.
+    private func reloadDASHItem(seekTo time: TimeInterval, format: VideoFormat?) async {
+        guard let info = delegate?.playerInfo else {
+            playerLog.error("[quality] reloadDASHItem: playerInfo is nil — quality reload skipped")
+            return
+        }
+        guard !Task.isCancelled else { return }
+
+        let label = format.map { "\($0.height)p" } ?? "Auto"
+
+        // For explicit quality: use the format's direct URL.
+        // For Auto: fall back to the best available video-only MP4 (mirrors the initial load path).
+        let videoURL: URL?
+        if let fmt = format {
+            videoURL = fmt.url
+        } else {
+            videoURL = PlaybackQualityManager.selectBestVideoFormat(
+                from: info.formats, preferredMaxHeight: nil
+            )?.url
+        }
+
+        guard let videoURL else {
+            playerLog.error("[quality] reloadDASHItem: no video URL for quality=\(label) — cannot switch")
+            return
+        }
+        guard let audioURL = info.bestAdaptiveAudioURL else {
+            playerLog.error("[quality] reloadDASHItem: no adaptive audio URL — cannot rebuild composition")
+            return
+        }
+
+        playerLog.notice("[quality] DASH switch → \(label)")
+        await delegate?.qualitySelectDASHFormat(videoURL: videoURL, audioURL: audioURL, seekTo: time)
     }
 
     /// Sets `selectedFormat` to the best available format for the current quality preference,

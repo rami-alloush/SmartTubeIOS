@@ -734,6 +734,7 @@ extension PlayerView {
             showMoreMenu: $showMoreMenu,
             channelDestination: $channelDestination,
             vm: vm,
+            showQualityPicker: $showQualityPicker,
             showSpeedPicker: $showSpeedPicker,
             showAudioTrackPicker: $showAudioTrackPicker,
             showSleepTimerPicker: $showSleepTimerPicker

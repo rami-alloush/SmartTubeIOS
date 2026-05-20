@@ -313,6 +313,79 @@ extension PlaybackViewModel {
         }
     }
 
+    /// Rebuilds the `AVMutableComposition` during a quality switch for DASH/MP4-only videos
+    /// (where `hlsURL == nil`). Mirrors `attemptComposition` but does not reset `playerInfo`
+    /// or `availableFormats` and does not call `launchPhase2` — this is a mid-playback swap.
+    func rebuildCompositionForQuality(videoURL: URL, audioURL: URL, seekTo: TimeInterval) async {
+        let videoItag = URLComponents(url: videoURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "itag" })?.value ?? "?"
+        let audioItag = URLComponents(url: audioURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "itag" })?.value ?? "?"
+        playerLog.notice("[quality/DASH] rebuilding composition — videoItag=\(videoItag) audioItag=\(audioItag)")
+
+        let ua = InnerTubeClients.iOS.userAgent
+        let videoAsset = AVURLAsset(url: videoURL, options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": ua]])
+        let audioAsset = AVURLAsset(url: audioURL, options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": ua]])
+
+        do {
+            async let videoTracks = videoAsset.loadTracks(withMediaType: .video)
+            async let audioTracks = audioAsset.loadTracks(withMediaType: .audio)
+            let (vTracks, aTracks) = try await (videoTracks, audioTracks)
+
+            guard let sourceVideoTrack = vTracks.first,
+                  let sourceAudioTrack = aTracks.first else {
+                playerLog.error("❌ [quality/DASH] no tracks in remote assets — quality switch failed")
+                return
+            }
+
+            let videoDuration = try await videoAsset.load(.duration)
+            let timeRange = CMTimeRange(start: .zero, duration: videoDuration)
+            let composition = AVMutableComposition()
+
+            guard let compVideo = composition.addMutableTrack(withMediaType: .video,
+                                                              preferredTrackID: kCMPersistentTrackID_Invalid),
+                  let compAudio = composition.addMutableTrack(withMediaType: .audio,
+                                                              preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                playerLog.error("❌ [quality/DASH] could not add composition tracks")
+                return
+            }
+
+            try compVideo.insertTimeRange(timeRange, of: sourceVideoTrack, at: .zero)
+            try compAudio.insertTimeRange(timeRange, of: sourceAudioTrack, at: .zero)
+            playerLog.notice("✅ [quality/DASH] composition built — swapping item")
+
+            lastAttemptedStreamURL = videoURL
+            let compositeItem = AVPlayerItem(asset: composition)
+            isSwappingItem = true
+            player.replaceCurrentItem(with: compositeItem)
+            isSwappingItem = false
+            itemObserverTask?.cancel()
+
+            for await status in compositeItem.statusStream {
+                switch status {
+                case .readyToPlay:
+                    let size = compositeItem.presentationSize
+                    playerLog.notice("✅ [quality/DASH] readyToPlay — presentationSize=\(Int(size.width))x\(Int(size.height))")
+                    if seekTo > 0 { seek(to: seekTo) }
+                    loadAudioTracks(from: compositeItem)
+                    player.rate = Float(settings.playbackSpeed)
+                    isPlaying = true
+                    return
+                case .failed:
+                    let err = compositeItem.error.map { "\($0)" } ?? "nil"
+                    playerLog.error("❌ [quality/DASH] AVPlayerItem failed: \(err)")
+                    return
+                case .unknown:
+                    continue
+                @unknown default:
+                    continue
+                }
+            }
+        } catch {
+            playerLog.error("❌ [quality/DASH] composition build error: \(error)")
+        }
+    }
+
     // MARK: - Helpers
 
     /// Returns the best adaptive video-only MP4 URL, respecting the user's quality preference.

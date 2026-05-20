@@ -412,6 +412,10 @@ extension PlaybackViewModel: QualityEventHandler {
             self.error = e
         }
     }
+
+    func qualitySelectDASHFormat(videoURL: URL, audioURL: URL, seekTo: TimeInterval) async {
+        await rebuildCompositionForQuality(videoURL: videoURL, audioURL: audioURL, seekTo: seekTo)
+    }
 }
 
 extension PlaybackViewModel: AudioTrackDelegate {}

@@ -44,6 +44,7 @@ extension PlayerView {
                 ScrollView {
                     VStack(spacing: 0) {
                         Button {
+                            pickerLog.notice("[qualityPicker] selected Auto (was: \(vm.selectedFormat?.qualityLabel ?? "Auto"))")
                             vm.selectFormat(nil)
                             store.settings.preferredQuality = .auto
                             showQualityPicker = false
@@ -68,6 +69,7 @@ extension PlayerView {
                         Divider()
                         ForEach(vm.availableFormats) { fmt in
                             Button {
+                                pickerLog.notice("[qualityPicker] selected \(fmt.qualityLabel) (was: \(vm.selectedFormat?.qualityLabel ?? "Auto"))")
                                 vm.selectFormat(fmt)
                                 if let q = AppSettings.VideoQuality.from(height: fmt.height) {
                                     store.settings.preferredQuality = q
