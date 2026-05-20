@@ -27,23 +27,23 @@ public enum QualityRecoveryAction: Sendable {
 ///
 /// Priority (highest first):
 /// 1. HTTP 403 → `.retry403Recovery`
-/// 2. `qualityCap` was set (non-auto) → `.revertToAuto`
+/// 2. `quality` is non-auto (a specific quality was requested) → `.revertToAuto`
 /// 3. H.264 decode error on first attempt → `.retryWithH264Cap`
 /// 4. All other cases → `.fail(error:)`
 ///
 /// - Parameters:
 ///   - error: The `NSError` from `AVPlayerItem.error`.
-///   - qualityCap: The height cap in pixels, or `nil` when playing in Auto mode.
+///   - quality: The quality in effect when the item failed. `.auto` means no cap was set.
 ///   - hasAppliedH264Cap: `true` if the H.264 bitrate cap has already been tried.
 public func qualityRecoveryAction(
     for error: NSError,
-    qualityCap: Int?,
+    quality: AppSettings.VideoQuality,
     hasAppliedH264Cap: Bool
 ) -> QualityRecoveryAction {
     let is403 = error.domain == nsURLErrorDomain && error.code == -1102
     let isH264DecodeError = error.domain == avFoundationErrorDomain && error.code == -11833
     if is403 { return .retry403Recovery }
-    if qualityCap != nil { return .revertToAuto }
+    if quality != .auto { return .revertToAuto }
     if !hasAppliedH264Cap && isH264DecodeError { return .retryWithH264Cap }
     return .fail(error: error)
 }

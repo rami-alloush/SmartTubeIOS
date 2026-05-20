@@ -482,7 +482,7 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_403_returnsRetry403Recovery() {
-        let action = qualityRecoveryAction(for: make403Error(), qualityCap: nil, hasAppliedH264Cap: false)
+        let action = qualityRecoveryAction(for: make403Error(), quality: .auto, hasAppliedH264Cap: false)
         guard case .retry403Recovery = action else {
             Issue.record("Expected .retry403Recovery, got \(action)")
             return
@@ -490,7 +490,7 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_qualityCapFailed_returnsRevertToAuto() {
-        let action = qualityRecoveryAction(for: makeGenericError(), qualityCap: 1080, hasAppliedH264Cap: false)
+        let action = qualityRecoveryAction(for: makeGenericError(), quality: .q1080, hasAppliedH264Cap: false)
         guard case .revertToAuto = action else {
             Issue.record("Expected .revertToAuto, got \(action)")
             return
@@ -498,7 +498,7 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_h264DecodeError_returnsRetryWithH264Cap() {
-        let action = qualityRecoveryAction(for: makeH264DecodeError(), qualityCap: nil, hasAppliedH264Cap: false)
+        let action = qualityRecoveryAction(for: makeH264DecodeError(), quality: .auto, hasAppliedH264Cap: false)
         guard case .retryWithH264Cap = action else {
             Issue.record("Expected .retryWithH264Cap, got \(action)")
             return
@@ -506,7 +506,7 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_h264DecodeErrorAfterCapAlreadyApplied_returnsFail() {
-        let action = qualityRecoveryAction(for: makeH264DecodeError(), qualityCap: nil, hasAppliedH264Cap: true)
+        let action = qualityRecoveryAction(for: makeH264DecodeError(), quality: .auto, hasAppliedH264Cap: true)
         guard case .fail = action else {
             Issue.record("Expected .fail, got \(action)")
             return
@@ -514,7 +514,7 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_unknownError_returnsFail() {
-        let action = qualityRecoveryAction(for: makeGenericError(), qualityCap: nil, hasAppliedH264Cap: false)
+        let action = qualityRecoveryAction(for: makeGenericError(), quality: .auto, hasAppliedH264Cap: false)
         guard case .fail = action else {
             Issue.record("Expected .fail, got \(action)")
             return
@@ -522,8 +522,8 @@ struct PlaybackQualityTests {
     }
 
     @Test func recoveryAction_403_takesPriorityOverQualityCap() {
-        // 403 + non-nil qualityCap → 403 wins (priority 1 > priority 2)
-        let action = qualityRecoveryAction(for: make403Error(), qualityCap: 720, hasAppliedH264Cap: false)
+        // 403 + non-auto quality → 403 wins (priority 1 > priority 2)
+        let action = qualityRecoveryAction(for: make403Error(), quality: .q720, hasAppliedH264Cap: false)
         guard case .retry403Recovery = action else {
             Issue.record("Expected .retry403Recovery (403 priority), got \(action)")
             return

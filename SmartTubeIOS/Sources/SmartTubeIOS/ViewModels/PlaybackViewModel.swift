@@ -382,11 +382,11 @@ extension PlaybackViewModel: QualityEventHandler {
         loadAudioTracks(from: item)
     }
 
-    func qualityItemDidFail(error: Error?, qualityCap: Int?, hasAppliedH264Cap: Bool) async {
+    func qualityItemDidFail(error: Error?, quality: AppSettings.VideoQuality, hasAppliedH264Cap: Bool) async {
         let nsErr = (error as? NSError) ?? NSError(domain: "", code: 0)
         let action = qualityRecoveryAction(
             for: nsErr,
-            qualityCap: qualityCap,
+            quality: quality,
             hasAppliedH264Cap: hasAppliedH264Cap
         )
         switch action {

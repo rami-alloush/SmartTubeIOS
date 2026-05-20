@@ -39,11 +39,11 @@ protocol QualityEventHandler: AnyObject {
     /// The coordinator must seek to `seekTo` (if > 0), mark `isPlaying`, and load audio tracks.
     func qualityItemDidBecomeReady(_ item: AVPlayerItem, seekTo: TimeInterval)
     /// Called when a quality-switch `AVPlayerItem` enters `.failed` with the full error context.
-    /// The coordinator uses `qualityRecoveryAction(for:qualityCap:hasAppliedH264Cap:)` to
+    /// The coordinator uses `qualityRecoveryAction(for:quality:hasAppliedH264Cap:)` to
     /// dispatch the appropriate recovery path.
     func qualityItemDidFail(
         error: Error?,
-        qualityCap: Int?,
+        quality: AppSettings.VideoQuality,
         hasAppliedH264Cap: Bool  // snapshot: avoid race with qualityManager.hasAppliedH264Cap
     ) async
     /// Written by `reloadHLSItem` around `player.replaceCurrentItem` to suppress
@@ -167,7 +167,7 @@ final class PlaybackQualityManager {
                     playerLog.error("❌ Quality-switch AVPlayerItem failed: \(err)")
                     await self.delegate?.qualityItemDidFail(
                         error: item.error,
-                        qualityCap: cap,
+                        quality: quality,
                         hasAppliedH264Cap: self.hasAppliedH264Cap
                     )
                 case .unknown:
@@ -312,7 +312,7 @@ final class PlaybackQualityManager {
                     playerLog.error("❌ H.264-capped AVPlayerItem also failed: \(err)")
                     await self.delegate?.qualityItemDidFail(
                         error: item.error,
-                        qualityCap: nil,
+                        quality: .auto,
                         hasAppliedH264Cap: self.hasAppliedH264Cap
                     )
                 case .unknown:
