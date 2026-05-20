@@ -156,7 +156,21 @@ struct PlaybackQualityTests {
         #expect(isH264 == false)
     }
 
-    // MARK: - Quality preference selection (mirrors applyQualityPreference logic)
+    @Test func variantSelection_noCODECSAttribute_acceptsVariant() throws {
+        // A valid HLS master manifest may omit the CODECS attribute entirely.
+        // The parser must still accept the variant (pendingIsH264 = false) and store its URL.
+        let manifest = """
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080
+            https://example.com/1080p.m3u8
+            """
+        let base = try #require(URL(string: "https://example.com/"))
+        let variants = parseHLSMasterManifest(manifest, baseURL: base)
+        #expect(variants[1080] != nil, "Parser must accept a variant with no CODECS attribute")
+        #expect(variants[1080] == URL(string: "https://example.com/1080p.m3u8"))
+    }
+
+
 
     private func makeFormat(height: Int, bitrate: Int? = nil) -> VideoFormat {
         let url = URL(string: "https://example.com/\(height)p.ts")!
