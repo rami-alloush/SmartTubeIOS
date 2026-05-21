@@ -138,6 +138,12 @@ final class DASHQualitySwitchUITests: XCTestCase {
         let baseline = currentResolutionLabel() ?? "nil"
         captureState("baseline — resolution: \(baseline)", in: app)
 
+        // ── Step 2.5: Assert quality picker has adaptive options ──────────────
+        // Fail immediately when the picker shows only 360p (and/or Auto).
+        // That means the muxed fallback is the only working stream, which means
+        // no quality switching is possible at all — a clear regression.
+        try assertAdaptiveOptionsInPicker()
+
         // ── Step 3: Quality cycle ─────────────────────────────────────────────
         // Covers all standard H.264 quality levels YouTube offers.
         // The picker uses BEGINSWITH matching, so "720p" matches "720p60" and "720p30".
@@ -177,7 +183,7 @@ final class DASHQualitySwitchUITests: XCTestCase {
             )
             XCTAssertTrue(
                 resChanged,
-                "Resolution did not change to ×\(heightStr) within 15 s after selecting \(quality) — " +
+                "Resolution did not change to ×\(heightStr) within 15 s after selecting \(quality). " +
                 "DASH rebuild failed (loadTracks 403? composition error?). " +
                 "Check device log for '❌ [quality/DASH]' lines near this step."
             )
@@ -186,6 +192,48 @@ final class DASHQualitySwitchUITests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Opens the quality picker and asserts that at least one adaptive quality
+    /// (anything other than 360p and Auto) is available. Fails the test if the
+    /// picker shows only 360p — that indicates the muxed-only fallback is active
+    /// and quality switching is broken.
+    private func assertAdaptiveOptionsInPicker() throws {
+        showControls()
+        let qualityBtn = app.buttons["player.quickAccess.quality"].firstMatch
+        guard qualityBtn.waitForExistence(timeout: 8) && qualityBtn.isHittable else {
+            XCTFail("Quality button not hittable — cannot verify quality options")
+            return
+        }
+        qualityBtn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        // Wait for the picker to open (360p is present in every video).
+        let is360Present = app.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "360p"))
+            .firstMatch
+            .waitForExistence(timeout: 5)
+        guard is360Present else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTFail("Quality picker did not open")
+            return
+        }
+
+        // Check for any adaptive quality other than 360p.
+        let adaptiveLabels = ["1080p", "720p", "480p", "240p", "144p", "1440p", "2160p", "1080p60", "720p60"]
+        let hasAdaptive = adaptiveLabels.contains {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", $0)).firstMatch.exists
+        }
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+
+        XCTAssertTrue(
+            hasAdaptive,
+            "Quality picker shows only 360p — adaptive streams unavailable. " +
+            "Muxed-only fallback is active (rqh=1 blocks all adaptive clients). " +
+            "Expected iOS auth client to return rqh=1-free streams for logged-in users. " +
+            "Check device log for exhaustiveRetry iOS-auth phase."
+        )
+    }
 
     /// Opens the more menu, taps "Stats for Nerds", waits for the overlay to appear.
     private func enableStatsForNerds() throws {

@@ -255,13 +255,24 @@ final class PlaybackQualityManager {
         }
 
         guard let videoURL else {
-            playerLog.error("[quality] reloadDASHItem: no video URL for quality=\(label) — cannot switch")
-            selectedFormat = nil  // Revert so Stats for Nerds shows actual presentationSize
+            // No adaptive video in playerInfo — likely playing on muxed 360p fallback.
+            // Trigger a fresh exhaustive retry (iOS auth client should return adaptive
+            // streams without rqh=1 for logged-in users) rather than silently giving up.
+            playerLog.error("[quality] reloadDASHItem: no video URL for quality=\(label) — triggering 403 recovery retry")
+            selectedFormat = nil
+            let retryErr = NSError(domain: NSURLErrorDomain, code: NSURLErrorNoPermissionsToReadFile,
+                                   userInfo: [NSLocalizedDescriptionKey: "No adaptive video URL — re-fetching player info"])
+            await delegate?.qualityItemDidFail(error: retryErr, quality: .auto, hasAppliedH264Cap: hasAppliedH264Cap)
             return
         }
         guard let audioURL = info.bestAdaptiveAudioURL else {
-            playerLog.error("[quality] reloadDASHItem: no adaptive audio URL — cannot rebuild composition")
-            selectedFormat = nil  // Revert so Stats for Nerds shows actual presentationSize
+            // No adaptive audio in playerInfo — likely playing on muxed 360p fallback.
+            // Trigger a fresh exhaustive retry so iOS auth client can provide rqh=1-free streams.
+            playerLog.error("[quality] reloadDASHItem: no adaptive audio URL — triggering 403 recovery retry")
+            selectedFormat = nil
+            let retryErr = NSError(domain: NSURLErrorDomain, code: NSURLErrorNoPermissionsToReadFile,
+                                   userInfo: [NSLocalizedDescriptionKey: "No adaptive audio URL — re-fetching player info"])
+            await delegate?.qualityItemDidFail(error: retryErr, quality: .auto, hasAppliedH264Cap: hasAppliedH264Cap)
             return
         }
 

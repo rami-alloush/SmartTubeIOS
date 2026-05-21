@@ -71,10 +71,15 @@ extension PlaybackViewModel {
             guard !Task.isCancelled else { return }
 
             // --- iOS client (fresh network fetch) ---
-            // Tries HLS + adaptive only (iOS rarely has muxed; muxed fallback happens below).
+            // When logged in, use the authenticated iOS client. Auth tokens cause YouTube
+            // to return adaptive stream URLs without rqh=1 CDN enforcement, enabling
+            // DASH composition. The unauthenticated iOS client always returns rqh=1 URLs
+            // that 403 at the CDN. Tries HLS + adaptive only (muxed fallback happens below).
             var androidInfoForMuxed: PlayerInfo? = nil
             do {
-                let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
+                let iosInfo = hasAuthToken
+                    ? try await api.fetchPlayerInfoiOSAuthenticated(videoId: video.id)
+                    : try await api.fetchPlayerInfo(videoId: video.id)
                 await VideoPreloadCache.shared.store(playerInfo: iosInfo, for: video.id)
                 if await tryAllStreams(video: video, info: iosInfo, label: "iOS[\(attempt)]",
                                       skipMuxed: true) {
@@ -213,12 +218,7 @@ extension PlaybackViewModel {
         // 3. Muxed direct MP4 (itag=18, 360p — last resort, skipped when skipMuxed=true)
         if !skipMuxed, let muxedURL = info.bestMuxedDownloadURL {
             playerLog.notice("[\(label)] Trying muxed")
-            // Use asMuxedOnly to strip adaptive-only formats from the quality picker.
-            // The full `info` includes 720p/480p/etc adaptive video formats that 403 at
-            // the CDN (rqh=1 enforcement). Showing them in the picker would let the user
-            // select 720p, triggering a rebuild that always fails. asMuxedOnly keeps only
-            // the combined muxed format so the picker correctly reflects playback reality.
-            if await attemptURL(muxedURL, for: video, info: info.asMuxedOnly, label: "\(label)/muxed") { return true }
+            if await attemptURL(muxedURL, for: video, info: info, label: "\(label)/muxed") { return true }
             playerLog.notice("[\(label)] Muxed failed — no more alternatives for this client")
         }
 
@@ -444,9 +444,14 @@ extension PlaybackViewModel {
 
             guard let sourceVideoTrack = vTracks.first,
                   let sourceAudioTrack = aTracks.first else {
-                playerLog.error("❌ [quality/DASH] no tracks in remote assets — quality switch failed")
+                playerLog.error("❌ [quality/DASH] no tracks in remote assets — triggering 403 recovery retry")
                 selectedFormat = nil
                 if statsForNerdsVisible { updateStatsSnapshot() }
+                if let video = currentVideo {
+                    await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                    HLSManifestCache.shared.invalidate(for: video.id)
+                    await retryWith403Recovery(video: video, originalError: nil)
+                }
                 return
             }
 
@@ -486,10 +491,16 @@ extension PlaybackViewModel {
                     isPlaying = true
                     return
                 case .failed:
-                    let err = compositeItem.error.map { "\($0)" } ?? "nil"
-                    playerLog.error("❌ [quality/DASH] AVPlayerItem failed: \(err)")
+                    let itemError = compositeItem.error
+                    let errStr = itemError.map { "\($0)" } ?? "nil"
+                    playerLog.error("❌ [quality/DASH] AVPlayerItem failed: \(errStr) — triggering 403 recovery retry")
                     selectedFormat = nil
                     if statsForNerdsVisible { updateStatsSnapshot() }
+                    if let video = currentVideo {
+                        await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                        HLSManifestCache.shared.invalidate(for: video.id)
+                        await retryWith403Recovery(video: video, originalError: itemError)
+                    }
                     return
                 case .unknown:
                     continue
@@ -498,9 +509,14 @@ extension PlaybackViewModel {
                 }
             }
         } catch {
-            playerLog.error("❌ [quality/DASH] composition build error: \(error)")
+            playerLog.error("❌ [quality/DASH] composition build error: \(error) — triggering 403 recovery retry")
             selectedFormat = nil
             if statsForNerdsVisible { updateStatsSnapshot() }
+            if let video = currentVideo {
+                await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
+                HLSManifestCache.shared.invalidate(for: video.id)
+                await retryWith403Recovery(video: video, originalError: error)
+            }
         }
     }
 

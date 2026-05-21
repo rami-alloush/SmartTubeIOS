@@ -80,11 +80,10 @@ package enum InnerTubeClients {
     package enum TV {
         package static let name      = "TVHTML5"
         package static let nameID    = "7"
-        // Use yt-dlp's tv_downgraded version (5.x) for authenticated requests.
-        // Version 7.x is the unauthenticated Cobalt client; version 5.x (tv_downgraded)
-        // is YouTube's authenticated TV client and returns hlsManifestUrl for standard
-        // videos, enabling native AVPlayer ABR quality switching without composition.
-        package static let version   = "5.20260114"
+        // Version 7.x (standard Cobalt TV client) — used for browse AND authenticated player.
+        // Tested yt-dlp tv_downgraded 5.20260114 for player: returns HLS=false (same as 7.x),
+        // and 5.x breaks the /browse home-feed endpoint (HTTP 400). No benefit to 5.x here.
+        package static let version   = "7.20260311.12.00"
         package static let userAgent = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
     }
 

@@ -352,6 +352,17 @@ struct AppEntry: App {
         deepLinkLaunchArgConsumed = true
         #if os(iOS)
         Task { @MainActor in
+            // If the user is signed in but the access token is still being refreshed
+            // (expired on cold start), wait up to 5 s for the proactive refresh to
+            // finish before opening the video URL. Without this wait, exhaustiveRetry
+            // runs with hasAuthToken=false and falls back to muxed-only quality,
+            // causing DASH quality-switch tests to fail even on an authenticated simulator.
+            if authService.isSignedIn, authService.accessToken == nil {
+                for _ in 0..<50 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)   // 100 ms
+                    if authService.accessToken != nil { break }
+                }
+            }
             await UIApplication.shared.open(deepLink)
         }
         #endif
