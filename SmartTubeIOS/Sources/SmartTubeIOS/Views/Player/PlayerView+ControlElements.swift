@@ -42,7 +42,6 @@ struct PlayerControlsOverlay: View {
     #endif
     @Environment(SettingsStore.self) var store
     @Environment(\.dismiss) var dismiss
-
     var body: some View {
         VStack {
             // Top bar: back + title
@@ -629,11 +628,19 @@ extension PlayerView {
         return false
     }
 
+    // Returns true when the error requires the user to sign in (APIError.signInRequired).
+    // Retrying is futile — show a "Sign In" button instead of "Try Again".
+    private func isSignInRequiredError(_ err: Error) -> Bool {
+        if let apiError = err as? APIError, case .signInRequired = apiError { return true }
+        return false
+    }
+
     @ViewBuilder
     func errorBanner(_ err: Error) -> some View {
         // IP-block errors show a specific message and no retry button — retrying
         // with the same IP will also fail and may extend the YouTube block duration.
         let isIPBlock = isIPBlockError(err)
+        let isSignInRequired = isSignInRequiredError(err)
         VStack(spacing: 12) {
             HStack {
                 Image(systemName: AppSymbol.warning)
@@ -642,7 +649,7 @@ extension PlayerView {
                     .font(.callout)
                     .foregroundStyle(.white)
             }
-            if !isIPBlock {
+            if !isIPBlock && !isSignInRequired {
                 Button {
                     vm.retryLoad()
                 } label: {
@@ -655,6 +662,9 @@ extension PlayerView {
                         .clipShape(Capsule())
                 }
                 .accessibilityIdentifier("player.retryButton")
+            }
+            if isSignInRequired {
+                SignInButtonView()
             }
         }
         .padding()
@@ -757,3 +767,28 @@ extension PlayerControlsOverlay {
     }
 }
 #endif
+
+// MARK: - Sign-in button (age-restricted / login-required errors)
+//
+// Isolated into its own view so the @State sheet-presentation flag lives in a
+// dedicated scope.  PlayerControlsOverlay cannot hold its own mutable @State in
+// the extension methods where this is used, so we delegate to this tiny helper.
+private struct SignInButtonView: View {
+    @State private var showSignIn = false
+
+    var body: some View {
+        Button {
+            showSignIn = true
+        } label: {
+            Text("Sign In")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(Color.white)
+                .clipShape(Capsule())
+        }
+        .accessibilityIdentifier("player.signInButton")
+        .sheet(isPresented: $showSignIn) { SignInView() }
+    }
+}

@@ -221,6 +221,10 @@ public enum APIError: LocalizedError {
     /// the source IP address (VPN, proxy, shared datacenter IP). The associated value is
     /// the raw `playabilityStatus.reason` string from the response.
     case ipBlocked(String)
+    /// Thrown when the video is age-restricted or otherwise requires the user to sign in
+    /// before it can be played. Unlike `unavailable`, retrying with the same credentials
+    /// will not succeed — the user must authenticate first.
+    case signInRequired
 
     public var errorDescription: String? {
         switch self {
@@ -231,6 +235,8 @@ public enum APIError: LocalizedError {
         case .invalidURL(let endpoint):  return "Could not build URL for endpoint: \(endpoint)"
         case .ipBlocked:
             return "YouTube is temporarily blocking this network. Disable your VPN, try a different VPN server, or wait a few minutes and retry."
+        case .signInRequired:
+            return "This video is age-restricted or requires sign in to watch."
         }
     }
 }
