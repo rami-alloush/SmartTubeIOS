@@ -54,20 +54,23 @@ public actor iCloudSyncManager {
 
     /// Begin listening for external iCloud KV changes. Call once on app launch.
     /// Calling `synchronize()` pulls the latest values from the server.
+    /// When no iCloud account is signed in the synchronize call would silently fail
+    /// with SyncedDefaults Code=8888 "No account" — guard against this so the error
+    /// does not pollute device logs.
     public func start() {
-        kvStore.synchronize()
-        // Use the callback-based observer so the non-Sendable Notification.userInfo
-        // is consumed synchronously (before any actor crossing). Only the extracted
-        // [String] — a Sendable type — crosses into the actor via the Task.
-        NotificationCenter.default.addObserver(
-            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
-            object: nil,
-            queue: nil
-        ) { [weak self] notification in
-            let changedKeys = (notification.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey]
-                as? [String]) ?? []
-            Task { await self?.handleExternalChange(changedKeys) }
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            // No iCloud account on this device — register for identity changes so we
+            // can start syncing if the user signs in while the app is running.
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSUbiquityIdentityDidChange,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                Task { await self?.handleIdentityChange() }
+            }
+            return
         }
+        startSync()
     }
 
     // MARK: - Push
@@ -90,6 +93,33 @@ public actor iCloudSyncManager {
     }
 
     // MARK: - Private
+
+    private func startSync() {
+        kvStore.synchronize()
+        // Use the callback-based observer so the non-Sendable Notification.userInfo
+        // is consumed synchronously (before any actor crossing). Only the extracted
+        // [String] — a Sendable type — crosses into the actor via the Task.
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            let changedKeys = (notification.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey]
+                as? [String]) ?? []
+            Task { await self?.handleExternalChange(changedKeys) }
+        }
+    }
+
+    private func handleIdentityChange() {
+        guard FileManager.default.ubiquityIdentityToken != nil else { return }
+        // Account became available — remove the identity-change observer and start sync.
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSNotification.Name.NSUbiquityIdentityDidChange,
+            object: nil
+        )
+        startSync()
+    }
 
     private func handleExternalChange(_ changedKeys: [String]) {
         for key in changedKeys {
