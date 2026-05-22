@@ -25,18 +25,46 @@ Inspired by the original [SmartTube Android app](https://github.com/yuliskov/Sma
 
 ## Features
 
-- Home, Subscriptions, History, Search, and Playlists feeds
-- Video playback via AVPlayer — adaptive HLS/DASH, up to 8K
-- SponsorBlock integration — auto-skip with per-category controls
+### Playback
+- Adaptive HLS and DASH streaming — up to 8K via AVPlayer; manual quality picker (144p → 4K)
+- DASH adaptive quality switching via `AVMutableComposition` — no black frames, audio preserved on every switch
+- Audio-only playback mode
+- Landscape playback with one-tap orientation lock (iPhone)
+- Picture-in-Picture (iOS)
+- Mini-player with background audio
+- Adjustable playback speed, seek interval, and sleep timer
+- Previous / next video navigation
+- Now Playing metadata on lock screen and Dynamic Island
+
+### Audio & Captions
+- Multi-track audio selection with a preferred-language setting (original, English, dubbed, and more)
+- Caption / subtitle track selection — language choice remembered across videos
+
+### Content & Feeds
+- Home, Subscriptions, Shorts, History, Search, Playlists, Library
+- Local subscriptions — follow channels without a Google account
+- RSS channel feeds with background refresh and deduplication
+- iCloud sync for subscriptions, watch state, queue, and RSS feeds
+- Video publish date shown in search results and feed cards
+
+### Ad & Sponsor Blocking
+- Zero ads, no tracking
+- SponsorBlock — auto-skip with per-category controls and skip-button toast
 - DeArrow community titles and thumbnails
-- Google OAuth sign-in (YouTube TV device authorization flow)
-- Video downloads with live activity progress
-- Share Extension — share YouTube links from any app
-- Picture-in-Picture
-- Shorts support
-- Comments
-- Settings: quality, playback speed, theme, seek duration, SponsorBlock categories
-- No ads, no tracking
+
+### Integrations
+- Google OAuth sign-in (YouTube TV device-code flow)
+- Safari Web Extension — auto-redirects YouTube, Shorts, and Music links to SmartTube
+- Share Extension — share YouTube links from any app directly into SmartTube
+- Video downloads with live-activity progress; Downloads screen in Library
+- WatchTime reporting and Like / Dislike support
+- VPN / IP-block detection with a clear, non-retrying error banner
+- Comments, Stats for Nerds
+
+### Platforms
+- **iPhone & iPad** — iOS 17+
+- **macOS** — Mac Catalyst, macOS 14+ (Sonoma)
+- **Apple TV** — tvOS 17+, full Siri Remote / d-pad navigation
 
 ---
 
