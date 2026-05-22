@@ -472,9 +472,13 @@ extension PlaybackViewModel {
             }
             playerLog.notice("Starting AVPlayer with: \(initialStreamURL.absoluteString.prefix(120))")
             lastAttemptedStreamURL = initialStreamURL
+            // HLS manifests are signed by WEB_EMBEDDED_PLAYER (web client) — use browser UA.
+            // Muxed/adaptive direct URLs are signed by the iOS client — use iOS UA.
+            let isHLS = (info.hlsURL != nil && initialStreamURL == info.hlsURL)
+            let initialUA = isHLS ? InnerTubeClients.Web.userAgent : InnerTubeClients.iOS.userAgent
             let playerAsset = AVURLAsset(
                 url: initialStreamURL,
-                options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]]
+                options: ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": initialUA]]
             )
             let item = AVPlayerItem(asset: playerAsset)
             // .spectral gives the highest-quality pitch-preserving time-stretch at

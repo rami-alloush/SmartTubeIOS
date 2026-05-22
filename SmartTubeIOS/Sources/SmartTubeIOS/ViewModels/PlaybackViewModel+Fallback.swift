@@ -322,9 +322,12 @@ extension PlaybackViewModel {
         }
 
         lastAttemptedStreamURL = effectiveURL
-        // Use AVURLAsset so the iOS User-Agent is sent with every HLS manifest and
-        // segment request — matches the quality-switch path in PlaybackQualityManager.
-        let uaOpts: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": InnerTubeClients.iOS.userAgent]]
+        // Use AVURLAsset so the correct User-Agent is sent with every HLS manifest and
+        // segment request. HLS manifests are signed by WEB_EMBEDDED_PLAYER (a web client),
+        // so use the browser UA; muxed/adaptive URLs are signed by the iOS client.
+        let isHLSManifest = label.contains("/HLS")
+        let hlsUA = isHLSManifest ? InnerTubeClients.Web.userAgent : InnerTubeClients.iOS.userAgent
+        let uaOpts: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": hlsUA]]
         let asset = AVURLAsset(url: effectiveURL, options: uaOpts)
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .spectral

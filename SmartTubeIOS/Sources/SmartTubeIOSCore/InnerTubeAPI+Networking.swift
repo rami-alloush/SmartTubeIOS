@@ -381,6 +381,9 @@ extension InnerTubeAPI {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        // WEB_EMBEDDED_PLAYER is a web client — use a browser UA so YouTube treats the
+        // request as a legitimate iframe embed and returns hlsManifestUrl in streamingData.
+        request.setValue(InnerTubeClients.Web.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(InnerTubeClients.TVEmbedded.nameID,
                          forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(InnerTubeClients.TVEmbedded.version,

@@ -103,8 +103,8 @@ public struct PlayerInfo: Sendable {
     /// Prefers HLS (works natively in AVPlayer on iOS, handles adaptive quality).
     /// Falls back to combined muxed mp4 for non-HLS responses.
     public var preferredStreamURL: URL? {
-        // TEMP DISABLED: HLS skipped — forcing muxed/DASH path for testing
-        // if let hls = hlsURL { return hls }
+        // HLS manifest — native AVPlayer ABR, alternate audio renditions, no rqh=1 issues.
+        if let hls = hlsURL { return hls }
         // Muxed (combined video+audio) MP4 — identified by two codecs separated by ", "
         // e.g. `video/mp4; codecs="avc1.42001E, mp4a.40.2"` (itag=18).
         // Adaptive video-only streams also have video/mp4 but only one codec, so the
