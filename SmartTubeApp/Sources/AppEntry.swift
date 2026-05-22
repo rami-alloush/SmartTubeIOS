@@ -106,7 +106,10 @@ struct AppEntry: App {
                     browseViewModel.updateHistoryEnabled(newState == .enabled)
                 }
                 .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
-                    if !enabled { Task { await api.resetVisitorData() } }
+                    Task {
+                        if !enabled { await api.resetVisitorData() }
+                        browseViewModel.loadContent(refresh: true, source: "perDeviceRecommendationsChanged")
+                    }
                 }
                 .onOpenURL { url in handleOpenURL(url) }
         }
@@ -142,7 +145,10 @@ struct AppEntry: App {
                     browseViewModel.updateHistoryEnabled(newState == .enabled)
                 }
                 .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
-                    if !enabled { Task { await api.resetVisitorData() } }
+                    Task {
+                        if !enabled { await api.resetVisitorData() }
+                        browseViewModel.loadContent(refresh: true, source: "perDeviceRecommendationsChanged")
+                    }
                 }
         }
         #else
@@ -180,7 +186,10 @@ struct AppEntry: App {
                         browseViewModel.updateHistoryEnabled(newState == .enabled)
                     }
                     .onChange(of: settingsStore.settings.perDeviceRecommendationsEnabled) { _, enabled in
-                        if !enabled { Task { await api.resetVisitorData() } }
+                        Task {
+                            if !enabled { await api.resetVisitorData() }
+                            browseViewModel.loadContent(refresh: true, source: "perDeviceRecommendationsChanged")
+                        }
                     }
                     .onOpenURL { url in handleOpenURL(url) }
                     .onChange(of: scenePhase, initial: true) { _, phase in
