@@ -309,17 +309,17 @@ extension PlaybackViewModel {
             // If YouTube returns UNPLAYABLE/LOGIN_REQUIRED and the user is signed in,
             // automatically retry with the authenticated TV client before showing an error.
             let info: PlayerInfo
-            if let cachedInfo = cached.playerInfo {
-                playerLog.notice("cache HIT: playerInfo (skipping network)")
-                info = cachedInfo
-            } else if let inFlight = await VideoPreloadCache.shared.inFlightPlayerFetch(videoId: video.id),
-                      let coalescedInfo = await inFlight.value {
-                // Coalesced: a background prefetch was in-flight — use its result.
-                playerLog.notice("coalescedPrefetch HIT: playerInfo (skipping network)")
-                info = coalescedInfo
-            } else {
-                do {
-                    info = try await api.fetchPlayerInfo(videoId: video.id)
+            // TEMP DISABLED: playerInfo cache/coalescing — always fetch fresh
+            // if let cachedInfo = cached.playerInfo {
+            //     playerLog.notice("cache HIT: playerInfo (skipping network)")
+            //     info = cachedInfo
+            // } else if let inFlight = await VideoPreloadCache.shared.inFlightPlayerFetch(videoId: video.id),
+            //           let coalescedInfo = await inFlight.value {
+            //     playerLog.notice("coalescedPrefetch HIT: playerInfo (skipping network)")
+            //     info = coalescedInfo
+            // } else {
+            do {
+                info = try await api.fetchPlayerInfo(videoId: video.id)
                 } catch {
                     if case APIError.ipBlocked(let reason) = error {
                         // NW-6-FIX: IP-block short-circuit. Every extra /player call from a
@@ -362,8 +362,7 @@ extension PlaybackViewModel {
                         throw error
                     }
                 }
-                await VideoPreloadCache.shared.store(playerInfo: info, for: video.id)
-            }
+            await VideoPreloadCache.shared.store(playerInfo: info, for: video.id)
             // BUG-005 fix: guard against rapid navigation — if the user navigated away while we
             // were awaiting the player info, discard this result rather than overwrite ViewModel state.
             guard currentVideo?.id == video.id else {
@@ -428,18 +427,16 @@ extension PlaybackViewModel {
             // quality, but the HLS variant playlist may omit qualities the CDN has not
             // encoded for this video. Parsing the manifest prevents the user from
             // selecting a quality tier that AVPlayer's ABR would silently ignore.
-            if let hlsURL = info.hlsURL {
-                let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
-                if !variantURLs.isEmpty {
-                    hlsVariantURLs = variantURLs
-                    availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
-                    playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker to \(availableFormats.count) options")
-                    // If a previously-saved format was filtered out, reset to Auto.
-                    if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) {
-                        selectedFormat = nil
-                    }
-                }
-            }
+            // TEMP DISABLED: HLS variant fetch skipped
+            // if let hlsURL = info.hlsURL {
+            //     let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
+            //     if !variantURLs.isEmpty {
+            //         hlsVariantURLs = variantURLs
+            //         availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
+            //         playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker to \(availableFormats.count) options")
+            //         if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) { selectedFormat = nil }
+            //     }
+            // }
             // Build player item — preferredStreamURL is guaranteed non-nil here because
             // parsePlayerInfo throws APIError.unavailable when streamingData is absent.
             guard let masterStreamURL = info.preferredStreamURL else {
@@ -496,13 +493,13 @@ extension PlaybackViewModel {
             // ABR algorithm toward the user's preferred resolution without bypassing audio
             // metadata (which variant URLs would lose). Hints are applied unconditionally
             // to the master URL for all HLS streams.
-            // Apply quality hints for all HLS items — explicit setting or display-based cap.
-            if info.hlsURL != nil {
-                let h = CGFloat(initialMaxH)
-                item.preferredMaximumResolution = CGSize(width: h * 4, height: h)
-                item.preferredPeakBitRate = peakBitRate(for: initialMaxH)
-                playerLog.notice("Initial quality \(initialMaxH)p hint set (master with ABR)")
-            }
+            // TEMP DISABLED: HLS ABR hints skipped
+            // if info.hlsURL != nil {
+            //     let h = CGFloat(initialMaxH)
+            //     item.preferredMaximumResolution = CGSize(width: h * 4, height: h)
+            //     item.preferredPeakBitRate = peakBitRate(for: initialMaxH)
+            //     playerLog.notice("Initial quality \(initialMaxH)p hint set (master with ABR)")
+            // }
             // Observe item status using async/await (withCheckedContinuation is not needed
             // here since we only need to react to status changes, not await them).
             // BUG-009 fix: replaceCurrentItem BEFORE wiring the observer to avoid a race
@@ -838,20 +835,19 @@ extension PlaybackViewModel {
 
         // BUG-015 fix: read currentAuthToken per-prefetch-call so a token refresh mid-loop
         // uses the fresh token rather than a stale snapshot captured before the loop starts.
-        let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
-        let sponsorCats = settings.activeSponsorCategories
-        Task(priority: .background) { [weak self] in
-            for videoId in neighbourIds {
-                // Re-read the token at each iteration — if a refresh happened, this picks up
-                // the new token without blocking the background task on the main actor.
-                let token = await MainActor.run { self?.currentAuthToken }
-                await VideoPreloadCache.shared.prefetch(
-                    videoId: videoId,
-                    sponsorCategories: sponsorCats,
-                    authToken: token,
-                    priority: .speculative
-                )
-            }
-        }
+        // TEMP DISABLED: neighbour prefetch — forcing fresh playerInfo fetch on every tap
+        // let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
+        // let sponsorCats = settings.activeSponsorCategories
+        // Task(priority: .background) { [weak self] in
+        //     for videoId in neighbourIds {
+        //         let token = await MainActor.run { self?.currentAuthToken }
+        //         await VideoPreloadCache.shared.prefetch(
+        //             videoId: videoId,
+        //             sponsorCategories: sponsorCats,
+        //             authToken: token,
+        //             priority: .speculative
+        //         )
+        //     }
+        // }
     }
 }

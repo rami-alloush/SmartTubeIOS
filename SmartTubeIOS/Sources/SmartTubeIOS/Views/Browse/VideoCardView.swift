@@ -72,19 +72,15 @@ public struct VideoCardView: View {
         .task {
             localProgress = await VideoStateStore.shared.state(for: video.id)?.watchedFraction
         }
-        .task(id: video.id) {
-            // Pre-fetch all playback data for this video in the background while
-            // the user is browsing. The cache skips the call if data is already fresh.
-            // Pass the actual token (not just a Bool) so runPrefetch can sync it to
-            // its internal API before the tracking URL fetch — eliminating the race
-            // where prefetch fires before PlaybackViewModel.updateAuthToken propagates.
-            await VideoPreloadCache.shared.prefetch(
-                videoId: video.id,
-                sponsorCategories: store.settings.activeSponsorCategories,
-                authToken: authService.accessToken,
-                priority: .visible
-            )
-        }
+        // TEMP DISABLED: browse prefetch — forcing fresh playerInfo fetch on every tap
+        // .task(id: video.id) {
+        //     await VideoPreloadCache.shared.prefetch(
+        //         videoId: video.id,
+        //         sponsorCategories: store.settings.activeSponsorCategories,
+        //         authToken: authService.accessToken,
+        //         priority: .visible
+        //     )
+        // }
         .contextMenu {
             #if !os(tvOS)
             if let shareURL = URL(string: "https://www.youtube.com/watch?v=\(video.id)") {

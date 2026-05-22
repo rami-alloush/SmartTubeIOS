@@ -875,7 +875,7 @@ extension PlaybackViewModel {
     static func displayMaxVideoHeight() -> Int {
         #if canImport(UIKit)
         let bounds = UIScreen.main.nativeBounds
-        return Int(min(bounds.width, bounds.height))
+        return Int(max(bounds.width, bounds.height))
         #else
         return 1080  // Conservative fallback for non-UIKit targets
         #endif
