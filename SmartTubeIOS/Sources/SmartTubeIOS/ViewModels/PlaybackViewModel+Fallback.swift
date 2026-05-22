@@ -162,6 +162,22 @@ extension PlaybackViewModel {
                                       label: "Android[\(attempt)]/muxed") {
                     return
                 }
+                // Android muxed failed (possibly AVF -11828 "Cannot Open" on SABR/long-video URLs,
+                // or URL expiry). Try the Web/iOS client muxed URL as a final rescue path.
+                // fetchPlayerInfo() returns iOS-client playerInfo whose muxed URL is
+                // CDN-signed with standard MP4 headers, avoiding the TVHTML5 SABR issue.
+                playerLog.notice("[Android[\(attempt)]] Muxed failed — trying Web client muxed fallback")
+                do {
+                    let webInfo = try await api.fetchPlayerInfo(videoId: video.id)
+                    if webInfo.bestMuxedDownloadURL != nil {
+                        if await tryAllStreams(video: video, info: webInfo,
+                                              label: "Web[\(attempt)]/muxed") {
+                            return
+                        }
+                    }
+                } catch {
+                    playerLog.error("Web client muxed fallback fetch failed (attempt \(attempt)): \(error)")
+                }
             }
         }
 
@@ -239,9 +255,15 @@ extension PlaybackViewModel {
 
         // 3. Muxed direct MP4 (itag=18, 360p — last resort, skipped when skipMuxed=true)
         if !skipMuxed, let muxedURL = info.bestMuxedDownloadURL {
-            playerLog.notice("[\(label)] Trying muxed")
-            if await attemptURL(muxedURL, for: video, info: info, label: "\(label)/muxed") { return true }
-            playerLog.notice("[\(label)] Muxed failed — no more alternatives for this client")
+            // Guard: TVHTML5 SABR-protocol URLs serve binary data, not a standard MP4 container.
+            // AVPlayer returns -11828 (AVFoundationErrorDomain "Cannot Open") for these.
+            if muxedURL.absoluteString.contains("c=TVHTML5") {
+                playerLog.notice("[\(label)] Skipping SABR muxed URL (c=TVHTML5) — not a playable MP4")
+            } else {
+                playerLog.notice("[\(label)] Trying muxed")
+                if await attemptURL(muxedURL, for: video, info: info, label: "\(label)/muxed") { return true }
+                playerLog.notice("[\(label)] Muxed failed — no more alternatives for this client")
+            }
         }
 
         return false
