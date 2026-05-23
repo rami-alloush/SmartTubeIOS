@@ -158,9 +158,13 @@ extension InnerTubeAPI {
         guard let token = authToken else {
             return try await postPlayer(body: body)
         }
-        guard let url = playerBaseURL.appendingPathComponent("player") as URL? else {
+        guard var comps = URLComponents(url: playerBaseURL.appendingPathComponent("player"),
+                                        resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL("player")
         }
+        // Mirror postTV: Bearer auth on googleapis.com does not require ?key=.
+        // (Sending key= with Bearer is harmless but unnecessary; omit it like postTV does.)
+        guard let url = comps.url else { throw APIError.invalidURL("player") }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -340,41 +344,49 @@ extension InnerTubeAPI {
     /// Per yt-dlp documentation, this client is exempt from rqh=1 CDN enforcement —
     /// adaptive stream URLs returned do NOT require a pot= proof-of-origin token.
     /// Uses nameID=62 so YouTube identifies the request as the Studio creator client.
-    /// REQUIRES auth: WEB_CREATOR returns `signInRequired` (no streamingData) for
-    /// unauthenticated requests — Bearer token is injected when available.
     ///
-    /// Endpoint routing mirrors postTV:
-    ///   • Authenticated → www.youtube.com + Bearer (web client, no API key needed with auth)
-    ///   • Unauthenticated → www.youtube.com + ?key= (will return signInRequired, but at least 200)
+    /// Endpoint: www.youtube.com (same as MWEB/WebSafari — WEB_CREATOR is a web client).
+    /// Auth: cookie-based (URLSession shared cookie storage). NO Bearer token.
+    ///   • googleapis.com + Bearer → HTTP 400 INVALID_ARGUMENT (googleapis.com does not
+    ///     support WEB_CREATOR nameID=62 with OAuth2 Bearer auth).
+    ///   • www.youtube.com + Bearer → HTTP 400 (www.youtube.com expects SAPISID cookies,
+    ///     not OAuth2 Bearer tokens, for web client IDs).
+    ///   • www.youtube.com + cookies → 200 (streams rqh=0 if session is authenticated)
     func postWebCreator(body: [String: Any]) async throws -> [String: Any] {
-        // WEB_CREATOR is a web/browser client — always use www.youtube.com (not googleapis.com).
-        // Using playerBaseURL (googleapis.com) returns HTTP 400 for web client nameIDs.
         guard var comps = URLComponents(url: baseURL.appendingPathComponent("player"),
                                         resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL("player")
         }
-        // Web clients require the public API key even with Bearer (mirrors yt-dlp web_creator).
         comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         guard let url = comps.url else { throw APIError.invalidURL("player") }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // WEB_CREATOR is a web client — use a full browser UA and Origin.
-        request.setValue(InnerTubeClients.Web.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        // Chrome desktop UA — WEB_CREATOR is identified as a studio/web client.
+        request.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36,gzip(gfe)", forHTTPHeaderField: "User-Agent")
         request.setValue(InnerTubeClients.WebCreator.nameID, forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(InnerTubeClients.WebCreator.version, forHTTPHeaderField: "X-YouTube-Client-Version")
-        // WEB_CREATOR requires a signed-in session to return streamingData.
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        // NOTE: No Authorization: Bearer header.
+        // www.youtube.com uses cookie-based session auth for web clients.
+        // Sending Bearer causes HTTP 400. Auth state comes from URLSession cookie storage.
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let videoId = body["videoId"] as? String ?? ""
         tubeLog.notice("POST /player [WebCreator] videoId=\(videoId, privacy: .public)")
         let (data, response) = try await session.data(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            tubeLog.error("❌ HTTP \(statusCode, privacy: .public) for /player [WebCreator]")
+            var errSummary = ""
+            if let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let err = j["error"] as? [String: Any] {
+                let code = err["code"] ?? ""
+                let msg = (err["message"] as? String ?? "").prefix(120)
+                let status = err["status"] ?? ""
+                errSummary = "code=\(code) status=\(status) msg=\(msg)"
+            } else {
+                errSummary = String(data: data.prefix(120), encoding: .utf8) ?? "(non-utf8)"
+            }
+            tubeLog.error("❌ HTTP \(statusCode, privacy: .public) for /player [WebCreator] err=\(errSummary, privacy: .public)")
             throw APIError.httpError(statusCode)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {

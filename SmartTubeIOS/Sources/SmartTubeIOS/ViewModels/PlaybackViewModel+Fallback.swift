@@ -375,9 +375,18 @@ extension PlaybackViewModel {
 
         lastAttemptedStreamURL = effectiveURL
         let isHLSManifest = label.contains("/HLS")
-        let hlsUA = "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X)"
+        // WebSafari HLS variant playlists are served from manifest.googlevideo.com and
+        // signed for a browser WEB client. The CDN checks that the requesting UA matches
+        // a web browser; sending the iOS YouTube UA returns 403. Use the Safari macOS UA
+        // for WebSafari HLS, and Origin + Referer for all HLS (browser-style headers).
+        let hlsUA: String
+        if isHLSManifest && label.contains("WebSafari") {
+            hlsUA = InnerTubeClients.WebSafari.userAgent
+        } else {
+            hlsUA = "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X)"
+        }
         var hlsHeaders: [String: String] = ["User-Agent": hlsUA]
-        if isHLSManifest && !label.contains("WebSafari") {
+        if isHLSManifest {
             hlsHeaders["Origin"] = "https://www.youtube.com"
             hlsHeaders["Referer"] = "https://www.youtube.com/"
         }
@@ -473,14 +482,13 @@ extension PlaybackViewModel {
             .queryItems?.first(where: { $0.name == "itag" })?.value ?? "?"
         let videoRqh = videoURL.absoluteString.contains("rqh=1")
 
-        // Skip rqh=1 streams that have no pot= token — CDN returns 403 without it.
-        // When a PoTokenProvider is active, applyingPoToken() appends &pot=<token>
-        // to all format URLs before they reach this function, so the guard passes.
-        let hasPot = videoURL.absoluteString.contains("pot=")
-        if videoRqh && !hasPot {
+        // Skip every rqh=1 stream — no client works without a pot= token.
+        // Do NOT attempt a workaround via BotGuard/PoToken — see docs/notes on why
+        // BotGuard was removed (WAA Create proto format changed, pipeline unreliable).
+        if videoRqh {
             let clientParam = URLComponents(url: videoURL, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "c" })?.value ?? "unknown"
-            playerLog.notice("[\(label)/adaptive] skipping rqh=1 (client=\(clientParam)) — no pot= token available")
+            playerLog.notice("[\(label)/adaptive] skipping rqh=1 (client=\(clientParam)) — pot= tokens not supported")
             return false
         }
 
