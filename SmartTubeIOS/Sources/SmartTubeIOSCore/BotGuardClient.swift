@@ -229,7 +229,14 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
                 }
             }
 
-            throw BotGuardError.challengeParseError("JSPB binary: no matching field schema (check logs)")
+            // ── Fallback: proto fields not parseable — treat outer[1] as the raw program
+            // and discover the interpreter URL from YouTube's homepage player JS.
+            // This handles newer YouTube WAA Create response formats where the proto fields
+            // no longer match the expected BgChallengeData schema.
+            bgLog.notice("[BotGuard] JSPB proto parse fallback: using outer[1] as raw program, fetching interpreter from YouTube homepage")
+            let js = try await fetchInterpreterFromYouTube()
+            // globalName "" signals runPipelineSync to discover it dynamically in JSContext.
+            return BotGuardChallenge(interpreterJS: js, program: b64str, globalName: "")
         } else {
             bgLog.notice("[BotGuard] outer[1] type=\(type(of: outer[1])) — unrecognised")
             throw BotGuardError.challengeParseError("outer[1] is neither Array nor String")
@@ -274,6 +281,43 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
             return js
         }
         return raw  // raw is inline JS
+    }
+
+    /// Fetches YouTube's current player JS by extracting the player URL from the homepage.
+    /// Used as a fallback when the WAA Create binary proto parse cannot provide an interpreter URL.
+    private func fetchInterpreterFromYouTube() async throws -> String {
+        bgLog.notice("[BotGuard] fetching interpreter URL from YouTube homepage")
+        guard let homeURL = URL(string: "https://www.youtube.com/") else {
+            throw BotGuardError.challengeParseError("YouTube homepage: invalid URL")
+        }
+        var homeReq = URLRequest(url: homeURL, timeoutInterval: 12)
+        homeReq.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        let (htmlData, _) = try await session.data(for: homeReq)
+        guard let html = String(data: htmlData, encoding: .utf8) else {
+            throw BotGuardError.challengeParseError("YouTube homepage: invalid UTF-8")
+        }
+        // Match the player JS path: /s/player/<hash>/player_ias.vflset/<locale>/base.js
+        let patterns = [
+            #"["'](/s/player/[a-f0-9]+/player_ias\.vflset/[^"'/]+/base\.js)["']"#,
+            #"src\s*=\s*["']([^"']*player[^"']*\.js)["']"#,
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+               let range = Range(match.range(at: 1), in: html) {
+                let path = String(html[range])
+                let fullURL: String
+                if path.hasPrefix("//")   { fullURL = "https:\(path)" }
+                else if path.hasPrefix("http") { fullURL = path }
+                else                       { fullURL = "https://www.youtube.com\(path)" }
+                bgLog.notice("[BotGuard] player JS URL: \(String(fullURL.prefix(80)), privacy: .public)")
+                return try await fetchInterpreterJS(from: fullURL)
+            }
+        }
+        throw BotGuardError.challengeParseError("YouTube homepage: player JS URL not found in HTML")
     }
 
     // MARK: - Binary Protobuf Helpers
@@ -381,9 +425,31 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         }
 
         // --- Locate the VM object in global scope ---
-        guard let vm = ctx.globalObject?.objectForKeyedSubscript(challenge.globalName),
-              !vm.isNull, !vm.isUndefined else {
-            throw BotGuardError.jsFailed("VM '\(challenge.globalName)' not in JSContext global")
+        // When globalName is non-empty, look it up directly.
+        // When empty (fallback path), discover the VM by scanning globals for an object
+        // with a method 'a' — this is the BotGuard VM's known entry-point signature.
+        var vm: JSValue?
+        if !challenge.globalName.isEmpty {
+            vm = ctx.globalObject?.objectForKeyedSubscript(challenge.globalName)
+        }
+        if vm == nil || vm!.isNull || vm!.isUndefined {
+            let discovered = ctx.evaluateScript("""
+                (function() {
+                    var ks = Object.keys(globalThis);
+                    for (var i = 0; i < ks.length; i++) {
+                        var v = globalThis[ks[i]];
+                        if (v && typeof v === 'object' && typeof v.a === 'function') return ks[i];
+                    }
+                    return null;
+                })()
+            """)
+            if let name = discovered?.toString(), name != "null", !name.isEmpty {
+                bgLog.notice("[BotGuard] discovered globalName=\(name, privacy: .public) (requested='\(challenge.globalName, privacy: .public)')")
+                vm = ctx.globalObject?.objectForKeyedSubscript(name)
+            }
+        }
+        guard let vm, !vm.isNull, !vm.isUndefined else {
+            throw BotGuardError.jsFailed("VM '\(challenge.globalName)' not in JSContext global (dynamic discovery also failed)")
         }
 
         // --- Phase 2: call vm.a(program, vmFunctionsCallback, true, undefined, noop, [[], []]) ---

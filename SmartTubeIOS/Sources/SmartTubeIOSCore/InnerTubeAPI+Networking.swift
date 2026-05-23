@@ -344,26 +344,24 @@ extension InnerTubeAPI {
     /// unauthenticated requests — Bearer token is injected when available.
     ///
     /// Endpoint routing mirrors postTV:
-    ///   • Authenticated → youtubei.googleapis.com (www.youtube.com rejects Bearer, returns 400)
+    ///   • Authenticated → www.youtube.com + Bearer (web client, no API key needed with auth)
     ///   • Unauthenticated → www.youtube.com + ?key= (will return signInRequired, but at least 200)
     func postWebCreator(body: [String: Any]) async throws -> [String: Any] {
-        let isAuth = authToken != nil
-        // googleapis.com for authenticated requests (www.youtube.com rejects Bearer with 400).
-        let endpointBase = isAuth ? playerBaseURL : baseURL
-        guard var comps = URLComponents(url: endpointBase.appendingPathComponent("player"),
+        // WEB_CREATOR is a web/browser client — always use www.youtube.com (not googleapis.com).
+        // Using playerBaseURL (googleapis.com) returns HTTP 400 for web client nameIDs.
+        guard var comps = URLComponents(url: baseURL.appendingPathComponent("player"),
                                         resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL("player")
         }
-        // No ?key= when Bearer is present (mirrors postTV / RetrofitOkHttpHelper).
-        if !isAuth {
-            comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        }
+        // Web clients require the public API key even with Bearer (mirrors yt-dlp web_creator).
+        comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         guard let url = comps.url else { throw APIError.invalidURL("player") }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // WEB_CREATOR is a web client — use a full browser UA.
+        // WEB_CREATOR is a web client — use a full browser UA and Origin.
         request.setValue(InnerTubeClients.Web.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
         request.setValue(InnerTubeClients.WebCreator.nameID, forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(InnerTubeClients.WebCreator.version, forHTTPHeaderField: "X-YouTube-Client-Version")
         // WEB_CREATOR requires a signed-in session to return streamingData.

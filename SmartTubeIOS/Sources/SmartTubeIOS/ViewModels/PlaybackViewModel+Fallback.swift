@@ -17,6 +17,17 @@ private let playerLog = CrashlyticsLogger(category: "Player")
 
 extension PlaybackViewModel {
 
+    // MARK: - AetherEngine accessor
+
+    /// Typed accessor for the boxed AetherEngine stored in `_aetherEngineBox`.
+    /// Using a computed property here (rather than a stored var) avoids importing
+    /// AetherEngine in PlaybackViewModel.swift, which would introduce VideoFormat ambiguity
+    /// into that file's public API.
+    private var aetherEngine: AetherEngine? {
+        get { _aetherEngineBox as? AetherEngine }
+        set { _aetherEngineBox = newValue }
+    }
+
     // MARK: - Entry Points
 
     /// Main retry entry point. Called whenever the primary iOS stream fails.
@@ -373,28 +384,15 @@ extension PlaybackViewModel {
 
         let item: AVPlayerItem
         if applyHLSHints {
-            // AetherEngine path: proxy HLS through a local HLS-fMP4 server (127.0.0.1) with
-            // the iOS YouTube UA on every FFmpeg request. AVPlayer never touches CDN URLs, so
-            // CDN signing validation and UA fingerprinting become irrelevant.
-            do {
-                aetherEngine?.stop()
-                let engine = try AetherEngine()
-                aetherEngine = engine
-                let options = LoadOptions(httpHeaders: hlsHeaders)
-                try await engine.load(url: effectiveURL, options: options)
-                guard let aep = engine.currentAVPlayer,
-                      let localhostAsset = aep.currentItem?.asset as? AVURLAsset else {
-                    playerLog.error("❌ [\(label)] AetherEngine loaded but no localhost URL available")
-                    return false
-                }
-                // Pause the engine's internal player — our player drives playback.
-                engine.pause()
-                playerLog.notice("[\(label)] AetherEngine serving HLS from \(localhostAsset.url.host ?? "?")")
-                item = AVPlayerItem(url: localhostAsset.url)
-            } catch {
-                playerLog.error("❌ [\(label)] AetherEngine load failed: \(error)")
-                return false
-            }
+            // Use AVURLAsset with custom UA headers for HLS — AVFoundation handles
+            // HLS natively and sends our YouTube UA for ALL requests (manifest +
+            // segments). AetherEngine cannot be used here because FFmpegBuild has
+            // no HTTP protocol handler, so segment sub-requests inside HLS always
+            // fail regardless of the io_open callback approach.
+            let uaOpts: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": hlsHeaders]
+            let asset = AVURLAsset(url: effectiveURL, options: uaOpts)
+            playerLog.notice("[\(label)] HLS via AVURLAsset (native stack) url=\(effectiveURL.lastPathComponent)")
+            item = AVPlayerItem(asset: asset)
         } else {
             // Non-HLS (muxed / DASH): direct AVURLAsset with iOS UA headers.
             let uaOpts: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": hlsHeaders]
@@ -475,13 +473,11 @@ extension PlaybackViewModel {
             .queryItems?.first(where: { $0.name == "itag" })?.value ?? "?"
         let videoRqh = videoURL.absoluteString.contains("rqh=1")
 
-        // Skip every rqh=1 stream — no client works without a pot= token.
-        // yt-dlp claims TVHTML5 and ANDROID_VR are exempt, but empirically:
-        //   TVHTML5    → immediate 403 from CDN (~163 ms)
-        //   ANDROID_VR → CDN hangs indefinitely (30 s+, no fast error)
-        // Neither reaches readyToPlay without a Proof-of-Origin token.
-        // When pot= support is added, remove this guard.
-        if videoRqh {
+        // Skip rqh=1 streams that have no pot= token — CDN returns 403 without it.
+        // When a PoTokenProvider is active, applyingPoToken() appends &pot=<token>
+        // to all format URLs before they reach this function, so the guard passes.
+        let hasPot = videoURL.absoluteString.contains("pot=")
+        if videoRqh && !hasPot {
             let clientParam = URLComponents(url: videoURL, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "c" })?.value ?? "unknown"
             playerLog.notice("[\(label)/adaptive] skipping rqh=1 (client=\(clientParam)) — no pot= token available")

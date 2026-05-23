@@ -199,6 +199,26 @@ extension InnerTubeAPI {
     /// returns `streamingData` (including an `hlsManifestUrl`) rather than the
     /// "The page needs to be reloaded" rejection that occurs without the STS value.
     /// Also injects `visitorData` into the client context so personalized auth resolves.
+    /// Resolves a Proof-of-Origin token for `videoId`.
+    ///
+    /// Returns the cached token when `poTokenVideoId` already matches, otherwise
+    /// asks `poTokenProvider` for a fresh token, caches it, and returns it.
+    /// Falls back to `nil` when no provider is configured or the provider throws.
+    func resolvePoToken(for videoId: String) async -> String? {
+        if let cached = poToken, poTokenVideoId == videoId { return cached }
+        guard let provider = poTokenProvider else { return nil }
+        do {
+            let tok = try await provider.token(for: videoId)
+            poToken = tok
+            poTokenVideoId = videoId
+            tubeLog.notice("[InnerTube] ✅ poToken resolved (len=\(tok.count, privacy: .public)) for \(videoId, privacy: .public)")
+            return tok
+        } catch {
+            tubeLog.warning("[InnerTube] poTokenProvider failed for \(videoId, privacy: .public): \(error, privacy: .public)")
+            return nil
+        }
+    }
+
     public func fetchPlayerInfoAuthenticated(videoId: String) async throws -> PlayerInfo {
         // Build a TV client context that includes visitorData when available.
         // YouTube's TV auth endpoint needs visitorData inside context.client to correctly
@@ -215,11 +235,12 @@ extension InnerTubeAPI {
         var cpbc: [String: Any] = ["html5Preference": "HTML5_PREF_WANTS"]
         if let sts { cpbc["signatureTimestamp"] = sts }
 
-        // att/get: fetch a proof-of-origin attestation token for the TV session.
-        // Including it as serviceIntegrityDimensions.poToken signals to YouTube that this
-        // is a legitimate TV client — YouTube may then return hlsManifestUrl or standard
-        // CDN adaptive URLs rather than the SABR-only response.
-        let attToken = await fetchAttestationToken(videoId: videoId)
+        // Resolve a Proof-of-Origin token via BotGuardClient (PoTokenProvider).
+        // Including it as serviceIntegrityDimensions.poToken causes YouTube to return
+        // CDN adaptive URLs without rqh=1 enforcement. Falls back to att/get legacy
+        // endpoint when no PoTokenProvider is configured.
+        var attToken = await resolvePoToken(for: videoId)
+        if attToken == nil { attToken = await fetchAttestationToken(videoId: videoId) }
 
         func buildBody(fields: [String: Any]) -> [String: Any] {
             var body = makeBody(client: ["client": fields])
@@ -231,6 +252,13 @@ extension InnerTubeAPI {
                 body["serviceIntegrityDimensions"] = ["poToken": token]
             }
             return body
+        }
+
+        // Applies pot= to every format URL so the CDN accepts rqh=1 streams.
+        func applyPot(_ info: PlayerInfo) -> PlayerInfo {
+            guard let tok = attToken else { return info }
+            tubeLog.notice("[TVAuth] poToken applied to format URLs for \(videoId, privacy: .public)")
+            return info.applyingPoToken(tok)
         }
 
         let firstData = try await postTV(endpoint: "player", body: buildBody(fields: clientFields))
@@ -247,10 +275,10 @@ extension InnerTubeAPI {
             var retryFields = (tvClientContext["client"] as? [String: Any]) ?? [:]
             retryFields["visitorData"] = newVD
             let retryData = try await postTV(endpoint: "player", body: buildBody(fields: retryFields))
-            return try parsePlayerInfo(from: retryData, videoId: videoId)
+            return applyPot(try parsePlayerInfo(from: retryData, videoId: videoId))
         }
 
-        return try parsePlayerInfo(from: firstData, videoId: videoId)
+        return applyPot(try parsePlayerInfo(from: firstData, videoId: videoId))
     }
 
     /// Fetches end-screen cards for a video using the Web client.

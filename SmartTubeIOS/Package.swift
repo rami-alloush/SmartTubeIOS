@@ -23,10 +23,10 @@ let package = Package(
             url: "https://github.com/firebase/firebase-ios-sdk",
             from: "12.0.0"
         ),
-        .package(
-            url: "https://github.com/superuser404notfound/AetherEngine",
-            revision: "dcc1c570b964c9988e6adfa66408cb765b4c2e25"  // 1.3.0
-        ),
+        // Local fork of AetherEngine with Demuxer.swift patched to propagate
+        // extraHeaders (user_agent + headers) to libavformat's internal HTTP
+        // stack, fixing CDN rqh=1 segment 403s for YouTube HLS streams.
+        .package(path: "./AetherEngine"),
     ],
     targets: [
         // MARK: Core – iOS, macOS (Foundation only)
