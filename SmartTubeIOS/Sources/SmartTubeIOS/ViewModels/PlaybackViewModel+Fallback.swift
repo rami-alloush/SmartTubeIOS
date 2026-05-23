@@ -72,6 +72,27 @@ extension PlaybackViewModel {
                 guard !Task.isCancelled else { return }
             }
 
+            // --- Phase 0b: Authenticated WEB client (logged-in users only) ---
+            // yt-dlp `web` OAuth client pattern: WEB (nameID=1) + www.youtube.com +
+            // `Authorization: Bearer {token}` + `X-Goog-AuthUser: 0`.
+            // For authenticated users YouTube does NOT apply rqh=1 to adaptive stream URLs
+            // from the WEB client, making this the most reliable ≥720p path when signed in.
+            // Skipped when not logged in (notAuthenticated error is silently swallowed).
+            if hasAuthToken {
+                do {
+                    let webAuthInfo = try await api.fetchPlayerInfoWebAuthenticated(videoId: video.id)
+                    if await tryAllStreams(video: video, info: webAuthInfo,
+                                          label: "WebAuth[\(attempt)]", skipMuxed: true) {
+                        return
+                    }
+                } catch APIError.notAuthenticated {
+                    // No token — skip silently.
+                } catch {
+                    playerLog.error("WebAuth client fetch failed (attempt \(attempt)): \(error)")
+                }
+                guard !Task.isCancelled else { return }
+            }
+
             // --- Phase 1: TV Embedded client ---
             // TVHTML5_SIMPLY_EMBEDDED_PLAYER (client ID 85) returns an HLS manifest
             // for most embeddable videos. HLS streams bypass the rqh=1/pot CDN enforcement
@@ -125,10 +146,10 @@ extension PlaybackViewModel {
 
             // --- iOS client (fresh network fetch) ---
             // Unauthenticated iOS (googleapis.com, c=IOS) returns adaptive-only streams.
-            // Per yt-dlp research, iOS adaptive streams do NOT have rqh=1 and do not
-            // require a pot= token. The authenticated path (Bearer + iOS client nameID=5)
-            // currently returns HTTP 400 — the TV-device-code token is scoped for TVHTML5,
-            // not for iOS client. Falls back to unauthenticated in that case.
+            // Confirmed: iOS adaptive streams ALWAYS have rqh=1 (empirically verified May 2026
+            // via device log — "skipping rqh=1 (client=IOS)"). The authenticated path (Bearer
+            // + iOS client nameID=5) returns HTTP 400 — the TV-device-code token is scoped for
+            // TVHTML5, not iOS client. Falls back to unauthenticated, which also has rqh=1.
             // Tries HLS + adaptive only (muxed fallback happens below).
             var androidInfoForMuxed: PlayerInfo? = nil
             do {

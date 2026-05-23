@@ -173,6 +173,26 @@ extension InnerTubeAPI {
         return try parsePlayerInfo(from: data, videoId: videoId)
     }
 
+    /// Fetches player info using the authenticated WEB client (nameID=1, www.youtube.com).
+    /// Mirrors yt-dlp's `web` OAuth client: `Bearer {token}` + `X-Goog-AuthUser: 0`.
+    /// For authenticated users, adaptive stream URLs from the WEB client do not carry
+    /// `rqh=1` CDN enforcement, making this the primary authenticated adaptive path.
+    /// Throws `APIError.notAuthenticated` when no auth token is present.
+    public func fetchPlayerInfoWebAuthenticated(videoId: String) async throws -> PlayerInfo {
+        let sts = await fetchSignatureTimestampIfNeeded()
+        var cpbc: [String: Any] = ["html5Preference": "HTML5_PREF_WANTS"]
+        if let sts { cpbc["signatureTimestamp"] = sts }
+        var clientFields = (webClientContext["client"] as? [String: Any]) ?? [:]
+        if let vd = visitorData { clientFields["visitorData"] = vd }
+        var body = makeBody(client: ["client": clientFields])
+        body["videoId"] = videoId
+        body["racyCheckOk"] = true
+        body["contentCheckOk"] = true
+        body["playbackContext"] = ["contentPlaybackContext": cpbc]
+        let data = try await postWebAuthenticated(body: body)
+        return try parsePlayerInfo(from: data, videoId: videoId)
+    }
+
     /// Fetches player info using the authenticated iOS client.
     /// The unauthenticated iOS player request omits `streamingData` for some videos
     /// (e.g. embed-disabled or account-restricted content). Adding a Bearer auth token

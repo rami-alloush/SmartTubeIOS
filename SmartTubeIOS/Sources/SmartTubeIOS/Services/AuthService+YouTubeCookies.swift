@@ -53,7 +53,8 @@ extension AuthService {
               let location = http1.value(forHTTPHeaderField: "Location"),
               let mergeURL = URL(string: location) else {
             let code = (response1 as? HTTPURLResponse)?.statusCode ?? 0
-            authLog.notice("[cookies] OAuthLogin did not redirect (HTTP \(code)) — SAPISID unavailable")
+            authLog.notice("[cookies] OAuthLogin did not redirect (HTTP \(code)) — trying Multilogin fallback")
+            await fetchSAPISIDViaMultilogin(token: token)
             return
         }
 
@@ -80,6 +81,58 @@ extension AuthService {
         sapisid = sapisidCookie.value
         // Persist to Keychain so it survives app restarts — no re-fetch needed on next launch.
         Task { await tokenManager.setSAPISID(sapisidCookie.value) }
+    }
+
+    // MARK: - Google Multilogin fallback
+
+    /// Attempts to obtain SAPISID via the Google Multilogin endpoint.
+    ///
+    /// Multilogin is used by Chromium for account session sync and accepts any valid
+    /// Google OAuth access token — no special OAuthLogin scope required. The response
+    /// body contains a JSON cookie list (with XSSI prefix) including `SAPISID`.
+    ///
+    /// Reference: chromium/src/components/signin/core/browser/gaia_cookie_manager_service.cc
+    private func fetchSAPISIDViaMultilogin(token: String) async {
+        guard let url = URL(string: "https://accounts.google.com/oauth/multilogin?source=ChromiumBrowser&pt=I1") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("MultiLogin osid=0:\(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "source=ChromiumBrowser".data(using: .utf8)
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            authLog.notice("[cookies] Multilogin request failed: \(error.localizedDescription)")
+            return
+        }
+
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            authLog.notice("[cookies] Multilogin HTTP \(code) — SAPISID via Multilogin unavailable")
+            return
+        }
+
+        // Strip XSSI protection prefix ")]}'" before JSON parsing.
+        var body = String(data: data, encoding: .utf8) ?? ""
+        if body.hasPrefix(")]}'") {
+            body = String(body.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let jsonData = body.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              (json["status"] as? String) == "OK",
+              let cookies = json["cookies"] as? [[String: Any]],
+              let entry = cookies.first(where: { $0["name"] as? String == "SAPISID" }),
+              let value = entry["value"] as? String, !value.isEmpty else {
+            authLog.notice("[cookies] Multilogin response missing SAPISID — unavailable")
+            return
+        }
+
+        authLog.notice("[cookies] ✅ SAPISID obtained via Multilogin — WEB_CREATOR SAPISIDHASH auth enabled")
+        sapisid = value
+        Task { await tokenManager.setSAPISID(value) }
     }
 }
 
