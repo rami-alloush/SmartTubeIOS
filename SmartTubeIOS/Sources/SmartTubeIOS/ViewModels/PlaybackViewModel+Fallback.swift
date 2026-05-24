@@ -637,6 +637,32 @@ extension PlaybackViewModel {
             assetHeaders["Authorization"] = "Bearer \(token)"
             playerLog.notice("[\(label)/adaptive] injecting Bearer auth into CDN headers for TVAuth rqh=1")
         }
+
+        // Fast rqh=1 firstByte probe for Android VR — avoids the full 8s loadTracks
+        // timeout when the CDN hangs byte-range requests for rqh=1 URLs without pot=.
+        // The CDN either immediately 403s (fail fast) or stalls the TCP connection
+        // (3s timeout here vs 8s loadTracks timeout = 5s saved per failing video).
+        // TVAuth with Bearer is intentionally excluded — its 3s timeout is already fast.
+        if videoRqh && isAndroidVR {
+            var probeReq = URLRequest(url: videoURL)
+            probeReq.setValue(ua, forHTTPHeaderField: "User-Agent")
+            probeReq.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+            probeReq.timeoutInterval = 3
+            if let (_, probeResp) = try? await URLSession(configuration: .ephemeral).data(for: probeReq),
+               let http = probeResp as? HTTPURLResponse {
+                if http.statusCode == 403 || http.statusCode == 401 {
+                    playerLog.notice("❌ [\(label)/adaptive] rqh=1 firstByte probe: HTTP \(http.statusCode) — CDN enforcing rqh, skipping composition")
+                    return false
+                }
+                playerLog.notice("[\(label)/adaptive] rqh=1 firstByte probe: HTTP \(http.statusCode) — CDN not enforcing, proceeding")
+            } else {
+                // Probe timed out (CDN stalling connection) — bail out early, 5s faster
+                // than waiting for the full 8s loadTracks race to expire.
+                playerLog.notice("⚠️ [\(label)/adaptive] rqh=1 firstByte probe: timeout — CDN stalling, skipping composition")
+                return false
+            }
+        }
+
         let videoAsset = AVURLAsset(url: videoURL, options: ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders])
         let audioAsset = AVURLAsset(url: audioURL, options: ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders])
 
