@@ -15,7 +15,7 @@ struct SmartTubeApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let api = InnerTubeAPI(poTokenProvider: BotGuardClient())
+        let api = InnerTubeAPI()
         _api = State(initialValue: api)
         _authService = State(initialValue: AuthService())
         _browseViewModel = State(initialValue: BrowseViewModel(api: api))

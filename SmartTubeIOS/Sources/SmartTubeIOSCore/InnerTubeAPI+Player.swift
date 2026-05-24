@@ -244,6 +244,32 @@ extension InnerTubeAPI {
 
         let firstData = try await postTV(endpoint: "player", body: buildBody(fields: clientFields))
 
+        // D-16 SABR probe: test if serverAbrStreamingUrl accepts a simple GET with Bearer.
+        // This is the endpoint the official YouTube TV app uses for all playback.
+        // If Bearer auth satisfies it and it returns video data or a redirect to a CDN URL
+        // without rqh=1, it could provide a playback path we can use via AVURLAsset or
+        // AVAssetResourceLoader without BotGuard/pot= tokens.
+        if let sabrStr = (firstData["streamingData"] as? [String: Any])?["serverAbrStreamingUrl"] as? String,
+           let sabrURL = URL(string: sabrStr),
+           let bearerToken = authToken {
+            tubeLog.notice("D-16 SABR URL (first 200): \(sabrStr.prefix(200), privacy: .public)")
+            let capturedToken = bearerToken
+            Task.detached {
+                var req = URLRequest(url: sabrURL)
+                req.setValue("Bearer \(capturedToken)", forHTTPHeaderField: "Authorization")
+                req.setValue(InnerTubeClients.TV.userAgent, forHTTPHeaderField: "User-Agent")
+                req.timeoutInterval = 8
+                if let (data, resp) = try? await URLSession(configuration: .ephemeral).data(for: req),
+                   let http = resp as? HTTPURLResponse {
+                    let ct = http.value(forHTTPHeaderField: "Content-Type") ?? "?"
+                    let preview = String(data: data.prefix(300), encoding: .utf8) ?? "(binary \(data.count) bytes)"
+                    tubeLog.notice("D-16 SABR GET Bearer: HTTP \(http.statusCode, privacy: .public) ct=\(ct, privacy: .public) body_preview=\(preview.prefix(200), privacy: .public)")
+                } else {
+                    tubeLog.notice("D-16 SABR GET Bearer: fail/timeout")
+                }
+            }
+        }
+
         // TV auth responses always contain responseContext.visitorData, even when unplayable.
         // On the very first call visitorData is nil, which causes YouTube to return no
         // streamingData. Extract and cache it here, then immediately retry so the quality

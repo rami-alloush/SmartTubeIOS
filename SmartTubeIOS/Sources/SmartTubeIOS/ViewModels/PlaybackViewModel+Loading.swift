@@ -430,16 +430,15 @@ extension PlaybackViewModel {
             // quality, but the HLS variant playlist may omit qualities the CDN has not
             // encoded for this video. Parsing the manifest prevents the user from
             // selecting a quality tier that AVPlayer's ABR would silently ignore.
-            // TEMP DISABLED: HLS variant fetch skipped
-            // if let hlsURL = info.hlsURL {
-            //     let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
-            //     if !variantURLs.isEmpty {
-            //         hlsVariantURLs = variantURLs
-            //         availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
-            //         playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker to \(availableFormats.count) options")
-            //         if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) { selectedFormat = nil }
-            //     }
-            // }
+            if let hlsURL = info.hlsURL {
+                let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
+                if !variantURLs.isEmpty {
+                    hlsVariantURLs = variantURLs
+                    availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
+                    playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker to \(availableFormats.count) options")
+                    if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) { selectedFormat = nil }
+                }
+            }
             // Build player item — preferredStreamURL is guaranteed non-nil here because
             // parsePlayerInfo throws APIError.unavailable when streamingData is absent.
             guard let masterStreamURL = info.preferredStreamURL else {
@@ -456,6 +455,16 @@ extension PlaybackViewModel {
                 }
                 playerLog.error("❌ No stream URL after successful parse (should not happen)")
                 throw APIError.decodingError("No stream URL")
+            }
+            // When the iOS client has no HLS URL (non-embeddable videos return only muxed
+            // 360p), playing masterStreamURL directly would settle for 360p without ever
+            // trying AndroidVR adaptive (which works for these videos via visitorData).
+            // Route through exhaustiveRetry first; it will try all adaptive paths and fall
+            // back to muxed 360p as Phase 2 if all adaptive attempts fail.
+            if info.hlsURL == nil {
+                playerLog.notice("⚠️ iOS response: no HLS — routing to exhaustiveRetry for adaptive quality before muxed fallback")
+                await exhaustiveRetry(video: video, originalError: nil)
+                return
             }
             // For initial load always use the master HLS manifest so that AVPlayer
             // receives EXT-X-MEDIA alternate audio renditions (dubbed tracks, etc.).
