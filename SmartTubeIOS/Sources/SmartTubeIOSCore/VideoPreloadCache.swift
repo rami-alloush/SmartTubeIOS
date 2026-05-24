@@ -99,6 +99,10 @@ public actor VideoPreloadCache {
     private var endCardsCache:    [String: CacheEntry<[EndCard]>]                = [:]
     private var sponsorCache:     [String: CacheEntry<[SponsorSegment]>]         = [:]
     private var deArrowCache:     [String: CacheEntry<DeArrowService.BrandingInfo>] = [:]
+    /// WKWebView-extracted HLS master manifest URLs keyed by videoId.
+    /// NOT cleared by consume() — persists so that re-plays and neighbour navigation
+    /// skip the 5–9 s WKWebView extraction step when the URL is still fresh.
+    private var wkHLSCache:       [String: CacheEntry<URL>]                     = [:]
 
     // MARK: - Access order (LRU)
 
@@ -390,6 +394,24 @@ public actor VideoPreloadCache {
         deArrowCache[videoId] = CacheEntry(value: deArrowBranding, storedAt: .init(), ttl: Self.deArrowTTL)
         disk.store(deArrowBranding, videoId: videoId, dataType: "deArrowBranding")
         touch(videoId)
+    }
+
+    /// Stores the WKWebView-extracted HLS master manifest URL for a video.
+    /// TTL matches the `expire=` lifetime of signed manifest URLs (~6h) with a 2h safety margin.
+    /// NOT subject to consume() eviction — survives across multiple load() calls.
+    public func store(wkHLSManifestURL url: URL, for videoId: String) {
+        cacheLog.notice("[store] wkHLS \(videoId) url=\(url.absoluteString.prefix(80))")
+        wkHLSCache[videoId] = CacheEntry(value: url, storedAt: .init(), ttl: 4 * 3_600)
+    }
+
+    /// Returns the cached WKWebView HLS master manifest URL if still within TTL, else nil.
+    public func cachedWKHLSURL(for videoId: String) -> URL? {
+        guard let entry = wkHLSCache[videoId] else { return nil }
+        if entry.isExpired {
+            wkHLSCache.removeValue(forKey: videoId)
+            return nil
+        }
+        return entry.value
     }
 
     // MARK: - Public: auth invalidation

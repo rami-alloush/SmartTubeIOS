@@ -447,7 +447,7 @@ extension PlaybackViewModel {
                     playerLog.notice("⚠️ adaptive-only iOS response — trying adaptive composition (c=IOS may be rqh=0)")
                     if await tryAllStreams(video: video, info: info, label: "iOS", skipMuxed: true) { return }
                     playerLog.notice("⚠️ iOS adaptive composition failed — retrying exhaustively")
-                    await exhaustiveRetry(video: video, originalError: nil, playerInfo: info)
+                    await exhaustiveRetry(video: video, originalError: nil, playerInfo: info, cached: cached)
                     return
                 }
                 playerLog.error("❌ No stream URL after successful parse (should not happen)")
@@ -460,7 +460,7 @@ extension PlaybackViewModel {
             // back to muxed 360p as Phase 2 if all adaptive attempts fail.
             if info.hlsURL == nil {
                 playerLog.notice("⚠️ iOS response: no HLS — routing to exhaustiveRetry for adaptive quality before muxed fallback")
-                await exhaustiveRetry(video: video, originalError: nil, playerInfo: info)
+                await exhaustiveRetry(video: video, originalError: nil, playerInfo: info, cached: cached)
                 return
             }
             // For initial load always use the master HLS manifest so that AVPlayer
@@ -878,6 +878,17 @@ extension PlaybackViewModel {
                     authToken: token,
                     priority: .speculative
                 )
+            }
+        }
+        // Pre-extract WKWebView HLS URL for the first neighbour while the current video
+        // is playing and WKWebView is idle. Stores the result in VideoPreloadCache so
+        // exhaustiveRetry can skip the 5–9 s extraction step when the user swipes there.
+        // Only the first neighbour is pre-extracted (serial WKWebView, one at a time).
+        if let firstNeighbour = neighbourIds.first {
+            Task(priority: .background) { [weak self] in
+                #if canImport(WebKit)
+                await self?.preExtractWKHLSForVideo(firstNeighbour)
+                #endif
             }
         }
     }

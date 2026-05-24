@@ -33,9 +33,23 @@ extension PlaybackViewModel {
     ///             Correct VR headers (nameID=28, Oculus UA on googleapis.com) are required.
     ///   Phase 4 — if all adaptive attempts fail, fall back to the Android muxed 360p stream.
     ///   The entire cycle repeats up to 3 times to survive transient network errors.
-    func exhaustiveRetry(video: Video, originalError: Error?, playerInfo: PlayerInfo? = nil) async {
+    func exhaustiveRetry(video: Video, originalError: Error?, playerInfo: PlayerInfo? = nil, cached: CachedVideoData? = nil) async {
         #if canImport(WebKit)
-        // Phase -1: WKWebView HLS extraction (device-native, no external tools required).
+        // Phase -1a: Cached WKWebView HLS URL shortcut — skip 5–9 s extraction when the
+        // master manifest URL for this video was stored by a prior session or neighbour
+        // pre-extraction. Falls through to live WKWebView extraction if the URL has expired
+        // or if tryWebViewHLS fails (e.g. 403 on an expired signed URL).
+        if let cachedHLSURL = await VideoPreloadCache.shared.cachedWKHLSURL(for: video.id) {
+            playerLog.notice("✅ [wkHLS] cached HLS URL found — skipping WKWebView extraction")
+            let nSolver = YouTubeWebViewHLSExtractor.shared.extractedNSolver
+            if await tryWebViewHLS(cachedHLSURL, nSolver: nSolver, for: video) {
+                playerLog.notice("✅ [wkHLS] cached URL played — exhaustiveRetry done")
+                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                return
+            }
+            playerLog.notice("⚠️ [wkHLS] cached URL failed (likely expired) — falling back to live WKWebView")
+        }
+        // Phase -1b: WKWebView HLS extraction (device-native, no external tools required).
         // YouTube's JavaScript player computes the spc= proof-of-context token that produces
         // HLS segment URLs not subject to rqh=1 CDN restrictions. Raw InnerTube API calls
         // (even with Bearer auth — confirmed by D-15 probe: HTTP 403) cannot generate spc=
@@ -55,9 +69,7 @@ extension PlaybackViewModel {
                 // Phase 2 (relatedVideos, trackingURLs, neighbour prefetch) must be launched
                 // here because loadAsync returns immediately after calling exhaustiveRetry and
                 // never reaches its own Phase 2 creation block.
-                if let playerInfo {
-                    launchPhase2(video: video, info: playerInfo)
-                }
+                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
                 return
             }
             playerLog.notice("⚠️ [webView] HLS load failed — falling through to client retry chain")
@@ -756,17 +768,22 @@ extension PlaybackViewModel {
         }
     }
 
-    private func launchPhase2(video: Video, info: PlayerInfo) {
+    private func launchPhase2(video: Video, info: PlayerInfo, cached: CachedVideoData? = nil) {
         phase2Task?.cancel()
         phase2Task = Task(priority: .utility) { [weak self] in
-            let empty = CachedVideoData(
+            // Use the caller-supplied cached data when available so Phase 2 can use
+            // already-consumed nextInfo/endCards/sponsorSegments instead of re-fetching.
+            // Falls back to empty (full network fetch) when no cached data is passed
+            // (e.g. from the 3-attempt retry loop which doesn't have the original cached struct).
+            let p2Cached = cached ?? CachedVideoData(
                 playerInfo: nil, trackingURLs: nil, nextInfo: nil,
                 endCards: nil, sponsorSegments: nil, deArrowBranding: nil,
                 staleFields: []
             )
             await self?.loadAsyncPhase2(
-                video: video, cached: empty, info: info,
-                cachedTrackingURLs: nil, authTrackingTask: nil, sponsorCached: false
+                video: video, cached: p2Cached, info: info,
+                cachedTrackingURLs: cached?.trackingURLs ?? nil, authTrackingTask: nil,
+                sponsorCached: cached?.sponsorSegments != nil
             )
         }
         // Background pre-warming runs alongside phase2:
@@ -1285,6 +1302,9 @@ extension PlaybackViewModel {
             return false
         }
         playerLog.notice("[webView/HLS] selected per-quality URL: \(bestURL.absoluteString.prefix(200))")
+        // Cache the master manifest URL so future loads of this video (or pre-extracted
+        // neighbours) can skip the 5–9 s WKWebView extraction step entirely.
+        await VideoPreloadCache.shared.store(wkHLSManifestURL: masterURL, for: video.id)
 
         // 3. Route through YTHLSProxyLoader so every AVPlayer request (playlist + segments)
         //    goes via URLSession.shared with the desktop-Safari UA.
@@ -1374,6 +1394,26 @@ extension PlaybackViewModel {
             i += 1
         }
         return bestURL
+    }
+
+    /// Proactively extracts and caches the WKWebView HLS master manifest URL for a neighbour
+    /// video while the current video is already playing. Stores the result in VideoPreloadCache
+    /// so that when the user swipes to the neighbour, exhaustiveRetry skips the 5–9 s
+    /// WKWebView extraction step and plays from the cached URL directly.
+    ///
+    /// Skips silently if the URL is already cached or if extraction returns nil.
+    func preExtractWKHLSForVideo(_ videoId: String) async {
+        guard await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) == nil else {
+            playerLog.notice("[wkHLS] pre-extract skipped — already cached for \(videoId)")
+            return
+        }
+        playerLog.notice("[wkHLS] pre-extracting HLS URL for neighbour \(videoId)")
+        guard let url = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: videoId) else {
+            playerLog.notice("[wkHLS] pre-extract returned nil for \(videoId)")
+            return
+        }
+        await VideoPreloadCache.shared.store(wkHLSManifestURL: url, for: videoId)
+        playerLog.notice("✅ [wkHLS] pre-extract done for \(videoId)")
     }
     #endif
 
