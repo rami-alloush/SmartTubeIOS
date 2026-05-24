@@ -447,7 +447,7 @@ extension PlaybackViewModel {
                     playerLog.notice("⚠️ adaptive-only iOS response — trying adaptive composition (c=IOS may be rqh=0)")
                     if await tryAllStreams(video: video, info: info, label: "iOS", skipMuxed: true) { return }
                     playerLog.notice("⚠️ iOS adaptive composition failed — retrying exhaustively")
-                    await exhaustiveRetry(video: video, originalError: nil)
+                    await exhaustiveRetry(video: video, originalError: nil, playerInfo: info)
                     return
                 }
                 playerLog.error("❌ No stream URL after successful parse (should not happen)")
@@ -460,7 +460,7 @@ extension PlaybackViewModel {
             // back to muxed 360p as Phase 2 if all adaptive attempts fail.
             if info.hlsURL == nil {
                 playerLog.notice("⚠️ iOS response: no HLS — routing to exhaustiveRetry for adaptive quality before muxed fallback")
-                await exhaustiveRetry(video: video, originalError: nil)
+                await exhaustiveRetry(video: video, originalError: nil, playerInfo: info)
                 return
             }
             // For initial load always use the master HLS manifest so that AVPlayer
@@ -866,19 +866,19 @@ extension PlaybackViewModel {
 
         // BUG-015 fix: read currentAuthToken per-prefetch-call so a token refresh mid-loop
         // uses the fresh token rather than a stale snapshot captured before the loop starts.
-        // TEMP DISABLED: neighbour prefetch — forcing fresh playerInfo fetch on every tap
-        // let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
-        // let sponsorCats = settings.activeSponsorCategories
-        // Task(priority: .background) { [weak self] in
-        //     for videoId in neighbourIds {
-        //         let token = await MainActor.run { self?.currentAuthToken }
-        //         await VideoPreloadCache.shared.prefetch(
-        //             videoId: videoId,
-        //             sponsorCategories: sponsorCats,
-        //             authToken: token,
-        //             priority: .speculative
-        //         )
-        //     }
-        // }
+        let neighbourIds = Array(relatedVideos.prefix(3).map(\.id))
+        let sponsorCats = settings.activeSponsorCategories
+        playerLog.notice("[prefetch] scheduling \(neighbourIds.count) neighbours")
+        Task(priority: .background) { [weak self] in
+            for videoId in neighbourIds {
+                let token = await MainActor.run { self?.currentAuthToken }
+                await VideoPreloadCache.shared.prefetch(
+                    videoId: videoId,
+                    sponsorCategories: sponsorCats,
+                    authToken: token,
+                    priority: .speculative
+                )
+            }
+        }
     }
 }

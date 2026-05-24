@@ -72,15 +72,14 @@ public struct VideoCardView: View {
         .task {
             localProgress = await VideoStateStore.shared.state(for: video.id)?.watchedFraction
         }
-        // TEMP DISABLED: browse prefetch — forcing fresh playerInfo fetch on every tap
-        // .task(id: video.id) {
-        //     await VideoPreloadCache.shared.prefetch(
-        //         videoId: video.id,
-        //         sponsorCategories: store.settings.activeSponsorCategories,
-        //         authToken: authService.accessToken,
-        //         priority: .visible
-        //     )
-        // }
+        .task(id: video.id) {
+            await VideoPreloadCache.shared.prefetch(
+                videoId: video.id,
+                sponsorCategories: store.settings.activeSponsorCategories,
+                authToken: authService.accessToken,
+                priority: .visible
+            )
+        }
         .contextMenu {
             #if !os(tvOS)
             if let shareURL = URL(string: "https://www.youtube.com/watch?v=\(video.id)") {

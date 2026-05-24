@@ -214,6 +214,9 @@ public actor VideoPreloadCache {
         )
         let insertIdx = prefetchQueue.firstIndex(where: { $0.priority < priority }) ?? prefetchQueue.endIndex
         prefetchQueue.insert(request, at: insertIdx)
+        let qDepth = prefetchQueue.count
+        let wCount = activeWorkerCount
+        cacheLog.notice("[prefetch] ENQUEUE \(videoId, privacy: .public) priority=\(priority.rawValue, privacy: .public) queueDepth=\(qDepth, privacy: .public) workers=\(wCount, privacy: .public)")
         drainQueue()
     }
 
@@ -286,8 +289,10 @@ public actor VideoPreloadCache {
     /// the existing Task is returned — no duplicate network request is made.
     public func getOrFetchPlayerInfo(videoId: String) -> Task<PlayerInfo?, Never> {
         if let existing = inFlightPlayerFetches[videoId] {
+            cacheLog.notice("[coalesce] returning existing in-flight task for \(videoId, privacy: .public)")
             return existing
         }
+        cacheLog.notice("[coalesce] creating new in-flight task for \(videoId, privacy: .public)")
         let task = Task<PlayerInfo?, Never>(priority: .userInitiated) {
             let result = try? await self.api.fetchPlayerInfo(videoId: videoId)
             self.inFlightPlayerFetches.removeValue(forKey: videoId)
@@ -348,7 +353,7 @@ public actor VideoPreloadCache {
     // MARK: - Public: store (write after live fetch)
 
     public func store(playerInfo: PlayerInfo, for videoId: String) {
-        cacheLog.debug("[store] playerInfo \(videoId, privacy: .public) formats=\(playerInfo.formats.count, privacy: .public) hls=\(playerInfo.hlsURL != nil, privacy: .public)")
+        cacheLog.notice("[store] playerInfo \(videoId, privacy: .public) formats=\(playerInfo.formats.count, privacy: .public) hls=\(playerInfo.hlsURL != nil, privacy: .public) adaptive=\(playerInfo.bestAdaptiveVideoURL != nil, privacy: .public)")
         playerInfoCache[videoId] = CacheEntry(value: playerInfo, storedAt: .init(), ttl: Self.playerInfoTTL)
         touch(videoId)
     }
@@ -422,6 +427,7 @@ public actor VideoPreloadCache {
         guard !Task.isCancelled else { return }
         let startedAt = Date()
         let allowed = allowedPrefetchDataTypes
+        cacheLog.notice("[prefetch] START \(videoId, privacy: .public) allowed=\(allowed.sorted().joined(separator: ","), privacy: .public)")
 
         // Route through getOrFetchPlayerInfo so a concurrent live-load for the
         // same video reuses this in-flight task instead of issuing a second request.
@@ -449,7 +455,6 @@ public actor VideoPreloadCache {
         guard !Task.isCancelled else { return }
 
         let elapsed = String(format: "%.2fs", Date().timeIntervalSince(startedAt))
-        _ = elapsed
 
         if let player  { store(playerInfo: player,          for: videoId) }
         store(trackingURLs: tracking,                        for: videoId)
@@ -458,6 +463,7 @@ public actor VideoPreloadCache {
         store(sponsorSegments: sponsor,                      for: videoId)
         if let dearrow { store(deArrowBranding: dearrow,     for: videoId) }
 
+        cacheLog.notice("[prefetch] DONE \(videoId, privacy: .public) elapsed=\(elapsed, privacy: .public) playerInfo=\(player != nil, privacy: .public) tracking=\(tracking != nil, privacy: .public) next=\(next != nil, privacy: .public) endCards=\(cards != nil, privacy: .public) sponsor=\(sponsor.count, privacy: .public) deArrow=\(dearrow != nil, privacy: .public)")
         prefetchTasks.removeValue(forKey: videoId)
     }
 

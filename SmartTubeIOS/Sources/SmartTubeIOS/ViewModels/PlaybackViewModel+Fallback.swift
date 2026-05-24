@@ -33,7 +33,7 @@ extension PlaybackViewModel {
     ///             Correct VR headers (nameID=28, Oculus UA on googleapis.com) are required.
     ///   Phase 4 — if all adaptive attempts fail, fall back to the Android muxed 360p stream.
     ///   The entire cycle repeats up to 3 times to survive transient network errors.
-    func exhaustiveRetry(video: Video, originalError: Error?) async {
+    func exhaustiveRetry(video: Video, originalError: Error?, playerInfo: PlayerInfo? = nil) async {
         #if canImport(WebKit)
         // Phase -1: WKWebView HLS extraction (device-native, no external tools required).
         // YouTube's JavaScript player computes the spc= proof-of-context token that produces
@@ -52,6 +52,12 @@ extension PlaybackViewModel {
             playerLog.notice("⚠️ [webView] got hlsManifestUrl — nSolver=\(nInfo as NSString)")
             if await tryWebViewHLS(webViewURL, nSolver: nSolver, for: video) {
                 playerLog.notice("✅ [webView] 720p+ HLS playing via WKWebView extraction — exhaustiveRetry done")
+                // Phase 2 (relatedVideos, trackingURLs, neighbour prefetch) must be launched
+                // here because loadAsync returns immediately after calling exhaustiveRetry and
+                // never reaches its own Phase 2 creation block.
+                if let playerInfo {
+                    launchPhase2(video: video, info: playerInfo)
+                }
                 return
             }
             playerLog.notice("⚠️ [webView] HLS load failed — falling through to client retry chain")

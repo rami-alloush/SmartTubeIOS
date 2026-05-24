@@ -46,17 +46,16 @@ extension ShortsPlayerView {
         guard !lookahead.isEmpty else { return }
         let token = authService.accessToken
         let cats = store.settings.activeSponsorCategories
-        // TEMP DISABLED: shorts neighbour prefetch — forcing fresh playerInfo fetch on every tap
-        // Task(priority: .background) {
-        //     for videoId in lookahead {
-        //         await VideoPreloadCache.shared.prefetch(
-        //             videoId: videoId,
-        //             sponsorCategories: cats,
-        //             authToken: token,
-        //             priority: .speculative
-        //         )
-        //     }
-        // }
+        Task(priority: .background) {
+            for videoId in lookahead {
+                await VideoPreloadCache.shared.prefetch(
+                    videoId: videoId,
+                    sponsorCategories: cats,
+                    authToken: token,
+                    priority: .speculative
+                )
+            }
+        }
     }
 
     /// Fetches an additional batch of Shorts and appends them, deduplicating by id.
