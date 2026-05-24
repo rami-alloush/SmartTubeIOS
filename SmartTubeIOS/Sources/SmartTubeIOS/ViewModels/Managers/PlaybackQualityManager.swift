@@ -366,13 +366,21 @@ final class PlaybackQualityManager {
     /// Fetches the HLS master manifest and returns a map of stream height → variant playlist URL.
     func fetchHLSVariantURLs(url: URL) async -> [Int: URL] {
         var request = URLRequest(url: url)
-        // Use the same stable hardcoded UA as attemptURL uses for AVPlayer.
-        // InnerTubeClients.iOS.userAgent is dynamic (uses the running OS version), which on
-        // the iOS 26 simulator yields "iOS 26_5" — a beta version YouTube CDN doesn't recognise.
+        // Use the web browser (Chrome) UA to fetch HLS master manifests.
+        // YouTube's manifest CDN (manifest.googlevideo.com) serves the full quality tier
+        // (360p / 720p / 1080p) for browser UAs, but may return a mobile-optimised 360p-only
+        // manifest when it detects an iOS YouTube app UA (com.google.ios.youtube/…).
+        // This matches the UA that AVPlayer uses in loadAsync for HLS initial load
+        // (InnerTubeClients.Web.userAgent) and avoids the iOS 26+ simulator dynamic-version
+        // issue (Web.userAgent is a static Chrome string, never "iOS 26_5").
         request.setValue(
-            "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X)",
+            InnerTubeClients.Web.userAgent,
             forHTTPHeaderField: "User-Agent"
         )
+        // Embed browser context headers so the manifest CDN treats this as a legitimate
+        // WEB_EMBEDDED_PLAYER / WebSafari / MWEB HLS manifest fetch.
+        request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
         request.timeoutInterval = 8
         guard let (data, _) = try? await self.session.data(for: request),
               let text = String(data: data, encoding: .utf8) else {
