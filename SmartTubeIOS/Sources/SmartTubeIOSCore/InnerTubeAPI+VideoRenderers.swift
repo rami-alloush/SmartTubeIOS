@@ -654,8 +654,13 @@ extension InnerTubeAPI {
 
         let isShort: Bool = {
             // Primary signal: reelWatchEndpoint in navigationEndpoint (home, search, most feeds)
+            // Guard with duration ≤ 180 s: YouTube occasionally attaches reelWatchEndpoint to
+            // regular videos (e.g. because they were also published as a Short). The duration
+            // guard prevents those from being misclassified as Shorts. When duration is unknown
+            // (nil) we trust the endpoint signal alone — Shorts with no parsed duration are
+            // still Shorts.
             if let nav = r["navigationEndpoint"] as? [String: Any], nav["reelWatchEndpoint"] != nil {
-                return true
+                if duration.map({ $0 <= 180 }) ?? true { return true }
             }
             // Secondary signal: thumbnailOverlayTimeStatusRenderer.style == "SHORTS"
             // (subscriptions feed often omits reelWatchEndpoint and uses this style instead).
