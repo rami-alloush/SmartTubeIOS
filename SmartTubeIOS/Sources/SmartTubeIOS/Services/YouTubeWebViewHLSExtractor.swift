@@ -1,5 +1,6 @@
 #if canImport(WebKit)
 import WebKit
+import JavaScriptCore
 import os
 import SmartTubeIOSCore
 
@@ -465,11 +466,10 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         }
     }
 
-    /// Solves an HLS n-challenge by running the bundled EJS solver via Node.js as a child
-    /// process. Downloads the main player JS variant from YouTube's CDN (or uses a cached
-    /// copy in /tmp), then pipes the solver script to `node -` via a POSIX pipe.
-    /// This approach is safe for the iOS Simulator (macOS POSIX APIs available) but will
-    /// return nil on a real iOS device (no Node.js binary present).
+    /// Solves an HLS n-challenge using the bundled EJS solver evaluated in JavaScriptCore.
+    /// Downloads and caches the main player JS variant from YouTube's CDN, then runs the
+    /// yt-dlp EJS solver (lib + core) inside a JSContext — works on both simulator and
+    /// real iOS/tvOS devices (no Node.js required).
     private static func solveNChallengeViaNode(playerID: String, unsolvedN: String) async -> String? {
         guard let libURL  = Bundle.module.url(forResource: "yt.solver.lib.min",  withExtension: "js"),
               let coreURL = Bundle.module.url(forResource: "yt.solver.core.min", withExtension: "js"),
@@ -482,103 +482,64 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         // Download or use cached copy of the main player JS variant.
         // yt-dlp uses the `player_es6.vflset/en_US/base.js` variant because it is the
         // only variant that contains the n-solver function.
-        let tmpPlayerPath = "/tmp/yt_player_\(playerID).js"
-        if !FileManager.default.fileExists(atPath: tmpPlayerPath) {
+        // NSTemporaryDirectory() works correctly on both simulator and real device.
+        let tmpPlayerPath = NSTemporaryDirectory() + "yt_player_\(playerID).js"
+        let playerJS: String
+        if let cached = try? String(contentsOfFile: tmpPlayerPath, encoding: .utf8), !cached.isEmpty {
+            playerJS = cached
+        } else {
             guard let playerURL = URL(string:
                 "https://www.youtube.com/s/player/\(playerID)/player_es6.vflset/en_US/base.js"
             ) else { return nil }
             extractLog.notice("⚠️ [solver] downloading player JS for \(playerID as NSString)")
             guard let (data, _) = try? await URLSession.shared.data(from: playerURL),
-                  !data.isEmpty else {
+                  !data.isEmpty,
+                  let js = String(data: data, encoding: .utf8) else {
                 extractLog.warning("⚠️ [solver] player JS download failed")
                 return nil
             }
-            try? data.write(to: URL(fileURLWithPath: tmpPlayerPath))
+            try? js.write(toFile: tmpPlayerPath, atomically: true, encoding: .utf8)
+            playerJS = js
         }
-        extractLog.notice("⚠️ [solver] running Node.js EJS solver, n=\(unsolvedN as NSString)")
+        extractLog.notice("⚠️ [solver] running JSC EJS solver, n=\(unsolvedN as NSString)")
 
-        // Build the solver script that runs entirely inside Node.js.
-        // lib.min.js defines `var lib = {meriyah, astring}` (meriyah JS AST parser).
-        // core.min.js defines `var jsc = function(e,n){...}(meriyah,astring)` (EJS solver).
-        let escapedN = unsolvedN.replacingOccurrences(of: "'", with: "\\'")
-        let solverScript = """
-        \(libCode)
-        var meriyah = lib.meriyah; var astring = lib.astring;
-        \(coreCode)
-        var playerJS = require('fs').readFileSync('\(tmpPlayerPath)', 'utf8');
-        try {
-            var result = jsc({type:'player',player:playerJS,requests:[{type:'n',challenges:['\(escapedN)']}]});
-            var solved = (result&&result.responses&&result.responses[0]&&result.responses[0].data)
-                ? result.responses[0].data['\(escapedN)'] : null;
-            process.stdout.write(solved||'');
-        } catch(e) { process.stdout.write(''); }
-        """
+        // Run the JSContext solver on a detached background task — JSContext is not
+        // Sendable and must be created and consumed on the same thread.
+        return await Task.detached(priority: .userInitiated) {
+            let context = JSContext()!
+            var jsError: String?
+            context.exceptionHandler = { _, e in jsError = e?.toString() }
 
-        guard let scriptData = solverScript.data(using: .utf8) else { return nil }
-        return Self.runPosixSpawn(executable: "/usr/local/bin/node", args: ["-"], stdin: scriptData)
-    }
+            // lib.min.js defines `var lib = {meriyah, astring}` (JS AST parser).
+            context.evaluateScript(libCode)
+            context.evaluateScript("var meriyah = lib.meriyah; var astring = lib.astring;")
+            // core.min.js defines `var jsc = function(e,n){...}(meriyah,astring)` (EJS solver).
+            context.evaluateScript(coreCode)
 
-    /// Spawns an executable via `posix_spawn`, pipes `stdin` to it, and returns stdout.
-    /// Synchronous — blocks until the child exits. Runs in ~0.3 s for the Node.js solver.
-    private static func runPosixSpawn(executable: String, args: [String], stdin: Data) -> String? {
-        var pid: pid_t = 0
-        var stdinPipe  = [Int32](repeating: 0, count: 2)
-        var stdoutPipe = [Int32](repeating: 0, count: 2)
-        guard Darwin.pipe(&stdinPipe) == 0, Darwin.pipe(&stdoutPipe) == 0 else { return nil }
+            // Inject playerJS and unsolvedN as JS objects to avoid any escaping issues.
+            context.setObject(playerJS,   forKeyedSubscript: "playerJSContent" as NSString)
+            context.setObject(unsolvedN,  forKeyedSubscript: "unsolvedNValue"  as NSString)
 
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
-        posix_spawn_file_actions_adddup2(&fileActions, stdinPipe[0],  STDIN_FILENO)
-        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe[1], STDOUT_FILENO)
-        posix_spawn_file_actions_addclose(&fileActions, stdinPipe[1])
-        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe[0])
-        // Route stderr to /dev/null so Node.js warnings don't interfere.
-        let devNull = open("/dev/null", O_WRONLY)
-        if devNull >= 0 { posix_spawn_file_actions_adddup2(&fileActions, devNull, STDERR_FILENO) }
+            let result = context.evaluateScript("""
+            (function() {
+                try {
+                    var r = jsc({type:'player', player:playerJSContent,
+                                 requests:[{type:'n', challenges:[unsolvedNValue]}]});
+                    return (r && r.responses && r.responses[0] && r.responses[0].data)
+                        ? r.responses[0].data[unsolvedNValue] : null;
+                } catch(e) { return null; }
+            })()
+            """)
 
-        let cArgs: [UnsafeMutablePointer<CChar>?] = ([executable] + args).map { strdup($0) } + [nil]
-        defer { cArgs.compactMap { $0 }.forEach { free($0) } }
-
-        let spawnRet = posix_spawn(&pid, executable, &fileActions, nil, cArgs, nil)
-        posix_spawn_file_actions_destroy(&fileActions)
-        close(stdinPipe[0])
-        close(stdoutPipe[1])
-        if devNull >= 0 { close(devNull) }
-
-        guard spawnRet == 0 else {
-            extractLog.error("❌ [solver] posix_spawn failed: \(spawnRet)")
-            close(stdinPipe[1]); close(stdoutPipe[0])
-            return nil
-        }
-
-        // Write solver script to Node's stdin.
-        stdin.withUnsafeBytes { buf in
-            guard let ptr = buf.baseAddress else { return }
-            var offset = 0
-            while offset < buf.count {
-                let written = Darwin.write(stdinPipe[1], ptr.advanced(by: offset), buf.count - offset)
-                if written <= 0 { break }
-                offset += written
+            if let err = jsError {
+                extractLog.error("❌ [solver/JSC] exception: \(err as NSString)")
             }
-        }
-        close(stdinPipe[1])
-
-        // Read Node's stdout (the solved n-value, typically <50 bytes).
-        var outputData = Data()
-        var readBuf = [UInt8](repeating: 0, count: 4096)
-        while true {
-            let n = Darwin.read(stdoutPipe[0], &readBuf, readBuf.count)
-            if n <= 0 { break }
-            outputData.append(contentsOf: readBuf[..<n])
-        }
-        close(stdoutPipe[0])
-
-        var exitStatus: Int32 = 0
-        waitpid(pid, &exitStatus, 0)
-
-        let output = String(data: outputData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (output?.isEmpty == false) ? output : nil
+            let solved = result?.toString()
+            guard let s = solved, !s.isEmpty, s != "null", s != "undefined", s != unsolvedN else {
+                return nil
+            }
+            return s
+        }.value
     }
 
     private func finish(url: URL?) {
@@ -679,7 +640,7 @@ extension YouTubeWebViewHLSExtractor: WKScriptMessageHandler {
 
         // JS solver was not available — try solving on the Swift side via Node.js.
         if let playerID = playerIDValue, let unsolvedN = unsolvedNValue, !unsolvedN.isEmpty {
-            extractLog.notice("⚠️ [webView] JS solver unavailable; launching Swift/Node.js solver for playerID=\(playerID as NSString) n=\(unsolvedN as NSString)")
+                extractLog.notice("⚠️ [webView] JS solver unavailable; launching JSC solver for playerID=\(playerID as NSString) n=\(unsolvedN as NSString)")
             let capturedURL    = url
             let capturedPoToken = poToken
             Task { @MainActor [weak self] in
@@ -689,10 +650,10 @@ extension YouTubeWebViewHLSExtractor: WKScriptMessageHandler {
                 }.value
                 if let s = solved, !s.isEmpty, s != unsolvedN {
                     self.extractedNSolver = (unsolved: unsolvedN, solved: s)
-                    extractLog.notice("✅ [webView] n solved via Node.js: \(unsolvedN as NSString) → \(s as NSString)")
+                    extractLog.notice("✅ [webView] n solved via JSC: \(unsolvedN as NSString) → \(s as NSString)")
                 } else {
                     self.extractedNSolver = nil
-                    extractLog.notice("⚠️ [webView] Node.js solver returned nil/same for n=\(unsolvedN as NSString)")
+                    extractLog.notice("⚠️ [webView] JSC solver returned nil/same for n=\(unsolvedN as NSString)")
                 }
                 self.finishWithURL(capturedURL, poToken: capturedPoToken)
             }
