@@ -136,6 +136,8 @@ extension PlayerView {
             #if os(tvOS)
             moreMenuSpeedRow
             moreMenuQualityRow
+            #else
+            moreMenuQualityRow
             #endif
             moreMenuLikeDislikeRow
             moreMenuShareRow
@@ -361,7 +363,28 @@ extension PlayerView {
     }
 
     @ViewBuilder private var moreMenuQualityRow: some View {
-        EmptyView()
+        #if os(iOS)
+        if !vm.availableFormats.isEmpty && !vm.isAudioOnlyMode {
+            Button {
+                menuLog.notice("[moreMenu] Quality row tapped — closing moreMenu, opening qualityPicker")
+                showMoreMenu = false
+                showQualityPicker = true
+            } label: {
+                HStack {
+                    Label("Quality", systemImage: "film.stack")
+                    Spacer()
+                    Text(vm.selectedFormat?.qualityLabel ?? (vm.pendingQualityLabel.isEmpty ? "Auto" : vm.pendingQualityLabel))
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .accessibilityIdentifier("player.moreMenu.qualityRow")
+            Divider()
+        }
+        #endif
     }
 
     @ViewBuilder private var moreMenuLikeDislikeRow: some View {

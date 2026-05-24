@@ -1294,7 +1294,8 @@ extension PlaybackViewModel {
         }
         playerLog.notice("[webView/HLS] master manifest OK bytes=\(data.count)")
 
-        // 2. Parse M3U8 for best ≥720p per-quality playlist URL
+        // 2. Parse ALL variants for the quality picker and best ≥720p for initial playback.
+        let allVariants = parseHLSAllVariants(from: manifestText, baseURL: masterURL)
         let bestURL = parseHLSBestVariant(from: manifestText, baseURL: masterURL, minHeight: 720)
                    ?? parseHLSBestVariant(from: manifestText, baseURL: masterURL, minHeight: 0)
         guard let bestURL else {
@@ -1305,6 +1306,21 @@ extension PlaybackViewModel {
         // Cache the master manifest URL so future loads of this video (or pre-extracted
         // neighbours) can skip the 5–9 s WKWebView extraction step entirely.
         await VideoPreloadCache.shared.store(wkHLSManifestURL: masterURL, for: video.id)
+
+        // Populate the quality picker with the HLS variant heights from the master manifest.
+        // These are the only formats guaranteed to work via the proxy — iOS adaptive rqh=1
+        // streams are intentionally excluded from the picker.
+        if !allVariants.isEmpty {
+            hlsVariantURLs = allVariants
+            wkHLSMasterURL = masterURL
+            let syntheticFormats = allVariants.keys.sorted(by: >).map { h in
+                VideoFormat(label: "\(h)p", width: 0, height: h, fps: 30,
+                            mimeType: "video/mp4; codecs=\"avc1.640028\"",
+                            url: allVariants[h], bitrate: nil)
+            }
+            availableFormats = syntheticFormats
+            playerLog.notice("[webView/HLS] quality picker: \(syntheticFormats.map { $0.qualityLabel }.joined(separator: ", "))")
+        }
 
         // 3. Route through YTHLSProxyLoader so every AVPlayer request (playlist + segments)
         //    goes via URLSession.shared with the desktop-Safari UA.
@@ -1347,6 +1363,48 @@ extension PlaybackViewModel {
             }
         }
         return false
+    }
+
+    /// Parses an HLS master M3U8 manifest and returns a map of stream height → variant URL
+    /// for all streams present. Handles both absolute and relative URIs.
+    /// When multiple streams share the same height (e.g. H.264 + HEVC), the last one wins.
+    private func parseHLSAllVariants(from manifest: String, baseURL: URL) -> [Int: URL] {
+        let lines = manifest.components(separatedBy: "\n")
+        var result: [Int: URL] = [:]
+        var i = 0
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("#EXT-X-STREAM-INF:") {
+                var height = 0
+                if let resRange = line.range(of: #"RESOLUTION=\d+x(\d+)"#, options: .regularExpression) {
+                    let resPart = String(line[resRange])
+                    if let h = resPart.components(separatedBy: "x").last.flatMap(Int.init) {
+                        height = h
+                    }
+                }
+                i += 1
+                while i < lines.count {
+                    let candidate = lines[i].trimmingCharacters(in: .whitespaces)
+                    if !candidate.isEmpty && !candidate.hasPrefix("#") { break }
+                    i += 1
+                }
+                if i < lines.count, height > 0 {
+                    let uriLine = lines[i].trimmingCharacters(in: .whitespaces)
+                    let resolved: URL?
+                    if uriLine.hasPrefix("http://") || uriLine.hasPrefix("https://") {
+                        resolved = URL(string: uriLine)
+                    } else {
+                        let baseDir = baseURL.deletingLastPathComponent()
+                        resolved = URL(string: uriLine, relativeTo: baseDir).map { $0.absoluteURL }
+                    }
+                    if let url = resolved {
+                        result[height] = url
+                    }
+                }
+            }
+            i += 1
+        }
+        return result
     }
 
     /// Parses an HLS master M3U8 manifest and returns the URL of the best stream at ≥ `minHeight`.

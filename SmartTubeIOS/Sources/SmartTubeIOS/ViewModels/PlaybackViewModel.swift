@@ -237,6 +237,12 @@ public final class PlaybackViewModel {
         get { qualityManager.webHLSProxyLoader }
         set { qualityManager.webHLSProxyLoader = newValue }
     }
+    /// The master manifest URL obtained via WKWebView HLS extraction. Non-nil only when the
+    /// video is playing via the WKWebView path; used to route quality switches correctly.
+    var wkHLSMasterURL: URL? {
+        get { qualityManager.wkHLSMasterURL }
+        set { qualityManager.wkHLSMasterURL = newValue }
+    }
     #endif
     /// True while `replaceCurrentItem` is executing; guards the rate observer from
     /// treating the transient rate-drop as an unexpected external pause.
