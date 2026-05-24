@@ -112,6 +112,10 @@ extension PlayerView {
                     }
                 }
                 .frame(maxHeight: 320)
+                #if os(tvOS)
+                .prefersDefaultFocus(in: qualityPickerNamespace)
+                .focused($qualityPickerFocused)
+                #endif
             }
             .frame(maxWidth: moreMenuPortraitWidth)
             .background(.regularMaterial)
@@ -124,6 +128,10 @@ extension PlayerView {
             }
             #if os(tvOS)
             .focusScope(qualityPickerNamespace)
+            .onExitCommand {
+                pickerLog.notice("[qualityPicker] onExitCommand fired — dismissing")
+                showQualityPicker = false
+            }
             #endif
             .padding(.horizontal, 8)
             .padding(.bottom, 8)

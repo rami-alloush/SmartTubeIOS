@@ -93,6 +93,7 @@ public struct PlayerView: View {
     /// `moreMenuFocusedRow` drives D-pad navigation within the more menu via explicit
     /// `.onMoveCommand` (SwiftUI's spatial engine cannot navigate ZStack overlays).
     @FocusState var moreMenuFocusedRow: MoreMenuRow?
+    @FocusState var qualityPickerFocused: Bool
     @FocusState var speedPickerFocused: Bool
     @FocusState var sleepTimerPickerFocused: Bool
     @FocusState var skipToastButtonFocused: Bool

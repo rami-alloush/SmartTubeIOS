@@ -397,6 +397,16 @@ extension PlayerView {
                 }
             }
         }
+        .onChange(of: showQualityPicker) { _, visible in
+            swipeLog.notice("[tv] showQualityPicker changed → \(visible)")
+            if visible {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    qualityPickerFocused = true
+                    swipeLog.notice("[tv] qualityPickerFocused set → true")
+                }
+            }
+        }
         .onChange(of: showSleepTimerPicker) { _, visible in
             swipeLog.notice("[tv] showSleepTimerPicker changed → \(visible)")
             if visible {
