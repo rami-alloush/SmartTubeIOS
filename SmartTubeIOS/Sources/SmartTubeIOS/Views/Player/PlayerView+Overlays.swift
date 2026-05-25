@@ -384,7 +384,7 @@ extension PlayerView {
     }
 
     @ViewBuilder private var moreMenuQualityRow: some View {
-        if !vm.availableFormats.isEmpty && !vm.isAudioOnlyMode {
+        if !vm.isAudioOnlyMode {
             Button {
                 menuLog.notice("[moreMenu] Quality row tapped — closing moreMenu, opening qualityPicker")
                 showMoreMenu = false
@@ -401,6 +401,7 @@ extension PlayerView {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
+            .disabled(vm.availableFormats.isEmpty)
             .accessibilityIdentifier("player.moreMenu.qualityRow")
             #if os(tvOS)
             .background(moreMenuFocusedRow == .quality ? Color.gray.opacity(0.35) : .clear)

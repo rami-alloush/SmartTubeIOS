@@ -371,6 +371,7 @@ extension PlaybackViewModel {
             }
             playerInfo = info
             availableFormats = Self.deduplicatedVideoFormats(info.formats)
+            playerLog.notice("[loadAsync] availableFormats after initial dedup: raw=\(info.formats.count) deduped=\(availableFormats.count) maxH=\(availableFormats.map(\.height).max() ?? 0)")
             availableCaptions = info.captionTracks
             autoApplyCaptionPreference(tracks: info.captionTracks)
             selectedFormat = nil
@@ -431,8 +432,9 @@ extension PlaybackViewModel {
                 let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
                 if !variantURLs.isEmpty {
                     hlsVariantURLs = variantURLs
+                    let beforeCount = availableFormats.count
                     availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
-                    playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker to \(availableFormats.count) options")
+                    playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker \(beforeCount) → \(availableFormats.count) options")
                     if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) { selectedFormat = nil }
                 }
             }

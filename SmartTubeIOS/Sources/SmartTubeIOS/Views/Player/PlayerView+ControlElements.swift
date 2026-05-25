@@ -704,12 +704,14 @@ extension PlayerControlsOverlay {
                 accessibilityId: "player.quickAccess.speed"
             ) { showSpeedPicker = true }
 
-            if !vm.availableFormats.isEmpty && !vm.isAudioOnlyMode {
+            if !vm.isAudioOnlyMode {
                 quickAccessButton(
                     systemImage: "film.stack",
                     label: qualityLabel,
                     accessibilityId: "player.quickAccess.quality"
                 ) { showQualityPicker = true }
+                .disabled(vm.availableFormats.isEmpty)
+                .opacity(vm.availableFormats.isEmpty ? 0.4 : 1)
             }
 
             if vm.availableAudioTracks.count > 1 {

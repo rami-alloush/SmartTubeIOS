@@ -99,4 +99,31 @@ final class QuickAccessRowUITests: XCTestCase {
             app.buttons["player.quickAccess.sleepTimer"].waitForExistence(timeout: 10),
             "Quick-access sleep timer button should be visible")
     }
+
+    // MARK: - #186 regression: quality button always visible
+
+    /// Verifies the quality button is always present in the quick-access row
+    /// regardless of whether `availableFormats` has loaded yet.
+    /// Regression for #186: previously the button was removed from the view
+    /// hierarchy when `availableFormats` was empty, making it permanently
+    /// absent for muxed-only or slow-loading videos.
+    func testQualityButtonAlwaysVisibleInPlayer() throws {
+        try openPlayerFromHome()
+        showControls()
+        let qualityBtn = app.buttons["player.quickAccess.quality"]
+        XCTAssertTrue(
+            qualityBtn.waitForExistence(timeout: 15),
+            "Quality quick-access button should always be present in the player controls")
+        // Wait for formats to load and the button to become enabled, then verify
+        // tapping it opens the quality picker.
+        let enabled = NSPredicate(format: "isEnabled == true")
+        let enabledExpectation = XCTNSPredicateExpectation(predicate: enabled, object: qualityBtn)
+        let result = XCTWaiter().wait(for: [enabledExpectation], timeout: 20)
+        guard result == .completed else {
+            try captureAndSkip("Quality button never became enabled within 20 s — formats may not have loaded", in: app)
+        }
+        qualityBtn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let pickerAppeared = app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 5)
+        XCTAssertTrue(pickerAppeared, "Tapping the enabled quality button should open the quality picker")
+    }
 }
