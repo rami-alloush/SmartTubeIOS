@@ -77,6 +77,10 @@ final class PlaybackQualityManager {
     var pendingQualityLabel: String = ""
     var availableFormats: [VideoFormat] = []
     var hlsVariantURLs: [Int: URL] = [:]
+    /// `true` when the current stream is a muxed (360p) fallback.
+    /// Quality-switch attempts while muxed trigger fresh WKWebView extraction
+    /// rather than reusing potentially-expired wkHLSMasterURL variant URLs.
+    var isMuxedFallback: Bool = false
     var hasAppliedH264Cap: Bool = false
     @ObservationIgnored var qualityTask: Task<Void, Never>? = nil
     @ObservationIgnored private var itemObserverTask: Task<Void, Never>? = nil
@@ -122,6 +126,7 @@ final class PlaybackQualityManager {
         pendingQualityLabel = ""
         availableFormats = []
         hlsVariantURLs = [:]
+        isMuxedFallback = false
         hasAppliedH264Cap = false
         qualityTask?.cancel()
         qualityTask = nil
@@ -171,6 +176,20 @@ final class PlaybackQualityManager {
         qualityTask = Task { [weak self] in
             guard let self else { return }
             #if canImport(WebKit)
+            // Guard: if current playback is a muxed fallback, all stored HLS variant URLs
+            // are from an expired/failed session. Reusing them would immediately 403.
+            // Trigger 403 recovery to run a fresh exhaustiveRetry → fresh WKWebView extraction.
+            if isMuxedFallback {
+                wkHLSMasterURL = nil
+                hlsVariantURLs = [:]
+                webHLSProxyLoader = nil
+                isMuxedFallback = false
+                playerLog.notice("[quality] muxed fallback — clearing stale wkHLS URLs, triggering recovery for fresh extraction")
+                let err = NSError(domain: NSURLErrorDomain, code: -1102,
+                                 userInfo: [NSLocalizedDescriptionKey: "Quality switch: current stream is muxed fallback"])
+                await delegate?.qualityItemDidFail(error: err, quality: quality, hasAppliedH264Cap: hasAppliedH264Cap)
+                return
+            }
             if self.wkHLSMasterURL != nil {
                 await self.reloadWKHLSItem(seekTo: savedTime, height: format?.height)
                 return

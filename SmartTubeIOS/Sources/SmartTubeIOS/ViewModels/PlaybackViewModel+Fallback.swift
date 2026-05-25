@@ -568,6 +568,9 @@ extension PlaybackViewModel {
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
                 launchPhase2(video: video, info: info)
+                // Track whether the succeeded stream is muxed so quality-switch attempts
+                // can detect the state and trigger fresh WKWebView extraction (#210).
+                qualityManager.isMuxedFallback = isMuxedFallback
                 return true
             case .failed:
                 let err = item.error.map { "\($0)" } ?? "nil"
@@ -1431,6 +1434,7 @@ extension PlaybackViewModel {
                 isLoading = false
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
+                qualityManager.isMuxedFallback = false
                 return true
             case .failed:
                 let err = item.error?.localizedDescription ?? "nil"
