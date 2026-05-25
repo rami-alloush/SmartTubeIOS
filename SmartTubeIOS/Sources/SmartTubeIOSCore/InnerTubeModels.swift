@@ -168,6 +168,24 @@ public struct PlayerInfo: Sendable {
         }
     }
 
+    /// Returns `true` when all adaptive video-only MP4 formats have `rqh=1` CDN enforcement
+    /// in their URL. These streams trigger an 8-second `AVURLAsset.loadTracks` timeout on
+    /// the CDN's byte-range probe because rqh=1 requires auth that URLSession cannot provide.
+    /// Same class of stall as SABR but shorter timeout. When `true`, skip adaptive
+    /// composition and route to the WKWebView HLS path (which uses spc= auth instead).
+    public var containsRqhAdaptiveFormats: Bool {
+        let adaptiveVideos = formats.filter {
+            $0.mimeType.hasPrefix("video/mp4") &&
+            !$0.mimeType.contains(", ") &&
+            $0.url != nil
+        }
+        guard !adaptiveVideos.isEmpty else { return false }
+        return adaptiveVideos.allSatisfy {
+            guard let urlStr = $0.url?.absoluteString else { return false }
+            return urlStr.contains("/rqh/1") || urlStr.contains("rqh=1")
+        }
+    }
+
     /// Returns a copy of this `PlayerInfo` with `&pot=<token>` appended to every
     /// non-nil format URL, `hlsURL`, and `dashURL`.
     /// Call site in `PlaybackViewModel+Loading` applies this after `fetchPlayerInfo`

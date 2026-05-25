@@ -305,6 +305,12 @@ extension PlaybackViewModel {
             // and let exhaustiveRetry's WKWebView path handle the video instead.
             if info.containsSabrFormats {
                 playerLog.notice("[\(label)] All adaptive video URLs are SABR (c=TVHTML5) — skipping loadTracks stall, falling through")
+            // Guard: if every adaptive video URL has rqh=1, AVURLAsset.loadTracks stalls
+            // for ~8 s on the CDN's byte-range probe because rqh=1 requires CDN auth that
+            // URLSession cannot provide (same class of stall as SABR but shorter timeout).
+            // Skip composition and route to WKWebView HLS (spc=-authenticated).
+            } else if info.containsRqhAdaptiveFormats {
+                playerLog.notice("[\(label)] All adaptive video URLs are rqh=1 — skipping 8 s loadTracks stall, falling through")
             } else {
                 playerLog.notice("[\(label)] Trying adaptive composition")
                 if await attemptComposition(videoURL: videoURL, audioURL: audioURL,
