@@ -269,17 +269,30 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
         // switching already works natively for those (spc= token provides CDN auth).
         if isMasterManifest {
             let lines = text.components(separatedBy: "\n")
+            // Diagnostic: log first #EXT-X-MEDIA:TYPE=AUDIO line to verify URI quote format.
+            if let sample = lines.first(where: { $0.hasPrefix("#EXT-X-MEDIA:") && $0.contains("TYPE=AUDIO") }) {
+                proxyLog.notice("[HLSProxy] first AUDIO EXT-X-MEDIA sample: \(sample.prefix(300))")
+            }
             var audioGroupCount = 0
             let rewrittenLines: [String] = lines.map { line in
-                guard line.hasPrefix("#EXT-X-MEDIA:"), line.contains("URI=\"https://") else {
-                    return line
+                guard line.hasPrefix("#EXT-X-MEDIA:") else { return line }
+                // Rewrite URI="https://..." (quoted) or URI=https://... (unquoted).
+                // Both forms appear in YouTube manifests depending on client/version.
+                if line.contains("URI=\"https://") {
+                    audioGroupCount += 1
+                    return line.replacingOccurrences(of: "URI=\"https://", with: "URI=\"\(proxyScheme)://")
+                } else if line.contains("URI=https://") {
+                    audioGroupCount += 1
+                    return line.replacingOccurrences(of: "URI=https://", with: "URI=\(proxyScheme)://")
                 }
-                audioGroupCount += 1
-                return line.replacingOccurrences(of: "URI=\"https://", with: "URI=\"\(proxyScheme)://")
+                return line
             }
             if audioGroupCount > 0 {
                 proxyLog.notice("[HLSProxy] rewrote \(audioGroupCount) #EXT-X-MEDIA URI(s) to \(proxyScheme)://")
                 text = rewrittenLines.joined(separator: "\n")
+            } else {
+                let extMediaCount = lines.filter { $0.hasPrefix("#EXT-X-MEDIA:") }.count
+                proxyLog.notice("[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=\(extMediaCount) (no URI= found)")
             }
         }
 

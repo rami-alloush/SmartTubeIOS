@@ -72,8 +72,10 @@ final class AudioTrackManager {
             // one audio rendition. The previous guard `count > 1` silently exited,
             // leaving no audio option selected → silent video after a quality switch.
             // Use `!isEmpty` so a single-track manifest still gets its track applied.
-            guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
-                  !group.options.isEmpty else { return }
+            let group = try? await asset.loadMediaSelectionGroup(for: .audible)
+            let groupDesc = group.map { "\($0.options.count) option(s)" } ?? "nil"
+            playerLog.notice("AudioTrackManager: loadMediaSelectionGroup=\(groupDesc)")
+            guard let group, !group.options.isEmpty else { return }
             var tracks: [AudioTrack] = []
             var optionMap: [String: AVMediaSelectionOption] = [:]
 

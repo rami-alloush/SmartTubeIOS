@@ -6,26 +6,36 @@ import XCTest
 // the extracted device log. Classify every skip before closing the task:
 //
 // LEGITIMATE skip:
-//   - Simulator with no googlevideo.com auth cookies: the SID video (LSMQ3U1Thzw) has
-//     rqh=1 in its HLS variant URLs. The #209 guard fires → tryWebViewHLS returns false
-//     → falls to Android muxed → muxed has no EXT-X-MEDIA → loadAudioTracks finds no
-//     AVMediaSelectionGroup → availableAudioTracks is empty → audio row absent.
-//     Device log shows: "variant requires rqh=1 but no googlevideo cookies"
-//                       "[Android[1]/muxed/muxed] readyToPlay"
-//     Test message: "player.moreMenu.audioTrackRow not found for video LSMQ3U1Thzw"
+//   - Simulator / unauthenticated session: YouTube does NOT include EXT-X-MEDIA TYPE=AUDIO
+//     entries in the HLS master manifest returned to an unauthenticated WKWebView session.
+//     The manifest is fetched with a desktop-Safari UA via YTHLSProxyLoader, but without
+//     YouTube auth cookies the server returns a stripped manifest with video variants only.
+//     AVFoundation consequently sees no AVMediaSelectionGroup → loadMediaSelectionGroup
+//     returns nil → availableAudioTracks empty → audio row absent.
+//     Device log shows (NEW — after #209 guard removal in 42e9f92):
+//       "[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0 (no URI= found)"
+//       "AudioTrackManager: loadMediaSelectionGroup=nil"
+//       "✅ [webView/HLS] readyToPlay"  ← video IS playing at 720p+, but no audio tracks
+//     Test message: "Audio track row not found — likely muxed playback"
 //   - Network unavailable or YouTube server-side change: player never loads.
 //     Test message: "Player did not load or playback did not complete within deadline"
 //
 // BUG skip (must fix before closing):
-//   - Audio row absent on a real device with active YouTube session (googlevideo cookies
-//     present). Indicates loadAudioTracks is not being called from tryWebViewHLS readyToPlay.
-//     Device log should show "✅ [webView/HLS] readyToPlay" followed by "Audio tracks:"
-//     If "Audio tracks:" is missing after readyToPlay, the fix in commit e467e31 regressed.
+//   - Audio row absent on a real device with active YouTube session (user signed into YouTube).
+//     YouTube should include EXT-X-MEDIA TYPE=AUDIO entries in the manifest for authenticated
+//     sessions. Device log should show "[HLSProxy] rewrote N #EXT-X-MEDIA URI(s)" followed
+//     by "AudioTrackManager: loadMediaSelectionGroup=N option(s)" and "Audio tracks: <langs>".
 //   - On a real device: "skipAllTests" triggered but "readyToPlay" never appears in log —
 //     indicates tryWebViewHLS never completes (new regression in proxy or HLS extraction).
+//   - "✅ [webView/HLS] readyToPlay" present, EXT-X-MEDIA entries present, BUT
+//     "AudioTrackManager: loadMediaSelectionGroup=nil" → proxy is not correctly routing
+//     audio rendition playlist fetches to ytwebhls:// scheme.
 //
-// Log events to verify (real device with cookies):
-//   ✓ [webView/HLS] master manifest OK bytes=<large> (135KB+ for SID = audio groups present)
+// Log events to verify (real device with YouTube account signed in):
+//   ✓ [webView/HLS] master manifest OK bytes=<large> (manifest with 13 audio groups)
+//   ✓ [HLSProxy] first AUDIO EXT-X-MEDIA sample: #EXT-X-MEDIA:TYPE=AUDIO,...
+//   ✓ [HLSProxy] rewrote 13 #EXT-X-MEDIA URI(s) to ytwebhls://
+//   ✓ AudioTrackManager: loadMediaSelectionGroup=13 option(s)
 //   ✓ ✅ [webView/HLS] readyToPlay
 //   ✓ Audio tracks: <13 languages> — auto-selected: English (Original)
 //   ✓ player.moreMenu.audioTrackRow found and hittable
@@ -33,14 +43,14 @@ import XCTest
 //   ✓ Exactly one "Original" label
 //
 // RED FLAGS in device log:
-//   - "✅ [webView/HLS] readyToPlay" present BUT no "Audio tracks:" line →
-//     loadAudioTracks not called from tryWebViewHLS readyToPlay (regression of e467e31)
-//   - "Audio tracks: English (Original)" but picker shows only 1 track →
-//     loadAudioTracks called too early before AVMediaSelectionGroup populated
+//   - "[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0" on a
+//     REAL device with signed-in session → YouTube changed manifest format; re-examine.
+//   - "AudioTrackManager: loadMediaSelectionGroup=nil" after EXT-X-MEDIA lines present →
+//     proxy URI rewriting is not working; audio rendition fetches are being rejected (403).
+//   - "AudioTrackManager: loadMediaSelectionGroup=1 option(s)" → only default audio exposed;
+//     dubbed audio tracks missing from group.
 //   - Multiple "Original" labels in picker →
-//     Phase 1/2/3/4 isOriginal detection regression (task #130)
-//   - "variant requires rqh=1 but no googlevideo cookies" on a REAL device →
-//     User not signed into YouTube; rqh=1 guard fires; muxed fallback; audio selector absent
+//     Phase 1/2/3/4 isOriginal detection regression (task #130).
 
 // MARK: - SIDAudioTrackUITests
 //
@@ -192,16 +202,13 @@ final class SIDAudioTrackUITests: XCTestCase {
     /// PRIMARY REGRESSION: the audio track selector must appear in the more menu.
     ///
     /// The selector row is only added when `availableAudioTracks.count > 1`.
-    /// Before the fix, the SID video always played via the Android muxed stream —
-    /// muxed has no EXT-X-MEDIA, so AVPlayer exposes no AVMediaSelectionGroup and
-    /// AudioTrackManager loads zero tracks.
+    /// This requires the HLS master manifest to include EXT-X-MEDIA TYPE=AUDIO entries
+    /// for the dubbed language tracks. YouTube includes these only for authenticated sessions
+    /// (signed into YouTube). On an unauthenticated simulator, the manifest has 0 audio
+    /// renditions → loadMediaSelectionGroup returns nil → audio row absent.
     ///
-    /// This test passes when YouTube returns an HLS URL for this video, which
-    /// is more likely on a real device than on the simulator (server-side routing
-    /// depends on client headers and IP ranges). When HLS is unavailable from
-    /// YouTube in the current environment, the test skips with a diagnostic message
-    /// rather than failing — the regression being guarded is "HLS available but
-    /// audio selector absent", not "YouTube always returns HLS".
+    /// The regression being guarded is "signed-in session has HLS with audio tracks but
+    /// audio selector absent", not "audio selector always appears on simulator".
     func testAudioTrackSelectorIsVisibleInMoreMenu() throws {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
@@ -209,11 +216,12 @@ final class SIDAudioTrackUITests: XCTestCase {
             captureState("no-audio-row", in: app)
             throw XCTSkip(
                 "player.moreMenu.audioTrackRow not found for video \(Self.videoID). " +
-                "YouTube did not return an HLS URL in this environment (simulator vs device " +
-                "routing difference). Re-run on a physical device or when server-side A/B " +
-                "returns hls=true for this request. The HLS-race fix in tryAllStreams() and " +
-                "the Phase 3/4 isOriginal fix are verified by the other tests in this suite " +
-                "when HLS is available."
+                "YouTube's HLS manifest for this video contains no EXT-X-MEDIA TYPE=AUDIO " +
+                "entries in this environment (unauthenticated session on simulator). " +
+                "Re-run on a real device signed into YouTube: the authenticated manifest " +
+                "includes audio renditions which enable the selector. " +
+                "Log: '[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0' " +
+                "and 'AudioTrackManager: loadMediaSelectionGroup=nil' confirm the skip is legitimate."
             )
         }
 
@@ -229,7 +237,7 @@ final class SIDAudioTrackUITests: XCTestCase {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — likely muxed playback (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
@@ -269,7 +277,7 @@ final class SIDAudioTrackUITests: XCTestCase {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — likely muxed playback (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
@@ -304,7 +312,7 @@ final class SIDAudioTrackUITests: XCTestCase {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — likely muxed playback (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
