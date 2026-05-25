@@ -46,7 +46,7 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
     /// googlevideo.com cookies are required to authenticate CDN segment requests.
     let webViewCookies: [HTTPCookie]
     private let lock = NSLock()
-    private var activeTasks: [ObjectIdentifier: URLSessionDataTask] = []
+    private var activeTasks: [ObjectIdentifier: URLSessionDataTask] = [:]
 
     init(ua: String, nSolver: (unsolved: String, solved: String)? = nil, webViewCookies: [HTTPCookie] = []) {
         self.ua = ua
