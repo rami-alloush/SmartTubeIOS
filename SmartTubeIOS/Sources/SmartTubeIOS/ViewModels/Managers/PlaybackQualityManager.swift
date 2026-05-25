@@ -187,7 +187,7 @@ final class PlaybackQualityManager {
                 playerLog.notice("[quality] muxed fallback — clearing stale wkHLS URLs, triggering recovery for fresh extraction")
                 let err = NSError(domain: NSURLErrorDomain, code: -1102,
                                  userInfo: [NSLocalizedDescriptionKey: "Quality switch: current stream is muxed fallback"])
-                await delegate?.qualityItemDidFail(error: err, quality: quality, hasAppliedH264Cap: hasAppliedH264Cap)
+                await delegate.qualityItemDidFail(error: err, quality: quality, hasAppliedH264Cap: hasAppliedH264Cap)
                 return
             }
             if self.wkHLSMasterURL != nil {
