@@ -1355,11 +1355,17 @@ extension PlaybackViewModel {
             playerLog.notice("[webView/HLS] quality picker: \(syntheticFormats.map { $0.qualityLabel }.joined(separator: ", "))")
         }
 
-        // 3. Route through YTHLSProxyLoader so every AVPlayer request (playlist + segments)
-        //    goes via URLSession.shared with the desktop-Safari UA.
-        //    AVURLAssetHTTPHeaderFieldsKey is not reliably applied by CoreMedia's HLS stack.
-        guard let proxyURL = bestURL.proxyURL else {
-            playerLog.error("❌ [webView/HLS] failed to build proxy URL")
+        // 3. Route through YTHLSProxyLoader using the MASTER manifest URL (not a per-quality
+        //    variant URL). The master playlist contains EXT-X-MEDIA audio rendition groups
+        //    (dubbed tracks, original audio, etc.). Per-quality variant URLs omit these groups,
+        //    which causes AudioTrackManager to find no audio → silent audio for dubbed content.
+        //
+        //    AVPlayer will follow EXT-X-STREAM-INF links from the master into per-quality
+        //    variant playlists via the same ytwebhls:// scheme, so YTHLSProxyLoader intercepts
+        //    and n-rewrites all playlist requests (master + per-quality). Segment URLs in
+        //    variant playlists are https:// and served natively — no proxy needed for segments.
+        guard let proxyURL = masterURL.proxyURL else {
+            playerLog.error("❌ [webView/HLS] failed to build proxy URL for master")
             return false
         }
         let proxyLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver)
@@ -1372,6 +1378,23 @@ extension PlaybackViewModel {
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .spectral
         item.preferredForwardBufferDuration = 2.0
+        // Steer AVPlayer's ABR toward the best ≥720p variant without locking to a specific
+        // variant URL. This mirrors the pattern used by reloadHLSItem for mid-play quality
+        // switches. If the user has an explicit quality preference, honour it; otherwise
+        // cap at the best variant height found in the master manifest.
+        let preferredHeight: Int
+        if settings.preferredQuality != .auto, let cap = settings.preferredQuality.maxHeight {
+            preferredHeight = cap
+        } else if let best = allVariants.keys.filter({ $0 >= 720 }).max()
+                          ?? allVariants.keys.max() {
+            preferredHeight = best
+        } else {
+            preferredHeight = 0
+        }
+        if preferredHeight > 0 {
+            item.preferredMaximumResolution = CGSize(width: 7680, height: preferredHeight)
+            playerLog.notice("[webView/HLS] ABR hint: preferredMaximumResolution height=\(preferredHeight)")
+        }
         Task { [weak item] in
             try? await Task.sleep(for: .seconds(5))
             item?.preferredForwardBufferDuration = 0
