@@ -1365,6 +1365,8 @@ extension PlaybackViewModel {
         // googlevideo.com cookies (hasGoogleVideoCookies becomes true).
         let variantNeedsRqh = bestURL.absoluteString.contains("/rqh/1") || bestURL.absoluteString.contains("rqh=1")
         let hasGoogleVideoCookies = webViewCookies.contains { $0.domain.contains("googlevideo") }
+        let gvCount = webViewCookies.filter { $0.domain.contains("googlevideo") }.count
+        playerLog.notice("[webView/HLS] variant rqh=\(variantNeedsRqh) googlevideoCoookies=\(gvCount)/\(webViewCookies.count)")
         if variantNeedsRqh && !hasGoogleVideoCookies {
             playerLog.notice("⚠️ [webView/HLS] variant requires rqh=1 but no googlevideo cookies — skipping proxy to avoid AVPlayer 403")
             return false
