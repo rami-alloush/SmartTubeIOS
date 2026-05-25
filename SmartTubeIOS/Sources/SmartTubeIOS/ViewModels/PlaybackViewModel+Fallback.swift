@@ -300,21 +300,28 @@ extension PlaybackViewModel {
         // 2. Adaptive composition — video-only + audio-only; avoids muxed CDN pot restrictions
         if let videoURL = qualityCapVideoURL(from: info.formats),
            let audioURL = info.bestAdaptiveAudioURL {
-            playerLog.notice("[\(label)] Trying adaptive composition")
-            if await attemptComposition(videoURL: videoURL, audioURL: audioURL,
-                                        for: video, info: info, label: label) {
-                return true
+            // Guard: if every adaptive video URL is SABR (c=TVHTML5), AVURLAsset.loadTracks
+            // will stall for 60 s then return -11828 "Cannot Open". Skip composition entirely
+            // and let exhaustiveRetry's WKWebView path handle the video instead.
+            if info.containsSabrFormats {
+                playerLog.notice("[\(label)] All adaptive video URLs are SABR (c=TVHTML5) — skipping loadTracks stall, falling through")
+            } else {
+                playerLog.notice("[\(label)] Trying adaptive composition")
+                if await attemptComposition(videoURL: videoURL, audioURL: audioURL,
+                                            for: video, info: info, label: label) {
+                    return true
+                }
+                // A background prefetch may have stored an HLS URL in the cache while adaptive
+                // was running (confirmed in logs: hls=true stored mid-retry for LSMQ3U1Thzw).
+                // Check before falling through to muxed — HLS gives us multi-audio track support.
+                let freshCachedInfo = await VideoPreloadCache.shared.consume(videoId: video.id).playerInfo
+                if let freshHLSURL = freshCachedInfo?.hlsURL, freshHLSURL != info.hlsURL {
+                    playerLog.notice("[\(label)] HLS URL appeared in cache after adaptive failed — trying HLS")
+                    if await attemptURL(freshHLSURL, for: video, info: freshCachedInfo!,
+                                        label: "\(label)/HLS-late") { return true }
+                }
+                playerLog.notice("[\(label)] Adaptive composition failed — trying muxed")
             }
-            // A background prefetch may have stored an HLS URL in the cache while adaptive
-            // was running (confirmed in logs: hls=true stored mid-retry for LSMQ3U1Thzw).
-            // Check before falling through to muxed — HLS gives us multi-audio track support.
-            let freshCachedInfo = await VideoPreloadCache.shared.consume(videoId: video.id).playerInfo
-            if let freshHLSURL = freshCachedInfo?.hlsURL, freshHLSURL != info.hlsURL {
-                playerLog.notice("[\(label)] HLS URL appeared in cache after adaptive failed — trying HLS")
-                if await attemptURL(freshHLSURL, for: video, info: freshCachedInfo!,
-                                    label: "\(label)/HLS-late") { return true }
-            }
-            playerLog.notice("[\(label)] Adaptive composition failed — trying muxed")
         }
 
         // 3. Muxed direct MP4 (itag=18, 360p — last resort, skipped when skipMuxed=true)

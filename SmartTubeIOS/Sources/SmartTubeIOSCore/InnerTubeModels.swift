@@ -151,6 +151,23 @@ public struct PlayerInfo: Sendable {
         return audioOnly.sorted { ($0.bitrate ?? 0) > ($1.bitrate ?? 0) }.first?.url
     }
 
+    /// Returns `true` when all adaptive video-only MP4 formats are SABR streams
+    /// (signed by TVHTML5, identified by `c=TVHTML5` in the URL).
+    /// SABR URLs serve binary UMP protocol data — `AVURLAsset.loadTracks` stalls 60 s
+    /// then returns `-11828 ("Cannot Open")`. When `true`, skip adaptive composition
+    /// and route directly to the WKWebView HLS path.
+    public var containsSabrFormats: Bool {
+        let adaptiveVideos = formats.filter {
+            $0.mimeType.hasPrefix("video/mp4") &&
+            !$0.mimeType.contains(", ") &&
+            $0.url != nil
+        }
+        guard !adaptiveVideos.isEmpty else { return false }
+        return adaptiveVideos.allSatisfy {
+            $0.url?.absoluteString.contains("c=TVHTML5") == true
+        }
+    }
+
     /// Returns a copy of this `PlayerInfo` with `&pot=<token>` appended to every
     /// non-nil format URL, `hlsURL`, and `dashURL`.
     /// Call site in `PlaybackViewModel+Loading` applies this after `fetchPlayerInfo`
