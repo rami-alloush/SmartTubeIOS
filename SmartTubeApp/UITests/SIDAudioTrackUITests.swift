@@ -1,5 +1,47 @@
 import XCTest
 
+// AGENT-POST-RUN-CHECK: ui-tests-with-logs
+//
+// After every run of this test, load .github/skills/ui-tests-with-logs/SKILL.md and inspect
+// the extracted device log. Classify every skip before closing the task:
+//
+// LEGITIMATE skip:
+//   - Simulator with no googlevideo.com auth cookies: the SID video (LSMQ3U1Thzw) has
+//     rqh=1 in its HLS variant URLs. The #209 guard fires → tryWebViewHLS returns false
+//     → falls to Android muxed → muxed has no EXT-X-MEDIA → loadAudioTracks finds no
+//     AVMediaSelectionGroup → availableAudioTracks is empty → audio row absent.
+//     Device log shows: "variant requires rqh=1 but no googlevideo cookies"
+//                       "[Android[1]/muxed/muxed] readyToPlay"
+//     Test message: "player.moreMenu.audioTrackRow not found for video LSMQ3U1Thzw"
+//   - Network unavailable or YouTube server-side change: player never loads.
+//     Test message: "Player did not load or playback did not complete within deadline"
+//
+// BUG skip (must fix before closing):
+//   - Audio row absent on a real device with active YouTube session (googlevideo cookies
+//     present). Indicates loadAudioTracks is not being called from tryWebViewHLS readyToPlay.
+//     Device log should show "✅ [webView/HLS] readyToPlay" followed by "Audio tracks:"
+//     If "Audio tracks:" is missing after readyToPlay, the fix in commit e467e31 regressed.
+//   - On a real device: "skipAllTests" triggered but "readyToPlay" never appears in log —
+//     indicates tryWebViewHLS never completes (new regression in proxy or HLS extraction).
+//
+// Log events to verify (real device with cookies):
+//   ✓ [webView/HLS] master manifest OK bytes=<large> (135KB+ for SID = audio groups present)
+//   ✓ ✅ [webView/HLS] readyToPlay
+//   ✓ Audio tracks: <13 languages> — auto-selected: English (Original)
+//   ✓ player.moreMenu.audioTrackRow found and hittable
+//   ✓ Picker shows >5 language buttons
+//   ✓ Exactly one "Original" label
+//
+// RED FLAGS in device log:
+//   - "✅ [webView/HLS] readyToPlay" present BUT no "Audio tracks:" line →
+//     loadAudioTracks not called from tryWebViewHLS readyToPlay (regression of e467e31)
+//   - "Audio tracks: English (Original)" but picker shows only 1 track →
+//     loadAudioTracks called too early before AVMediaSelectionGroup populated
+//   - Multiple "Original" labels in picker →
+//     Phase 1/2/3/4 isOriginal detection regression (task #130)
+//   - "variant requires rqh=1 but no googlevideo cookies" on a REAL device →
+//     User not signed into YouTube; rqh=1 guard fires; muxed fallback; audio selector absent
+
 // MARK: - SIDAudioTrackUITests
 //
 // Regression tests for the Ben Eater "The SID: Classic 8-bit sound" video
