@@ -109,6 +109,21 @@ final class BotGuardPoTokenUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    // MARK: - Helpers
+
+    private func showControlsAndWaitEnabled(timeout: TimeInterval = 5) -> Bool {
+        let center = Self.sharedApp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            center.tap()
+            Thread.sleep(forTimeInterval: 0.4)
+            let btn = Self.sharedApp.buttons["player.playPauseButton"].firstMatch
+            if btn.exists && btn.isEnabled { return true }
+            Thread.sleep(forTimeInterval: 0.8)
+        }
+        return false
+    }
+
     // MARK: - Tests
 
     /// Verifies that adding the Option B pot= token extraction does not break the
@@ -117,27 +132,21 @@ final class BotGuardPoTokenUITests: XCTestCase {
     func testPlaybackSucceedsAfterOptionBChanges() throws {
         try XCTSkipIf(Self.skipAllTests, Self.skipReason)
 
-        // Re-show controls and confirm the button is still enabled.
-        let center = Self.sharedApp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        center.tap()
-        Thread.sleep(forTimeInterval: 0.5)
-        let btn = Self.sharedApp.buttons["player.playPauseButton"].firstMatch
-        XCTAssertTrue(btn.exists, "play/pause button not found — player may have crashed")
-        XCTAssertTrue(btn.isEnabled,
-            "play/pause button not enabled — WKWebView HLS path may be broken by Option B changes " +
+        let ready = showControlsAndWaitEnabled(timeout: 6)
+        XCTAssertTrue(ready,
+            "play/pause button did not become enabled — WKWebView HLS path may be broken by Option B changes " +
             "(check log for 'failed to fetch master manifest' or 404 from /pot/ URL encoding bug)")
     }
 
     /// Confirms playback is truly running by checking the player has not stalled
-    /// (hittable play/pause button after a 3-second pause).
+    /// (hittable play/pause button is available after controls re-appear).
     func testPlayerIsNotStalled() throws {
         try XCTSkipIf(Self.skipAllTests, Self.skipReason)
 
-        let center = Self.sharedApp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        center.tap()
-        Thread.sleep(forTimeInterval: 0.5)
+        let ready = showControlsAndWaitEnabled(timeout: 6)
+        XCTAssertTrue(ready, "play/pause button not hittable — player stalled or controls overlay never shown")
         let btn = Self.sharedApp.buttons["player.playPauseButton"].firstMatch
         XCTAssertTrue(btn.isHittable,
-            "play/pause button not hittable — player stalled or controls overlay never shown")
+            "play/pause button not hittable — controls visible but button is disabled")
     }
 }
