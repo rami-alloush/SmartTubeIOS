@@ -45,13 +45,19 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
     /// Includes both youtube.com and googlevideo.com cookies. For rqh=1-enforced content,
     /// googlevideo.com cookies are required to authenticate CDN segment requests.
     let webViewCookies: [HTTPCookie]
+    /// When non-nil, the proxy filters the master manifest to only serve #EXT-X-STREAM-INF
+    /// variants whose YT-EXT-AUDIO-CONTENT-ID matches this value (dubbed language selection).
+    /// When nil, only variants WITHOUT YT-EXT-AUDIO-CONTENT-ID are served (original audio).
+    let selectedLanguageContentID: String?
     private let lock = NSLock()
     private var activeTasks: [ObjectIdentifier: URLSessionDataTask] = [:]
 
-    init(ua: String, nSolver: (unsolved: String, solved: String)? = nil, webViewCookies: [HTTPCookie] = []) {
+    init(ua: String, nSolver: (unsolved: String, solved: String)? = nil,
+         webViewCookies: [HTTPCookie] = [], selectedLanguageContentID: String? = nil) {
         self.ua = ua
         self.nSolver = nSolver
         self.webViewCookies = webViewCookies
+        self.selectedLanguageContentID = selectedLanguageContentID
     }
 
     // MARK: AVAssetResourceLoaderDelegate
@@ -292,7 +298,59 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
                 text = rewrittenLines.joined(separator: "\n")
             } else {
                 let extMediaCount = lines.filter { $0.hasPrefix("#EXT-X-MEDIA:") }.count
-                proxyLog.notice("[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=\(extMediaCount) (no URI= found)")
+                proxyLog.notice("[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=\(extMediaCount); checking YT-EXT-AUDIO-CONTENT-ID variants")
+            }
+
+            // Step 3: Filter #EXT-X-STREAM-INF variants by selected dubbed-audio language.
+            // YouTube's HLS manifests encode dubbed audio via YT-EXT-AUDIO-CONTENT-ID attributes
+            // on #EXT-X-STREAM-INF lines (not via #EXT-X-MEDIA TYPE=AUDIO groups). Each quality
+            // level has N variants — one original (no attribute) and one per dubbed language.
+            // Filter to only the variants for the selected language so AVPlayer doesn't mix
+            // languages during ABR quality adaptation.
+            //
+            // FALLBACK: if no variants survive the filter (e.g. YouTube changes manifest format
+            // so all entries carry YT-EXT-AUDIO-CONTENT-ID), serve the original unfiltered
+            // manifest so AVPlayer can always load the video.
+            let hasVariants = lines.contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("#EXT-X-STREAM-INF:") }
+            if hasVariants {
+                let selectedLang = selectedLanguageContentID
+                var filteredLines: [String] = []
+                var pendingKeep: Bool? = nil
+                var keptVariantCount = 0
+
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("#EXT-X-STREAM-INF:") {
+                        let hasContentID = trimmed.contains("YT-EXT-AUDIO-CONTENT-ID=")
+                        if let lang = selectedLang {
+                            // Keep only the variant matching the selected language
+                            pendingKeep = trimmed.contains("YT-EXT-AUDIO-CONTENT-ID=\"\(lang)\"")
+                                       || trimmed.contains("YT-EXT-AUDIO-CONTENT-ID=\(lang)")
+                        } else {
+                            // No language selected → original (no content ID)
+                            pendingKeep = !hasContentID
+                        }
+                        if pendingKeep == true { filteredLines.append(line) }
+                    } else if let keep = pendingKeep, !trimmed.isEmpty, !trimmed.hasPrefix("#") {
+                        // URL line immediately following a #EXT-X-STREAM-INF
+                        if keep {
+                            filteredLines.append(line)
+                            keptVariantCount += 1
+                        }
+                        pendingKeep = nil
+                    } else {
+                        filteredLines.append(line)
+                    }
+                }
+
+                let langDisplay = selectedLang ?? "original"
+                if keptVariantCount > 0 {
+                    proxyLog.notice("[HLSProxy] language filter: lang=\(langDisplay) kept \(keptVariantCount) variant(s)")
+                    text = filteredLines.joined(separator: "\n")
+                } else {
+                    // No variants matched — serve unfiltered manifest so AVPlayer can always load.
+                    proxyLog.notice("[HLSProxy] language filter: lang=\(langDisplay) matched 0 variants — serving unfiltered manifest")
+                }
             }
         }
 

@@ -578,8 +578,10 @@ final class PlaybackQualityManager {
         let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
         let nSolver = webHLSProxyLoader?.nSolver
         let existingCookies = webHLSProxyLoader?.webViewCookies ?? []
-        playerLog.notice("[wkHLS quality] switching to \(h)p via proxy (nSolver=\(nSolver != nil) cookies=\(existingCookies.count))")
-        let newLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver, webViewCookies: existingCookies)
+        let existingLang = webHLSProxyLoader?.selectedLanguageContentID
+        playerLog.notice("[wkHLS quality] switching to \(h)p via proxy (nSolver=\(nSolver != nil) cookies=\(existingCookies.count) lang=\(existingLang ?? "original"))")
+        let newLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver, webViewCookies: existingCookies,
+                                         selectedLanguageContentID: existingLang)
         webHLSProxyLoader = newLoader
         let asset = AVURLAsset(url: proxyURL)
         asset.resourceLoader.setDelegate(newLoader, queue: DispatchQueue.global(qos: .userInitiated))

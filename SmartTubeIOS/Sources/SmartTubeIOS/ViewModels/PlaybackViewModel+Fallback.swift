@@ -1380,24 +1380,55 @@ extension PlaybackViewModel {
             playerLog.notice("[webView/HLS] quality picker: \(syntheticFormats.map { $0.qualityLabel }.joined(separator: ", "))")
         }
 
+        // 2b. Parse dubbed-audio language tracks from YT-EXT-AUDIO-CONTENT-ID attributes.
+        //     YouTube encodes dubbed languages in #EXT-X-STREAM-INF lines (not #EXT-X-MEDIA
+        //     TYPE=AUDIO), so loadMediaSelectionGroup returns nil. We parse them directly here
+        //     and populate AudioTrackManager so the language selector appears immediately.
+        let hlsLanguageTracks = parseHLSAudioLanguages(from: manifestText)
+        playerLog.notice("[webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks: \(hlsLanguageTracks.count) — \(hlsLanguageTracks.map { $0.name }.joined(separator: ", "))")
+        if !hlsLanguageTracks.isEmpty {
+            audioManager.loadHLSVariantTracks(hlsLanguageTracks)
+            // Wire language switching: when the user picks a track, reload the AVPlayerItem
+            // with the proxy filtered for that language. The callback is cleared by reset()
+            // when a new video loads.
+            audioManager.onHLSLanguageChange = { [weak self] (track: AudioTrack?) in
+                guard let self else { return }
+                let savedPos = self.player.currentTime().seconds
+                Task { [weak self] in
+                    await self?.switchHLSLanguage(
+                        to: track?.id,
+                        masterURL: masterURL,
+                        manifestText: manifestText,
+                        nSolver: nSolver,
+                        webViewCookies: webViewCookies,
+                        for: video,
+                        seekTo: savedPos
+                    )
+                }
+            }
+        }
+
         // 3. Route through YTHLSProxyLoader using the MASTER manifest URL (not a per-quality
-        //    variant URL). The master playlist contains EXT-X-MEDIA audio rendition groups
-        //    (dubbed tracks, original audio, etc.). Per-quality variant URLs omit these groups,
-        //    which causes AudioTrackManager to find no audio → silent audio for dubbed content.
-        //
-        //    YTHLSProxyLoader.rewritePlaylist rewrites #EXT-X-MEDIA URI attributes in the
-        //    master manifest from https:// to ytwebhls://, so AVPlayer fetches audio rendition
-        //    playlists through the proxy with the correct desktop-Safari User-Agent. Without
-        //    this, manifest.googlevideo.com rejects native iOS requests → loadMediaSelectionGroup
-        //    returns nil → availableAudioTracks empty → no audio language selector.
-        //    #EXT-X-STREAM-INF variant URLs remain https:// (spc= token provides CDN auth
-        //    natively and quality switching already works without proxying them).
+        //    variant URL). The proxy filters #EXT-X-STREAM-INF variants for the selected
+        //    dubbed language (or original audio when none is selected). Without the proxy,
+        //    AVPlayer would receive all N×M language+quality variant entries and could pick
+        //    any language during ABR adaptation.
         guard let proxyURL = masterURL.proxyURL else {
             playerLog.error("❌ [webView/HLS] failed to build proxy URL for master")
             return false
         }
-        playerLog.notice("[webView/HLS] ✅ proxying master URL (not per-quality variant) — EXT-X-MEDIA audio groups preserved for dubbed tracks")
-        let proxyLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver, webViewCookies: webViewCookies)
+        playerLog.notice("[webView/HLS] ✅ proxying master URL (original audio, YT-EXT-AUDIO-CONTENT-ID filter active)")
+        // Determine the initial content ID: if the user has a saved language preference that
+        // matches one of the HLS variant tracks, start with that language; otherwise nil (original).
+        let initialContentID: String?
+        if let pref = settings.preferredAudioLanguage,
+           let preferred = hlsLanguageTracks.first(where: { $0.languageCode == pref }) {
+            initialContentID = preferred.id
+        } else {
+            initialContentID = nil
+        }
+        let proxyLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver, webViewCookies: webViewCookies,
+                                           selectedLanguageContentID: initialContentID)
         let asset = AVURLAsset(url: proxyURL)
         // Keep proxy loader alive for the lifetime of this asset
         asset.resourceLoader.setDelegate(proxyLoader, queue: DispatchQueue.global(qos: .userInitiated))
@@ -1434,6 +1465,9 @@ extension PlaybackViewModel {
             switch status {
             case .readyToPlay:
                 playerLog.notice("✅ [webView/HLS] readyToPlay")
+                // Try the standard #EXT-X-MEDIA path (works if manifest has audio groups).
+                // For YouTube's YT-EXT-AUDIO-CONTENT-ID format, loadAudioTracks returns nil
+                // but tracks are already loaded via loadHLSVariantTracks above.
                 loadAudioTracks(from: item)
                 needsQuickStartup = false
                 isLoading = false
@@ -1450,6 +1484,74 @@ extension PlaybackViewModel {
             }
         }
         return false
+    }
+
+    /// Reloads the WKWebView HLS AVPlayerItem with the master manifest filtered for a
+    /// dubbed-audio language (or original when contentID is nil). Called when the user
+    /// selects an audio track from the picker via AudioTrackManager.onHLSLanguageChange.
+    private func switchHLSLanguage(
+        to contentID: String?,
+        masterURL: URL,
+        manifestText: String,
+        nSolver: (unsolved: String, solved: String)?,
+        webViewCookies: [HTTPCookie],
+        for video: Video,
+        seekTo position: Double
+    ) async {
+        let idDisplay = contentID ?? "original"
+        playerLog.notice("[wkHLS/lang] switching to contentID=\(idDisplay)")
+
+        // Update hlsVariantURLs so quality switching preserves the selected language.
+        let langVariants = parseHLSVariantURLsForLanguage(contentID, from: manifestText,
+                                                          baseURL: masterURL)
+        if !langVariants.isEmpty {
+            hlsVariantURLs = langVariants
+            let variantSummary = langVariants.keys.sorted(by: >).map { "\($0)p" }.joined(separator: ", ")
+            playerLog.notice("[wkHLS/lang] updated hlsVariantURLs: \(variantSummary)")
+        }
+
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
+        let proxyLoader = YTHLSProxyLoader(ua: ua, nSolver: nSolver, webViewCookies: webViewCookies,
+                                           selectedLanguageContentID: contentID)
+        guard let proxyURL = masterURL.proxyURL else {
+            playerLog.error("❌ [wkHLS/lang] failed to build proxy URL")
+            return
+        }
+        let asset = AVURLAsset(url: proxyURL)
+        asset.resourceLoader.setDelegate(proxyLoader, queue: DispatchQueue.global(qos: .userInitiated))
+        webHLSProxyLoader = proxyLoader
+
+        let item = AVPlayerItem(asset: asset)
+        item.audioTimePitchAlgorithm = .spectral
+        item.preferredForwardBufferDuration = 2.0
+        if let best = langVariants.keys.filter({ $0 >= 720 }).max() ?? langVariants.keys.max(), best > 0 {
+            item.preferredMaximumResolution = CGSize(width: 7680, height: best)
+        }
+        Task { [weak item] in
+            try? await Task.sleep(for: .seconds(5))
+            item?.preferredForwardBufferDuration = 0
+        }
+
+        player.replaceCurrentItem(with: item)
+        for await status in item.statusStream {
+            switch status {
+            case .readyToPlay:
+                let posStr = String(format: "%.1f", position)
+                playerLog.notice("✅ [wkHLS/lang] readyToPlay — seeking to \(posStr)s")
+                if position > 0 {
+                    let target = CMTime(seconds: position, preferredTimescale: 600)
+                    await item.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+                player.rate = Float(settings.playbackSpeed)
+                return
+            case .failed:
+                let err = item.error?.localizedDescription ?? "nil"
+                playerLog.error("❌ [wkHLS/lang] AVPlayerItem failed: \(err)")
+                return
+            case .unknown: continue
+            @unknown default: continue
+            }
+        }
     }
 
     /// Extracts all cookies from the WKWebView's httpCookieStore, including googlevideo.com
@@ -1484,9 +1586,135 @@ extension PlaybackViewModel {
         return false
     }
 
+    /// Parses YouTube's HLS master manifest for dubbed-audio language tracks encoded via
+    /// YT-EXT-AUDIO-CONTENT-ID attributes on #EXT-X-STREAM-INF lines.
+    ///
+    /// YouTube does NOT use standard #EXT-X-MEDIA:TYPE=AUDIO groups for dubbed content.
+    /// Instead each quality level appears N times — once per audio language — with
+    /// YT-EXT-AUDIO-CONTENT-ID="xx-XX.N" identifying the language. The original audio
+    /// variant has no YT-EXT-AUDIO-CONTENT-ID and is NOT returned here.
+    ///
+    /// The YT-EXT-XTAGS attribute on each variant is base64-encoded protobuf containing
+    /// "acont=original" or "acont=dubbed-auto" plus "lang=xx-XX". We use this to mark
+    /// the `acont=original` track as isOriginal=true.
+    ///
+    /// Returns deduplicated AudioTrack array (original first if present, then dubbed).
+    private func parseHLSAudioLanguages(from manifest: String) -> [AudioTrack] {
+        let lines = manifest.components(separatedBy: "\n")
+        var seenContentIDs = Set<String>()
+        var tracks: [AudioTrack] = []
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("#EXT-X-STREAM-INF:"),
+                  trimmed.contains("YT-EXT-AUDIO-CONTENT-ID=") else { continue }
+
+            // Extract YT-EXT-AUDIO-CONTENT-ID="xx-XX.N"
+            guard let contentID = extractQuotedHLSAttribute("YT-EXT-AUDIO-CONTENT-ID", from: trimmed),
+                  !contentID.isEmpty, !seenContentIDs.contains(contentID) else { continue }
+            seenContentIDs.insert(contentID)
+
+            // Content ID format: "xx-XX.N" or "xx.N" → language code is everything before last "."
+            let langCode: String
+            if let dotIdx = contentID.lastIndex(of: ".") {
+                langCode = String(contentID[contentID.startIndex..<dotIdx])
+            } else {
+                langCode = contentID
+            }
+
+            // Decode YT-EXT-XTAGS (base64 protobuf) to check for acont=original vs dubbed-auto.
+            let isOriginal: Bool
+            if let xtags = extractQuotedHLSAttribute("YT-EXT-XTAGS", from: trimmed),
+               let padded = { () -> Data? in
+                   let s = xtags + String(repeating: "=", count: (4 - xtags.count % 4) % 4)
+                   return Data(base64Encoded: s)
+               }(),
+               let decoded = String(data: padded, encoding: .utf8)
+                           ?? String(data: padded, encoding: .isoLatin1) {
+                isOriginal = decoded.contains("original") && !decoded.contains("dubbed")
+            } else {
+                isOriginal = false
+            }
+
+            let name = Locale.current.localizedString(forLanguageCode: langCode) ?? langCode
+            tracks.append(AudioTrack(id: contentID, name: name, languageCode: langCode,
+                                     isOriginal: isOriginal))
+        }
+
+        // Sort: original first, then alphabetical by display name
+        return tracks.sorted { a, b in
+            if a.isOriginal != b.isOriginal { return a.isOriginal }
+            return a.name.localizedCompare(b.name) == .orderedAscending
+        }
+    }
+
+    /// Parses a map of stream height → variant URL from the HLS master manifest for a
+    /// specific dubbed-audio content ID. Used by switchHLSLanguage to update hlsVariantURLs.
+    /// If `contentID` is nil, returns original-audio variant URLs (no YT-EXT-AUDIO-CONTENT-ID).
+    private func parseHLSVariantURLsForLanguage(
+        _ contentID: String?,
+        from manifest: String,
+        baseURL: URL
+    ) -> [Int: URL] {
+        let lines = manifest.components(separatedBy: "\n")
+        var result: [Int: URL] = [:]
+        var i = 0
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("#EXT-X-STREAM-INF:") {
+                let hasContentID = line.contains("YT-EXT-AUDIO-CONTENT-ID=")
+                let matches: Bool
+                if let lang = contentID {
+                    matches = line.contains("YT-EXT-AUDIO-CONTENT-ID=\"\(lang)\"")
+                           || line.contains("YT-EXT-AUDIO-CONTENT-ID=\(lang)")
+                } else {
+                    matches = !hasContentID
+                }
+                guard matches else { i += 2; continue }
+
+                var height = 0
+                if let resRange = line.range(of: #"RESOLUTION=\d+x(\d+)"#, options: .regularExpression) {
+                    let resPart = String(line[resRange])
+                    if let h = resPart.components(separatedBy: "x").last.flatMap(Int.init) {
+                        height = h
+                    }
+                }
+                i += 1
+                while i < lines.count {
+                    let candidate = lines[i].trimmingCharacters(in: .whitespaces)
+                    if !candidate.isEmpty && !candidate.hasPrefix("#") { break }
+                    i += 1
+                }
+                if i < lines.count, height > 0 {
+                    let uriLine = lines[i].trimmingCharacters(in: .whitespaces)
+                    let resolved: URL?
+                    if uriLine.hasPrefix("http://") || uriLine.hasPrefix("https://") {
+                        resolved = URL(string: uriLine)
+                    } else {
+                        let baseDir = baseURL.deletingLastPathComponent()
+                        resolved = URL(string: uriLine, relativeTo: baseDir).map { $0.absoluteURL }
+                    }
+                    if let url = resolved { result[height] = url }
+                }
+            }
+            i += 1
+        }
+        return result
+    }
+
+    /// Extracts the value of a quoted HLS attribute (e.g. `ATTR="value"`) from a tag line.
+    private func extractQuotedHLSAttribute(_ name: String, from line: String) -> String? {
+        let prefix = "\(name)=\""
+        guard let start = line.range(of: prefix) else { return nil }
+        let afterQuote = line[start.upperBound...]
+        guard let end = afterQuote.firstIndex(of: "\"") else { return nil }
+        return String(afterQuote[afterQuote.startIndex..<end])
+    }
+
     /// Parses an HLS master M3U8 manifest and returns a map of stream height → variant URL
     /// for all streams present. Handles both absolute and relative URIs.
-    /// When multiple streams share the same height (e.g. H.264 + HEVC), the last one wins.
+    /// Returns one URL per quality level — the first variant seen per height (original audio when
+    /// available, first dubbed entry as fallback when the manifest omits no-CONTENT-ID variants).
     private func parseHLSAllVariants(from manifest: String, baseURL: URL) -> [Int: URL] {
         let lines = manifest.components(separatedBy: "\n")
         var result: [Int: URL] = [:]
@@ -1516,7 +1744,10 @@ extension PlaybackViewModel {
                         let baseDir = baseURL.deletingLastPathComponent()
                         resolved = URL(string: uriLine, relativeTo: baseDir).map { $0.absoluteURL }
                     }
-                    if let url = resolved {
+                    if let url = resolved, result[height] == nil {
+                        // First entry per height wins — for YouTube's manifest order
+                        // (original first, then dubbed per quality), this naturally
+                        // selects the original audio variant.
                         result[height] = url
                     }
                 }
@@ -1536,6 +1767,9 @@ extension PlaybackViewModel {
         while i < lines.count {
             let line = lines[i].trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("#EXT-X-STREAM-INF:") {
+                // No CONTENT-ID guard needed: the `height > bestHeight` condition naturally
+                // selects the first entry per quality level (original audio in YouTube's
+                // manifest order, or the first dubbed entry if no original exists).
                 // Extract height from RESOLUTION=WxH
                 var height = 0
                 if let resRange = line.range(of: #"RESOLUTION=\d+x(\d+)"#, options: .regularExpression) {

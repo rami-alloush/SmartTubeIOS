@@ -6,51 +6,34 @@ import XCTest
 // the extracted device log. Classify every skip before closing the task:
 //
 // LEGITIMATE skip:
-//   - Simulator / unauthenticated session: YouTube does NOT include EXT-X-MEDIA TYPE=AUDIO
-//     entries in the HLS master manifest returned to an unauthenticated WKWebView session.
-//     The manifest is fetched with a desktop-Safari UA via YTHLSProxyLoader, but without
-//     YouTube auth cookies the server returns a stripped manifest with video variants only.
-//     AVFoundation consequently sees no AVMediaSelectionGroup → loadMediaSelectionGroup
-//     returns nil → availableAudioTracks empty → audio row absent.
-//     Device log shows (NEW — after #209 guard removal in 42e9f92):
-//       "[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0 (no URI= found)"
-//       "AudioTrackManager: loadMediaSelectionGroup=nil"
-//       "✅ [webView/HLS] readyToPlay"  ← video IS playing at 720p+, but no audio tracks
-//     Test message: "Audio track row not found — likely muxed playback"
 //   - Network unavailable or YouTube server-side change: player never loads.
 //     Test message: "Player did not load or playback did not complete within deadline"
+//   - YouTube changed the manifest format (no more YT-EXT-AUDIO-CONTENT-ID attributes):
+//     Device log shows "[webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks: 0"
+//     and "AudioTrackManager: loadHLSVariantTracks never called"
 //
 // BUG skip (must fix before closing):
-//   - Audio row absent on a real device with active YouTube session (user signed into YouTube).
-//     YouTube should include EXT-X-MEDIA TYPE=AUDIO entries in the manifest for authenticated
-//     sessions. Device log should show "[HLSProxy] rewrote N #EXT-X-MEDIA URI(s)" followed
-//     by "AudioTrackManager: loadMediaSelectionGroup=N option(s)" and "Audio tracks: <langs>".
-//   - On a real device: "skipAllTests" triggered but "readyToPlay" never appears in log —
-//     indicates tryWebViewHLS never completes (new regression in proxy or HLS extraction).
-//   - "✅ [webView/HLS] readyToPlay" present, EXT-X-MEDIA entries present, BUT
-//     "AudioTrackManager: loadMediaSelectionGroup=nil" → proxy is not correctly routing
-//     audio rendition playlist fetches to ytwebhls:// scheme.
+//   - Audio row absent even though "YT-EXT-AUDIO-CONTENT-ID tracks: N (N>0)" appears in log.
+//     parseHLSAudioLanguages is parsing tracks but loadHLSVariantTracks / SwiftUI binding broken.
+//   - "✅ [webView/HLS] readyToPlay" present but "[webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks:"
+//     line absent entirely → parseHLSAudioLanguages is not being called (regression in wiring).
+//   - Tracks loaded but picker shows 1 or 0 tracks → availableAudioTracks not populated correctly.
 //
-// Log events to verify (real device with YouTube account signed in):
-//   ✓ [webView/HLS] master manifest OK bytes=<large> (manifest with 13 audio groups)
-//   ✓ [HLSProxy] first AUDIO EXT-X-MEDIA sample: #EXT-X-MEDIA:TYPE=AUDIO,...
-//   ✓ [HLSProxy] rewrote 13 #EXT-X-MEDIA URI(s) to ytwebhls://
-//   ✓ AudioTrackManager: loadMediaSelectionGroup=13 option(s)
+// Log events to verify (simulator or real device, no auth required):
+//   ✓ [webView/HLS] master manifest OK bytes=<large>
+//   ✓ [HLSProxy] language filter: lang=original kept N variants (from M lines)
+//   ✓ [webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks: 13 — <language list>
+//   ✓ AudioTrackManager: loaded 13 HLS variant track(s) — selected: English
 //   ✓ ✅ [webView/HLS] readyToPlay
-//   ✓ Audio tracks: <13 languages> — auto-selected: English (Original)
 //   ✓ player.moreMenu.audioTrackRow found and hittable
 //   ✓ Picker shows >5 language buttons
-//   ✓ Exactly one "Original" label
+//   ✓ Exactly one "Original" label (contentID="en-US.4", acont=original in XTAGS)
 //
 // RED FLAGS in device log:
-//   - "[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0" on a
-//     REAL device with signed-in session → YouTube changed manifest format; re-examine.
-//   - "AudioTrackManager: loadMediaSelectionGroup=nil" after EXT-X-MEDIA lines present →
-//     proxy URI rewriting is not working; audio rendition fetches are being rejected (403).
-//   - "AudioTrackManager: loadMediaSelectionGroup=1 option(s)" → only default audio exposed;
-//     dubbed audio tracks missing from group.
-//   - Multiple "Original" labels in picker →
-//     Phase 1/2/3/4 isOriginal detection regression (task #130).
+//   - "[webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks: 0" → YouTube changed format; re-examine.
+//   - "AudioTrackManager: loadHLSVariantTracks" not present → wiring in tryWebViewHLS broken.
+//   - All 13 tracks show isOriginal=false → XTAGS base64 decode for acont=original broken.
+//   - Multiple "Original" labels → isOriginal detection firing too broadly.
 
 // MARK: - SIDAudioTrackUITests
 //
@@ -58,24 +41,23 @@ import XCTest
 // (video ID: LSMQ3U1Thzw) — a video with 13 AI-dubbed language tracks.
 //
 // Root cause fixed (May 2026):
-//   A background prefetch stored hls=true in VideoPreloadCache while foreground
-//   retry fetches returned hls=false. Adaptive composition 403'd. Without the fix,
-//   playback fell to the Android muxed stream — muxed has no EXT-X-MEDIA, so
-//   AVPlayer sees no AVMediaSelectionGroup and AudioTrackManager loads 0 tracks.
-//   The more-menu audio track row only appears when availableAudioTracks.count > 1,
-//   so the selector was silently absent.
+//   YouTube's HLS master manifest does NOT use #EXT-X-MEDIA:TYPE=AUDIO groups for
+//   dubbed content. Instead, each quality level has N #EXT-X-STREAM-INF variants —
+//   one per language — identified by YT-EXT-AUDIO-CONTENT-ID="xx-XX.N" attributes.
+//   The original audio variant has no attribute. Because AVFoundation's
+//   loadMediaSelectionGroup(for: .audible) requires EXT-X-MEDIA groups, it always
+//   returned nil → availableAudioTracks stayed empty → audio row never shown.
 //
-//   Fix 1 (PlaybackViewModel+Fallback.swift — tryAllStreams):
-//     After adaptive composition fails, check VideoPreloadCache for a late-arriving
-//     HLS URL. The background prefetch has already stored hls=true at that point,
-//     so the cache check fires and playback uses HLS ("iOS[N]/HLS-late" path).
+//   Fix (PlaybackViewModel+Fallback.swift — tryWebViewHLS):
+//     After fetching the master manifest, parseHLSAudioLanguages parses
+//     YT-EXT-AUDIO-CONTENT-ID attributes from #EXT-X-STREAM-INF lines to build
+//     AudioTrack instances. YT-EXT-XTAGS (base64 protobuf) is decoded to detect
+//     the original track via "acont=original". AudioTrackManager.loadHLSVariantTracks
+//     populates availableAudioTracks directly, bypassing the EXT-X-MEDIA path.
 //
-//   Fix 2 (AudioTrackManager — Phase 3 + Phase 4):
-//     YouTube sets isMainProgramContent=true on ALL 13 tracks (Phase 1 can't
-//     discriminate) and omits DEFAULT=YES (defaultOption=nil, Phase 2 also misses).
-//     Phase 3 checks isAuxiliaryContent; Phase 4 marks the last track in the
-//     manifest as original — YouTube consistently places the creator's English
-//     audio last.
+//   Fix (YTHLSProxyLoader — selectedLanguageContentID):
+//     The proxy now filters #EXT-X-STREAM-INF variants to only the selected language
+//     (or original when nil), so AVPlayer's ABR doesn't mix languages.
 //
 // Test strategy:
 //   Open the SID video directly via --uitesting-deeplink-video, then assert:
@@ -121,17 +103,36 @@ final class SIDAudioTrackUITests: XCTestCase {
         // the background prefetch may need a few extra seconds to arrive.
         Thread.sleep(forTimeInterval: 10)
 
-        // Show controls, then wait for the play/pause button to become enabled.
-        // enabled == true proves isLoading was cleared by the fallback .readyToPlay handler.
-        let playPauseButton = app.buttons["player.playPauseButton"].firstMatch
-        for _ in 0..<6 {
-            if playPauseButton.exists { break }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            Thread.sleep(forTimeInterval: 1.5)
+        // Poll until the play/pause button is both visible and enabled.
+        //
+        // WHY polling instead of XCTNSPredicateExpectation:
+        // The controls overlay is conditionally rendered in SwiftUI:
+        //   `if vm.controlsVisible { makeControlsOverlay(...) }`
+        // When controlsVisible = false the overlay (and every button inside it,
+        // including player.playPauseButton) is *removed* from the view hierarchy and
+        // therefore absent from the XCUITest accessibility tree. XCTNSPredicateExpectation
+        // evaluates `enabled` on a stale snapshot — once the element disappears it stays
+        // false even after isLoading is cleared by .readyToPlay. For slow-loading videos
+        // like this one (WKWebView extraction + ~16 s buffering) the 4-second controls
+        // auto-hide fires long before readyToPlay, so the passive waiter always times out.
+        //
+        // The fix: tap the screen every ~3 s to keep controls visible, then immediately
+        // re-query the button. Once isLoading = false the freshly-shown button is enabled.
+        let center = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let deadline = Date().addingTimeInterval(40)
+        var playbackReady = false
+        while Date() < deadline {
+            center.tap()
+            Thread.sleep(forTimeInterval: 0.4)   // let SwiftUI render the controls overlay
+            let btn = app.buttons["player.playPauseButton"].firstMatch
+            if btn.exists && btn.isEnabled {
+                playbackReady = true
+                break
+            }
+            // Controls auto-hide after 4 s; wait ~3 s then re-tap.
+            Thread.sleep(forTimeInterval: 3.0)
         }
-        let enabledPred = NSPredicate(format: "enabled == true")
-        let exp = XCTNSPredicateExpectation(predicate: enabledPred, object: playPauseButton)
-        if XCTWaiter().wait(for: [exp], timeout: 30) != .completed {
+        if !playbackReady {
             skipAllTests = true
         }
     }
@@ -202,13 +203,10 @@ final class SIDAudioTrackUITests: XCTestCase {
     /// PRIMARY REGRESSION: the audio track selector must appear in the more menu.
     ///
     /// The selector row is only added when `availableAudioTracks.count > 1`.
-    /// This requires the HLS master manifest to include EXT-X-MEDIA TYPE=AUDIO entries
-    /// for the dubbed language tracks. YouTube includes these only for authenticated sessions
-    /// (signed into YouTube). On an unauthenticated simulator, the manifest has 0 audio
-    /// renditions → loadMediaSelectionGroup returns nil → audio row absent.
-    ///
-    /// The regression being guarded is "signed-in session has HLS with audio tracks but
-    /// audio selector absent", not "audio selector always appears on simulator".
+    /// This requires parseHLSAudioLanguages to parse YT-EXT-AUDIO-CONTENT-ID attributes
+    /// from the HLS master manifest and loadHLSVariantTracks to populate availableAudioTracks.
+    /// Works on simulator without YouTube auth (YouTube includes YT-EXT-AUDIO-CONTENT-ID
+    /// in unauthenticated manifests — it is a video-stream attribute, not an auth-gated one).
     func testAudioTrackSelectorIsVisibleInMoreMenu() throws {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
@@ -216,12 +214,9 @@ final class SIDAudioTrackUITests: XCTestCase {
             captureState("no-audio-row", in: app)
             throw XCTSkip(
                 "player.moreMenu.audioTrackRow not found for video \(Self.videoID). " +
-                "YouTube's HLS manifest for this video contains no EXT-X-MEDIA TYPE=AUDIO " +
-                "entries in this environment (unauthenticated session on simulator). " +
-                "Re-run on a real device signed into YouTube: the authenticated manifest " +
-                "includes audio renditions which enable the selector. " +
-                "Log: '[HLSProxy] 0 #EXT-X-MEDIA URIs rewritten; total EXT-X-MEDIA lines=0' " +
-                "and 'AudioTrackManager: loadMediaSelectionGroup=nil' confirm the skip is legitimate."
+                "Device log should show '[webView/HLS] YT-EXT-AUDIO-CONTENT-ID tracks: 13'. " +
+                "If it shows '0 tracks', YouTube may have changed the manifest format. " +
+                "If the log line is absent entirely, tryWebViewHLS language-wiring is broken."
             )
         }
 
@@ -237,7 +232,7 @@ final class SIDAudioTrackUITests: XCTestCase {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest had 0 YT-EXT-AUDIO-CONTENT-ID tracks (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
@@ -259,8 +254,8 @@ final class SIDAudioTrackUITests: XCTestCase {
         XCTAssertGreaterThan(
             trackCount, 5,
             "Expected more than 5 language tracks for video \(Self.videoID) (has 13 AI-dubbed langs). " +
-            "Got \(trackCount). If the picker only shows 1 track, loadAudioTracks found only " +
-            "the muxed audio — the HLS path is not being used."
+            "Got \(trackCount). If the picker only shows 1 track, parseHLSAudioLanguages " +
+            "found only one YT-EXT-AUDIO-CONTENT-ID entry — check manifest fetch."
         )
 
         dismissPicker()
@@ -268,16 +263,14 @@ final class SIDAudioTrackUITests: XCTestCase {
 
     /// Exactly one track must be labelled "Original" in the picker.
     ///
-    /// Before the Phase 3 + Phase 4 fix in AudioTrackManager:
-    ///   • All 13 tracks showed "Original" when `===` identity was broken (task #130).
-    ///   • No tracks showed "Original" when Phase 1 failed (all have isMainProgramContent=true)
-    ///     and Phase 2 failed (defaultOption=nil / no DEFAULT=YES).
-    ///   Phase 4 now marks the last track in the HLS rendition list as original.
+    /// YouTube places the creator's English audio at contentID="en-US.4" with
+    /// YT-EXT-XTAGS protobuf containing "acont=original". parseHLSAudioLanguages decodes
+    /// the XTAGS base64 and sets isOriginal=true for that track only.
     func testExactlyOneTrackIsMarkedOriginal() throws {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest had 0 YT-EXT-AUDIO-CONTENT-ID tracks (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
@@ -292,8 +285,8 @@ final class SIDAudioTrackUITests: XCTestCase {
         XCTAssertEqual(
             originalLabels.count, 1,
             "Exactly one track must be labelled 'Original' in the picker. " +
-            "0 = Phase 4 (last-track fallback) not firing — no isOriginal=true track detected. " +
-            ">1 = regression: multiple tracks mislabelled as original (task #130)."
+            "0 = XTAGS base64 decode for acont=original not working (check parseHLSAudioLanguages). " +
+            ">1 = isOriginal detection firing too broadly."
         )
 
         dismissPicker()
@@ -301,18 +294,19 @@ final class SIDAudioTrackUITests: XCTestCase {
 
     /// The track labelled "Original" must be English.
     ///
-    /// Ben Eater originally recorded the SID video in English. YouTube places the
-    /// English (en-US) track last in the HLS EXT-X-MEDIA list, so Phase 4 in
-    /// AudioTrackManager marks it as original.
+    /// Ben Eater originally recorded the SID video in English. YouTube assigns
+    /// contentID="en-US.4" with XTAGS "acont=original:lang=en-US" to the original track.
+    /// parseHLSAudioLanguages derives langCode="en-US" and the display name is
+    /// Locale.current.localizedString(forLanguageCode:"en-US") which returns "English" on
+    /// the default English-locale simulator.
     ///
-    /// Note: runs on a default English-locale simulator. On a non-English locale,
-    /// the track name is localised (e.g. "Anglais" on French), which would cause
-    /// this test to skip rather than fail.
+    /// Note: on a non-English locale the display name is localised (e.g. "Anglais" on French),
+    /// which would cause this test to skip rather than fail.
     func testOriginalTrackIsEnglish() throws {
         guard !Self.skipAllTests else { throw XCTSkip(Self.skipReason) }
 
         guard let audioRow = openMoreMenuAudioRow() else {
-            throw XCTSkip("Audio track row not found — HLS manifest has no EXT-X-MEDIA audio renditions in this environment (see testAudioTrackSelectorIsVisibleInMoreMenu)")
+            throw XCTSkip("Audio track row not found — HLS manifest had 0 YT-EXT-AUDIO-CONTENT-ID tracks (see testAudioTrackSelectorIsVisibleInMoreMenu)")
         }
         audioRow.tap()
 
