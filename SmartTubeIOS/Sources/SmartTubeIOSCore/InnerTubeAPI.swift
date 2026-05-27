@@ -64,6 +64,20 @@ public actor InnerTubeAPI {
         return poToken != nil && poTokenVideoId == videoId
     }
 
+    /// Fetches a PO token from the configured provider in the background and caches it
+    /// in `poToken`/`poTokenVideoId`. Call this fire-and-forget when starting a video load
+    /// so the token is available for subsequent retry attempts without blocking the
+    /// primary fetch path. BotGuardClient caches within its TTL (~1h), so this is fast
+    /// after the first successful pipeline run.
+    public func prefetchPoToken(for videoId: String) async {
+        guard let provider = poTokenProvider, poToken == nil || poTokenVideoId != videoId else { return }
+        if let pot = try? await provider.token(for: videoId) {
+            poToken = pot
+            poTokenVideoId = videoId
+            tubeLog.notice("[InnerTube] prefetchPoToken ✅ (len=\(pot.count)) for \(videoId, privacy: .public)")
+        }
+    }
+
     // MARK: - PoTokenProvider
     let poTokenProvider: (any PoTokenProvider)?
 

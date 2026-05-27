@@ -222,6 +222,16 @@ extension PlaybackViewModel {
         // completed on slow networks (GitHub issue #53).
         playerLog.notice("[loadAsync] start id=\(video.id) title=\(video.title) player.rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue)")
 
+        // Pre-fetch a BotGuard PO token in the background so the cache is warm for
+        // subsequent retry attempts (Phase 1 exhaustiveRetry, next video load, etc.).
+        // Fire-and-forget — do NOT await here; BotGuardClient takes ~22 s for the first
+        // pipeline run and must not block the primary video load path.
+        let capturedAPI = api
+        let capturedVideoId = video.id
+        Task.detached(priority: .background) {
+            await capturedAPI.prefetchPoToken(for: capturedVideoId)
+        }
+
         // Local-file fast path — bypass all network fetches for downloaded videos.
         // The path must be inside Documents/SmartTubeDownloads/ to prevent path-traversal
         // from a crafted Video object.
