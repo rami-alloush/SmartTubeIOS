@@ -227,6 +227,9 @@ public final class PlaybackViewModel {
     var isSkippingSegment: Bool { sponsorBlockManager.isSkippingSegment }
     var itemObserverTask: Task<Void, Never>?
     var endObserverTask: Task<Void, Never>?
+    var stallObserverTask: Task<Void, Never>?
+    /// Number of `AVPlayerItemPlaybackStalled` (or rateObserver rate→0) events in this session.
+    var stallCount: Int = 0
     var qualityTask: Task<Void, Never>? {
         get { qualityManager.qualityTask }
         set { qualityManager.qualityTask = newValue }

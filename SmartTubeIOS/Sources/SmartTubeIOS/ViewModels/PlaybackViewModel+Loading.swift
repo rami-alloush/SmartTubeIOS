@@ -214,6 +214,7 @@ extension PlaybackViewModel {
 
     func loadAsync(video: Video) async {
         isLoading = true
+        stallCount = 0
         needsQuickStartup = true
         // Note: isLoading = false is set in the AVPlayerItem .readyToPlay observer so the
         // spinner stays visible until the first frame is actually ready. It was previously
@@ -261,6 +262,31 @@ extension PlaybackViewModel {
                     for await _ in notifications {
                         guard let self, !Task.isCancelled else { return }
                         self.handlePlaybackEnd()
+                    }
+                }
+                stallObserverTask?.cancel()
+                stallObserverTask = Task { @MainActor [weak self] in
+                    let notifications = NotificationCenter.default.notifications(
+                        named: AVPlayerItem.playbackStalledNotification,
+                        object: item
+                    )
+                    for await _ in notifications {
+                        guard let self, !Task.isCancelled else { return }
+                        self.stallCount += 1
+                        let t = Int(self.currentTime)
+                        playerLog.notice("[stall] AVPlayerItemPlaybackStalled at t=\(t)s stall#\(self.stallCount) video=\(self.currentVideo?.id ?? "unknown")")
+                        let stallError = NSError(
+                            domain: "SmartTube.PlaybackStall",
+                            code: 0,
+                            userInfo: [NSLocalizedDescriptionKey: "AVPlayerItemPlaybackStalled at t=\(t)s (stall #\(self.stallCount))"]
+                        )
+                        playerLog.recordNonFatal(stallError, userInfo: [
+                            "video_id":       self.currentVideo?.id ?? "unknown",
+                            "stall_at_time":  String(t),
+                            "stall_count":    String(self.stallCount),
+                            "video_duration": String(Int(self.duration)),
+                            "stall_trigger":  "AVPlayerItemPlaybackStalled"
+                        ])
                     }
                 }
                 #if canImport(UIKit)
@@ -606,6 +632,33 @@ extension PlaybackViewModel {
                 }
             }
 
+            // Observe playback stalls and record them as Crashlytics non-fatals (bug #193).
+            stallObserverTask?.cancel()
+            stallObserverTask = Task { @MainActor [weak self] in
+                let notifications = NotificationCenter.default.notifications(
+                    named: AVPlayerItem.playbackStalledNotification,
+                    object: item
+                )
+                for await _ in notifications {
+                    guard let self, !Task.isCancelled else { return }
+                    self.stallCount += 1
+                    let t = Int(self.currentTime)
+                    playerLog.notice("[stall] AVPlayerItemPlaybackStalled at t=\(t)s stall#\(self.stallCount) video=\(self.currentVideo?.id ?? "unknown")")
+                    let stallError = NSError(
+                        domain: "SmartTube.PlaybackStall",
+                        code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "AVPlayerItemPlaybackStalled at t=\(t)s (stall #\(self.stallCount))"]
+                    )
+                    playerLog.recordNonFatal(stallError, userInfo: [
+                        "video_id":       self.currentVideo?.id ?? "unknown",
+                        "stall_at_time":  String(t),
+                        "stall_count":    String(self.stallCount),
+                        "video_duration": String(Int(self.duration)),
+                        "stall_trigger":  "AVPlayerItemPlaybackStalled"
+                    ])
+                }
+            }
+
             // Audio-only mode: if enabled, replace the HLS item with an audio-only asset.
             // Falls back to HLS (already in player) on any failure. No-op when disabled.
             await loadAudioOnlyItemIfEnabled()
@@ -720,6 +773,8 @@ extension PlaybackViewModel {
         itemObserverTask = nil
         endObserverTask?.cancel()
         endObserverTask = nil
+        stallObserverTask?.cancel()
+        stallObserverTask = nil
         #if canImport(UIKit)
         UIApplication.shared.isIdleTimerDisabled = false
         clearNowPlayingInfo()
