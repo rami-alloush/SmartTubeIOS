@@ -22,6 +22,7 @@ public final class SearchViewModel {
     private var nextPageToken: String?
     private var searchTask: Task<Void, Never>?
     private var suggestTask: Task<Void, Never>?
+    private var hideObserverTasks: [Task<Void, Never>] = []
 
     private static let recommendedTerms: [String] = [
         "trending videos", "music 2025", "cooking recipes", "travel vlog",
@@ -41,6 +42,11 @@ public final class SearchViewModel {
         self.historyStore = historyStore
         suggestions = Self.recommendedTerms
         Task { await loadHistory() }
+        observeFeedHideNotifications()
+    }
+
+    deinit {
+        hideObserverTasks.forEach { $0.cancel() }
     }
 
     /// Call from `.task(id: query)` in the view to debounce live suggestions.
@@ -151,6 +157,23 @@ public final class SearchViewModel {
             }
         }
     }
+
+    // MARK: - Feed hide handling
+
+    private func observeFeedHideNotifications() {
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideVideoFromFeed) {
+                guard let self, let videoId = note.userInfo?["videoId"] as? String else { continue }
+                self.results.removeAll { $0.id == videoId }
+            }
+        })
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideChannelFromFeed) {
+                guard let self, let channelId = note.userInfo?["channelId"] as? String else { continue }
+                self.results.removeAll { $0.channelId == channelId }
+            }
+        })
+    }
 }
 
 // MARK: - ChannelViewModel
@@ -166,9 +189,15 @@ public final class ChannelViewModel {
 
     private let api: any InnerTubeAPIProtocol
     private var nextPageToken: String?
+    private var hideObserverTasks: [Task<Void, Never>] = []
 
     public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
+        observeFeedHideNotifications()
+    }
+
+    deinit {
+        hideObserverTasks.forEach { $0.cancel() }
     }
 
     public func load(channelId: String) {
@@ -203,5 +232,22 @@ public final class ChannelViewModel {
                 self.error = error
             }
         }
+    }
+
+    // MARK: - Feed hide handling
+
+    private func observeFeedHideNotifications() {
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideVideoFromFeed) {
+                guard let self, let videoId = note.userInfo?["videoId"] as? String else { continue }
+                self.videos.removeAll { $0.id == videoId }
+            }
+        })
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideChannelFromFeed) {
+                guard let self, let channelId = note.userInfo?["channelId"] as? String else { continue }
+                self.videos.removeAll { $0.channelId == channelId }
+            }
+        })
     }
 }

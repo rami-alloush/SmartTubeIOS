@@ -90,6 +90,9 @@ public struct AppSettings: Codable {
     /// Channels where SponsorBlock is disabled. Key = channelId, value = display title.
     /// Mirrors Android's `SponsorBlockData.excludedChannels`.
     public var sponsorBlockExcludedChannels: [String: String]
+    /// Channels hidden from the feed via "Don't Recommend Channel". Key = channelId, value = channel title.
+    /// Persists across sessions and syncs via iCloud when `iCloudSyncEnabled` is true.
+    public var blockedChannels: [String: String]
 
     /// Convenience: the set of categories whose action is not `.nothing`.
     /// Passed to `SponsorBlockService.fetchSegments` so we only fetch relevant segments.
@@ -246,6 +249,7 @@ public struct AppSettings: Codable {
         ]
         sponsorBlockMinSegmentDuration = 0
         sponsorBlockExcludedChannels   = [:]
+        blockedChannels                = [:]
         preferredAudioLanguage = nil
         preferredCaptionLanguage = nil
         deArrowEnabled       = false
@@ -308,6 +312,7 @@ extension AppSettings {
         case sponsorBlockActions
         case sponsorBlockMinSegmentDuration
         case sponsorBlockExcludedChannels
+        case blockedChannels
         case preferredAudioLanguage
         case preferredCaptionLanguage
         case deArrowEnabled
@@ -349,6 +354,7 @@ extension AppSettings {
         sponsorBlockActions          = c.safeDecode([SponsorSegment.Category: SponsorBlockAction].self, forKey: .sponsorBlockActions, default: d.sponsorBlockActions)
         sponsorBlockMinSegmentDuration = c.safeDecode(Double.self,          forKey: .sponsorBlockMinSegmentDuration, default: d.sponsorBlockMinSegmentDuration)
         sponsorBlockExcludedChannels = c.safeDecode([String: String].self,  forKey: .sponsorBlockExcludedChannels, default: d.sponsorBlockExcludedChannels)
+        blockedChannels              = c.safeDecode([String: String].self,  forKey: .blockedChannels,              default: d.blockedChannels)
         preferredAudioLanguage       = c.safeDecode(String?.self,           forKey: .preferredAudioLanguage,       default: d.preferredAudioLanguage)
         preferredCaptionLanguage     = c.safeDecode(String?.self,           forKey: .preferredCaptionLanguage,     default: d.preferredCaptionLanguage)
         deArrowEnabled               = c.safeDecode(Bool.self,              forKey: .deArrowEnabled,               default: d.deArrowEnabled)

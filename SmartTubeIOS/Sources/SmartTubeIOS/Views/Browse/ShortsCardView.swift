@@ -146,6 +146,7 @@ struct ShortsCardView: View {
                     Button(role: .destructive) {
                         Task {
                             try? await api.sendFeedback(token: token)
+                            store.settings.blockedChannels[channelId] = video.channelTitle
                             NotificationCenter.default.post(
                                 name: .hideChannelFromFeed,
                                 object: nil,

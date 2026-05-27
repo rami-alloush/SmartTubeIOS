@@ -47,6 +47,7 @@ public final class PlaylistViewModel {
     private var fetchTask: Task<Void, Never>?
     private let api: any InnerTubeAPIProtocol
     private let queueLoader: any QueuedPlaylistLoader
+    private var hideObserverTasks: [Task<Void, Never>] = []
 
     public init(
         api: any InnerTubeAPIProtocol = InnerTubeAPI(),
@@ -54,6 +55,11 @@ public final class PlaylistViewModel {
     ) {
         self.api = api
         self.queueLoader = queueLoader
+        observeFeedHideNotifications()
+    }
+
+    deinit {
+        hideObserverTasks.forEach { $0.cancel() }
     }
 
     public func load(playlistId: String, refresh: Bool = false) {
@@ -116,5 +122,22 @@ public final class PlaylistViewModel {
                 self.error = error
             }
         }
+    }
+
+    // MARK: - Feed hide handling
+
+    private func observeFeedHideNotifications() {
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideVideoFromFeed) {
+                guard let self, let videoId = note.userInfo?["videoId"] as? String else { continue }
+                self.videos.removeAll { $0.id == videoId }
+            }
+        })
+        hideObserverTasks.append(Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: .hideChannelFromFeed) {
+                guard let self, let channelId = note.userInfo?["channelId"] as? String else { continue }
+                self.videos.removeAll { $0.channelId == channelId }
+            }
+        })
     }
 }
