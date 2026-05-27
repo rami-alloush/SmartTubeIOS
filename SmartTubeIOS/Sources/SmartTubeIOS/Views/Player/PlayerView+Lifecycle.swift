@@ -347,12 +347,16 @@ extension PlayerView {
         }
         .onPlayPauseCommand { vm.togglePlayPause() }
         .onExitCommand {
-            swipeLog.notice("[tv] onExitCommand — showMoreMenu=\(showMoreMenu) showQuality=\(showQualityPicker) showSpeed=\(showSpeedPicker) showSleep=\(showSleepTimerPicker) highlighted=\(String(describing: highlightedControl)) controlsVisible=\(vm.controlsVisible)")
+            swipeLog.notice("[tv] onExitCommand — showMoreMenu=\(showMoreMenu) showQuality=\(showQualityPicker) showSpeed=\(showSpeedPicker) showSleep=\(showSleepTimerPicker) showCaption=\(showCaptionPicker) showAudio=\(showAudioTrackPicker) showDesc=\(showDescriptionSheet) showComments=\(showCommentsSheet) highlighted=\(String(describing: highlightedControl)) controlsVisible=\(vm.controlsVisible)")
             // Dismiss any open overlay first — Menu/Back is the tvOS dismiss convention.
-            if showMoreMenu      { showMoreMenu = false; return }
-            if showQualityPicker { showQualityPicker = false; return }
-            if showSpeedPicker   { showSpeedPicker = false; return }
-            if showSleepTimerPicker { showSleepTimerPicker = false; return }
+            if showMoreMenu          { showMoreMenu = false; return }
+            if showQualityPicker     { showQualityPicker = false; return }
+            if showSpeedPicker       { showSpeedPicker = false; return }
+            if showSleepTimerPicker  { showSleepTimerPicker = false; return }
+            if showCaptionPicker     { showCaptionPicker = false; return }
+            if showAudioTrackPicker  { showAudioTrackPicker = false; return }
+            if showDescriptionSheet  { showDescriptionSheet = false; return }
+            if showCommentsSheet     { showCommentsSheet = false; return }
             if highlightedControl != nil {
                 // Esc/Menu from nav mode → exit nav mode, controls stay until timer.
                 highlightedControl = nil
