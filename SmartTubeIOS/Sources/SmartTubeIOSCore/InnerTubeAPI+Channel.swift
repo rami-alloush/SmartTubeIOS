@@ -60,20 +60,37 @@ extension InnerTubeAPI {
 
     /// Resolves a YouTube `@handle` to the canonical `UC…` channel ID using the
     /// InnerTube `navigation/resolve_url` endpoint.
+    ///
+    /// Falls back to returning the handle unchanged when the endpoint does not return
+    /// a recognised `browseId` — YouTube's `/browse` endpoint has accepted `@handle`
+    /// as a `browseId` directly since 2022, so the browse call in `fetchChannel` will
+    /// still succeed. `parseChannel` then extracts the canonical ID from the
+    /// `channelMetadataRenderer.externalId` field in the browse response.
     private func resolveChannelHandle(_ handle: String) async throws -> String {
         let handleURL = "https://www.youtube.com/\(handle)"
         var body = makeBody(client: webClientContext)
         body["url"] = handleURL
         tubeLog.notice("resolveChannelHandle url=\(handleURL, privacy: .public)")
-        let data = try await post(endpoint: "navigation/resolve_url", body: body)
-        // Response shape: { "endpoint": { "browseEndpoint": { "browseId": "UCxxx" } } }
-        let endpoint = data["endpoint"] as? [String: Any]
-        if let browseId = (endpoint?["browseEndpoint"] as? [String: Any])?["browseId"] as? String {
-            return browseId
+        do {
+            let data = try await post(endpoint: "navigation/resolve_url", body: body)
+            // Standard shape: { "endpoint": { "browseEndpoint": { "browseId": "UCxxx" } } }
+            let endpoint = data["endpoint"] as? [String: Any]
+            if let browseId = (endpoint?["browseEndpoint"] as? [String: Any])?["browseId"] as? String,
+               !browseId.isEmpty {
+                tubeLog.notice("resolveChannelHandle resolved \(handle, privacy: .public) → \(browseId, privacy: .public)")
+                return browseId
+            }
+            // Some channels return a urlEndpoint instead of browseEndpoint — fall through.
+            let topKeys = data.keys.joined(separator: ", ")
+            tubeLog.warning("resolveChannelHandle: unexpected response keys=[\(topKeys, privacy: .public)] — falling back to handle-as-browseId")
+        } catch {
+            // resolve_url threw (e.g. HTTP error, consent wall in EU) — fall through.
+            tubeLog.warning("resolveChannelHandle: resolve_url threw \(error, privacy: .public) — falling back to handle-as-browseId")
         }
-        let topKeys = data.keys.joined(separator: ", ")
-        tubeLog.error("resolveChannelHandle: unexpected response keys=[\(topKeys, privacy: .public)]")
-        throw APIError.decodingError("Could not resolve handle \(handle) to a channel ID")
+        // Fallback: pass the handle through unchanged. YouTube's /browse endpoint
+        // accepts @handle as a browseId and will resolve it server-side.
+        // parseChannel will then extract the canonical UC… ID from externalId.
+        return handle
     }
 
     private func parseChannel(from json: [String: Any], channelId: String) throws -> (Channel, VideoGroup) {
@@ -117,8 +134,23 @@ extension InnerTubeAPI {
         }()
         let subscribers = header.flatMap { $0["subscriberCountText"] as? [String: Any] }.flatMap { extractText($0) }
 
+        // Prefer the canonical UC… channelId from channelMetadataRenderer.externalId over
+        // the browseId parameter — when a @handle is passed as browseId the parameter is
+        // the handle string, not the UC… ID. Using externalId ensures the stored Channel.id
+        // is always the stable UC-format identifier regardless of the browse path used (#185).
+        let resolvedChannelId: String = {
+            if let meta = (json["metadata"] as? [String: Any])?["channelMetadataRenderer"] as? [String: Any],
+               let extId = meta["externalId"] as? String, extId.hasPrefix("UC") {
+                if extId != channelId {
+                    tubeLog.notice("parseChannel: externalId=\(extId, privacy: .public) replaces browseId=\(channelId, privacy: .public)")
+                }
+                return extId
+            }
+            return channelId
+        }()
+
         let channel = Channel(
-            id: channelId,
+            id: resolvedChannelId,
             title: title,
             description: description,
             thumbnailURL: thumbURL,
