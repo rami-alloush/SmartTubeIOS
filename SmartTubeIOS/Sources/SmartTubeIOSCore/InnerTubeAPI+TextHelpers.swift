@@ -1,4 +1,7 @@
 import Foundation
+import OSLog
+
+private let tubeLog = Logger(subsystem: appSubsystem, category: "InnerTube")
 
 // MARK: - Text extraction helpers
 
@@ -44,23 +47,40 @@ extension InnerTubeAPI {
         let cal = Calendar.current
         let now = Date.now
         let startOfToday = cal.startOfDay(for: now)
+        let fmt: (Date?) -> String = { d in d.map { ISO8601DateFormatter().string(from: $0) } ?? "nil" }
         switch title.lowercased() {
         case "today":
-            return startOfToday
+            let d = startOfToday
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → today (\(fmt(d), privacy: .public))")
+            return d
         case "yesterday":
-            return cal.date(byAdding: .day, value: -1, to: startOfToday)
+            let d = cal.date(byAdding: .day, value: -1, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -1d (\(fmt(d), privacy: .public))")
+            return d
         case "this week":
-            return cal.date(byAdding: .day, value: -4, to: startOfToday)
+            let d = cal.date(byAdding: .day, value: -4, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -4d (\(fmt(d), privacy: .public))")
+            return d
         case "last week":
-            return cal.date(byAdding: .day, value: -10, to: startOfToday)
+            let d = cal.date(byAdding: .day, value: -10, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -10d (\(fmt(d), privacy: .public))")
+            return d
         case "earlier this month":
-            return cal.date(byAdding: .day, value: -15, to: startOfToday)
+            let d = cal.date(byAdding: .day, value: -15, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -15d (\(fmt(d), privacy: .public))")
+            return d
         case "this month":
-            return cal.date(byAdding: .day, value: -7, to: startOfToday)
+            let d = cal.date(byAdding: .day, value: -7, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -7d (\(fmt(d), privacy: .public))")
+            return d
         case "last month":
-            return cal.date(byAdding: .month, value: -1, to: startOfToday)
+            let d = cal.date(byAdding: .month, value: -1, to: startOfToday)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -1mo (\(fmt(d), privacy: .public))")
+            return d
         default:
-            return parseRelativeDate(title)
+            let d = parseRelativeDate(title)
+            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → relativeDate fallback → \(fmt(d), privacy: .public)")
+            return d
         }
     }
 
@@ -74,7 +94,10 @@ extension InnerTubeAPI {
               let valueRange = Range(match.range(at: 1), in: stripped),
               let unitRange = Range(match.range(at: 2), in: stripped),
               let value = Int(stripped[valueRange])
-        else { return nil }
+        else {
+            tubeLog.debug("parseRelativeDate '\(text, privacy: .public)' → no regex match")
+            return nil
+        }
         let unit = String(stripped[unitRange])
         let seconds: TimeInterval
         switch unit {
@@ -87,7 +110,9 @@ extension InnerTubeAPI {
         case "year":   seconds = TimeInterval(value * 365 * 86_400)
         default:       return nil
         }
-        return Date(timeIntervalSinceNow: -seconds)
+        let result = Date(timeIntervalSinceNow: -seconds)
+        tubeLog.debug("parseRelativeDate '\(text, privacy: .public)' → \(value, privacy: .public) \(unit, privacy: .public)(s) ago → \(ISO8601DateFormatter().string(from: result), privacy: .public)")
+        return result
     }
 
     func extractNumber(_ text: String) -> Int? {

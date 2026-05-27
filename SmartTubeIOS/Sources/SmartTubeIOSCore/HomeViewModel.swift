@@ -266,11 +266,13 @@ public final class HomeViewModel {
                 var seenIds = Set(sections[idx].videos.map(\.id))
                 let deduplicated = newVideos.filter { seenIds.insert($0.id).inserted }
                 sections[idx].videos.append(contentsOf: deduplicated)
-                // Re-sort after merging so videos from different pages remain in
-                // strict newest-first order across pagination boundaries.
-                if sections[idx].section.type == .subscriptions {
-                    sections[idx].videos.sort { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
-                }
+                // NOTE: Do NOT sort after appending. The YouTube subscription feed API
+                // returns pages in reverse-chronological order — page N+1 videos are
+                // always older than page N. Sorting the entire array after each append
+                // reorders existing items in SwiftUI's ForEach / mergedVideos interleave,
+                // which breaks the LazyVGrid scroll position (content shifts under the
+                // user's offset, making previously-seen cards reappear and the list
+                // appear to jump back).
                 sections[idx].nextPageToken = nextToken
                 sections[idx].isLoadingMore = false
             }

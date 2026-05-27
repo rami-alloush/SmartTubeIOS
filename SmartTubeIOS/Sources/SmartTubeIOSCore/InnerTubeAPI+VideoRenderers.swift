@@ -421,6 +421,7 @@ extension InnerTubeAPI {
         tubeLog.debug("tileRenderer id=\(videoId, privacy: .public) tileStyle=\(tile["style"] as? String ?? "nil", privacy: .public) reelEp=\(reelWatchEndpoint != nil, privacy: .public) overlayStyle=\(overlayStyle, privacy: .public) dur=\(durationStr, privacy: .public) vertThumb=\(isVerticalThumbnail, privacy: .public) ustreamerShorts=\(isUstreamerShorts, privacy: .public) → isShort=\(isShort, privacy: .public)")
 
         // publishedAt: best-effort from tileMetadata lines (second line may contain "2 years ago")
+        var publishedTimeText: String? = nil
         let publishedAt: Date? = {
             guard let lines = tileMetadata?["lines"] as? [[String: Any]], lines.count > 1 else { return nil }
             for line in lines.dropFirst() {
@@ -429,9 +430,14 @@ extension InnerTubeAPI {
                     guard let text = (item["lineItemRenderer"] as? [String: Any])?["text"] as? [String: Any],
                           let str = extractText(text)
                     else { continue }
-                    if let date = parseRelativeDate(str) { return date }
+                    if let date = parseRelativeDate(str) {
+                        publishedTimeText = str
+                        tubeLog.debug("tileRenderer id=\(videoId, privacy: .public) publishedTimeText='\(str, privacy: .public)'")
+                        return date
+                    }
                 }
             }
+            tubeLog.debug("tileRenderer id=\(videoId, privacy: .public) publishedTimeText=nil (no date in tileMetadata)")
             return nil
         }()
 
@@ -458,6 +464,7 @@ extension InnerTubeAPI {
                 return nil
             }(),
             publishedAt: publishedAt,
+            publishedTimeText: publishedTimeText,
             isLive: isLive,
             isShort: isShort,
             watchProgress: watchProgress,
@@ -727,9 +734,9 @@ extension InnerTubeAPI {
             return result
         }()
 
-        let publishedAt: Date? = (r["publishedTimeText"] as? [String: Any])
-            .flatMap { extractText($0) }
-            .flatMap { parseRelativeDate($0) }
+        let publishedTimeText: String? = (r["publishedTimeText"] as? [String: Any]).flatMap { extractText($0) }
+        let publishedAt: Date? = publishedTimeText.flatMap { parseRelativeDate($0) }
+        tubeLog.debug("videoRenderer id=\(videoId, privacy: .public) publishedTimeText='\(publishedTimeText ?? "nil", privacy: .public)'")
 
         return Video(
             id: videoId,
@@ -740,6 +747,7 @@ extension InnerTubeAPI {
             duration: duration,
             viewCount: viewCount,
             publishedAt: publishedAt,
+            publishedTimeText: publishedTimeText,
             isLive: isLive,
             isShort: isShort,
             watchProgress: watchProgress,
@@ -789,9 +797,9 @@ extension InnerTubeAPI {
                 .flatMap { $0["percentDurationWatched"] as? Double } }
             .first.map { $0 / 100.0 }
 
-        let publishedAt: Date? = (r["publishedTimeText"] as? [String: Any])
-            .flatMap { extractText($0) }
-            .flatMap { parseRelativeDate($0) }
+        let publishedTimeText: String? = (r["publishedTimeText"] as? [String: Any]).flatMap { extractText($0) }
+        let publishedAt: Date? = publishedTimeText.flatMap { parseRelativeDate($0) }
+        tubeLog.debug("playlistVideoRenderer id=\(videoId, privacy: .public) publishedTimeText='\(publishedTimeText ?? "nil", privacy: .public)'")
 
         return Video(
             id: videoId,
@@ -802,6 +810,7 @@ extension InnerTubeAPI {
             duration: duration,
             viewCount: viewCount,
             publishedAt: publishedAt,
+            publishedTimeText: publishedTimeText,
             isLive: false,
             isShort: false,
             watchProgress: watchProgress,

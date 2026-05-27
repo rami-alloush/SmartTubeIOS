@@ -13,6 +13,10 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
     public var duration: TimeInterval?      // seconds
     public var viewCount: Int?
     public var publishedAt: Date?
+    /// Raw relative-date text from the API (e.g. "2 years ago", "3 months ago").
+    /// Preserved for display so the UI shows the honest approximation instead of
+    /// formatting the computed `publishedAt` as a precise "May 12"-style string.
+    public var publishedTimeText: String?
     public var isLive: Bool
     public var isUpcoming: Bool
     public var isShort: Bool
@@ -41,7 +45,7 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, channelTitle, channelId, description, thumbnailURL, duration
-        case viewCount, publishedAt, isLive, isUpcoming, isShort, hasPortraitThumbnail
+        case viewCount, publishedAt, publishedTimeText, isLive, isUpcoming, isShort, hasPortraitThumbnail
         case watchProgress, playlistId, playlistIndex, badges
         case notInterestedToken, dontLikeToken, hideChannelToken
         case deArrowTitle, deArrowThumbnailTimestamp
@@ -58,6 +62,7 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
         duration: TimeInterval? = nil,
         viewCount: Int? = nil,
         publishedAt: Date? = nil,
+        publishedTimeText: String? = nil,
         isLive: Bool = false,
         isUpcoming: Bool = false,
         isShort: Bool = false,
@@ -79,6 +84,7 @@ public struct Video: Identifiable, Hashable, Codable, Sendable {
         self.duration = duration
         self.viewCount = viewCount
         self.publishedAt = publishedAt
+        self.publishedTimeText = publishedTimeText
         self.isLive = isLive
         self.isUpcoming = isUpcoming
         self.isShort = isShort
