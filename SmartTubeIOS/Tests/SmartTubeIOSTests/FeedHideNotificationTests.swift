@@ -56,24 +56,27 @@ struct SearchViewModelFeedHideTests {
 
     @Test("hideVideoFromFeed removes matching video from search results")
     func hideVideoRemovesFromResults() async throws {
+        let id1 = "search-hide-video-keep-\(UUID().uuidString)"
+        let id2 = "search-hide-video-remove-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa"),
-            makeVideo(id: "vid_bbb"),
+            makeVideo(id: id2),
+            makeVideo(id: id1),
         ])
         #expect(vm.results.count == 2)
 
-        postHideVideo(id: "vid_aaa")
+        postHideVideo(id: id2)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.results.count == 1)
-        #expect(vm.results.first?.id == "vid_bbb")
+        #expect(vm.results.first?.id == id1)
     }
 
     @Test("hideVideoFromFeed with unknown id does not change results")
     func hideVideoUnknownIdNoChange() async throws {
-        let vm = try await loadedVM(videos: [makeVideo(id: "vid_aaa")])
+        let id = "search-no-change-\(UUID().uuidString)"
+        let vm = try await loadedVM(videos: [makeVideo(id: id)])
 
-        postHideVideo(id: "vid_zzz")
+        postHideVideo(id: "search-unknown-\(UUID().uuidString)")
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.results.count == 1)
@@ -81,25 +84,28 @@ struct SearchViewModelFeedHideTests {
 
     @Test("hideChannelFromFeed removes all videos from that channel")
     func hideChannelRemovesAllFromChannel() async throws {
+        let channel1 = "search-ch-remove-\(UUID().uuidString)"
+        let channel2 = "search-ch-keep-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa", channelId: "ch_1"),
-            makeVideo(id: "vid_bbb", channelId: "ch_1"),
-            makeVideo(id: "vid_ccc", channelId: "ch_2"),
+            makeVideo(id: "va-\(UUID().uuidString)", channelId: channel1),
+            makeVideo(id: "vb-\(UUID().uuidString)", channelId: channel1),
+            makeVideo(id: "vc-\(UUID().uuidString)", channelId: channel2),
         ])
         #expect(vm.results.count == 3)
 
-        postHideChannel(id: "ch_1")
+        postHideChannel(id: channel1)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.results.count == 1)
-        #expect(vm.results.first?.id == "vid_ccc")
+        #expect(vm.results.first?.channelId == channel2)
     }
 
     @Test("hideChannelFromFeed with unknown channelId does not change results")
     func hideChannelUnknownIdNoChange() async throws {
-        let vm = try await loadedVM(videos: [makeVideo(id: "vid_aaa", channelId: "ch_1")])
+        let channel = "search-ch-safe-\(UUID().uuidString)"
+        let vm = try await loadedVM(videos: [makeVideo(id: "vd-\(UUID().uuidString)", channelId: channel)])
 
-        postHideChannel(id: "ch_zzz")
+        postHideChannel(id: "search-unknown-ch-\(UUID().uuidString)")
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.results.count == 1)
@@ -129,32 +135,36 @@ struct ChannelViewModelFeedHideTests {
 
     @Test("hideVideoFromFeed removes matching video from channel videos")
     func hideVideoRemovesFromChannelVideos() async throws {
+        let id1 = "ch-keep-\(UUID().uuidString)"
+        let id2 = "ch-remove-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa"),
-            makeVideo(id: "vid_bbb"),
+            makeVideo(id: id2),
+            makeVideo(id: id1),
         ])
         #expect(vm.videos.count == 2)
 
-        postHideVideo(id: "vid_aaa")
+        postHideVideo(id: id2)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.videos.count == 1)
-        #expect(vm.videos.first?.id == "vid_bbb")
+        #expect(vm.videos.first?.id == id1)
     }
 
     @Test("hideChannelFromFeed removes all videos matching channelId")
     func hideChannelRemovesAllFromChannelVideos() async throws {
+        let ch1 = "chvm-remove-\(UUID().uuidString)"
+        let ch2 = "chvm-keep-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa", channelId: "ch_1"),
-            makeVideo(id: "vid_bbb", channelId: "ch_2"),
+            makeVideo(id: "va-\(UUID().uuidString)", channelId: ch1),
+            makeVideo(id: "vb-\(UUID().uuidString)", channelId: ch2),
         ])
         #expect(vm.videos.count == 2)
 
-        postHideChannel(id: "ch_1")
+        postHideChannel(id: ch1)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.videos.count == 1)
-        #expect(vm.videos.first?.id == "vid_bbb")
+        #expect(vm.videos.first?.channelId == ch2)
     }
 }
 
@@ -182,33 +192,37 @@ struct PlaylistViewModelFeedHideTests {
 
     @Test("hideVideoFromFeed removes matching video from playlist videos")
     func hideVideoRemovesFromPlaylist() async throws {
+        let id1 = "pl-keep-\(UUID().uuidString)"
+        let id2 = "pl-remove-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa"),
-            makeVideo(id: "vid_bbb"),
+            makeVideo(id: id2),
+            makeVideo(id: id1),
         ])
         #expect(vm.videos.count == 2)
 
-        postHideVideo(id: "vid_aaa")
+        postHideVideo(id: id2)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.videos.count == 1)
-        #expect(vm.videos.first?.id == "vid_bbb")
+        #expect(vm.videos.first?.id == id1)
     }
 
     @Test("hideChannelFromFeed removes all videos from that channel in playlist")
     func hideChannelRemovesFromPlaylist() async throws {
+        let ch1 = "plch-remove-\(UUID().uuidString)"
+        let ch2 = "plch-keep-\(UUID().uuidString)"
         let vm = try await loadedVM(videos: [
-            makeVideo(id: "vid_aaa", channelId: "ch_1"),
-            makeVideo(id: "vid_bbb", channelId: "ch_1"),
-            makeVideo(id: "vid_ccc", channelId: "ch_2"),
+            makeVideo(id: "va-\(UUID().uuidString)", channelId: ch1),
+            makeVideo(id: "vb-\(UUID().uuidString)", channelId: ch1),
+            makeVideo(id: "vc-\(UUID().uuidString)", channelId: ch2),
         ])
         #expect(vm.videos.count == 3)
 
-        postHideChannel(id: "ch_1")
+        postHideChannel(id: ch1)
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(vm.videos.count == 1)
-        #expect(vm.videos.first?.id == "vid_ccc")
+        #expect(vm.videos.first?.channelId == ch2)
     }
 }
 

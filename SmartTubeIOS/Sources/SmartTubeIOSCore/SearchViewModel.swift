@@ -45,10 +45,6 @@ public final class SearchViewModel {
         observeFeedHideNotifications()
     }
 
-    deinit {
-        hideObserverTasks.forEach { $0.cancel() }
-    }
-
     /// Call from `.task(id: query)` in the view to debounce live suggestions.
     /// When `q` is empty, restores the recommended terms immediately.
     public func updateSuggestions(for q: String) async {
@@ -194,10 +190,6 @@ public final class ChannelViewModel {
     public init(api: any InnerTubeAPIProtocol = InnerTubeAPI()) {
         self.api = api
         observeFeedHideNotifications()
-    }
-
-    deinit {
-        hideObserverTasks.forEach { $0.cancel() }
     }
 
     public func load(channelId: String) {
