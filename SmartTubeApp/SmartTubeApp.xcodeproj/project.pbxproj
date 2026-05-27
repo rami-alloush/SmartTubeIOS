@@ -62,6 +62,7 @@
 		AA1200000000000000002002 /* WKHLSCookieProxyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1200000000000000002001 /* WKHLSCookieProxyUITests.swift */; };
 		AA1300000000000000002002 /* BotGuardPoTokenUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1300000000000000002001 /* BotGuardPoTokenUITests.swift */; };
 		AA1400000000000000002002 /* BotGuardLivePipelineUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1400000000000000002001 /* BotGuardLivePipelineUITests.swift */; };
+		AA1500000000000000002002 /* SIDPlaybackStallingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1500000000000000002001 /* SIDPlaybackStallingUITests.swift */; };
 		AB01CD23EF456789AB01CD23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB01CD23EF456789AB01CD24 /* AppDelegate.swift */; };
 		AP000000000000000000001B /* AirPlayUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AP000000000000000000001A /* AirPlayUITests.swift */; };
 		B0C1D2E3F4A5B6C7D8E9F0A1 /* ShortsNavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B0C1D2E3F4A5B6C7D8E9F0 /* ShortsNavigationUITests.swift */; };
@@ -210,6 +211,7 @@
 		AA1200000000000000002001 /* WKHLSCookieProxyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WKHLSCookieProxyUITests.swift; sourceTree = "<group>"; };
 		AA1300000000000000002001 /* BotGuardPoTokenUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotGuardPoTokenUITests.swift; sourceTree = "<group>"; };
 		AA1400000000000000002001 /* BotGuardLivePipelineUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotGuardLivePipelineUITests.swift; sourceTree = "<group>"; };
+		AA1500000000000000002001 /* SIDPlaybackStallingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SIDPlaybackStallingUITests.swift; sourceTree = "<group>"; };
 		AB01CD23EF456789AB01CD24 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AE55B486AFD7F51FEF1874FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AP000000000000000000001A /* AirPlayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayUITests.swift; sourceTree = "<group>"; };
@@ -350,6 +352,7 @@
 				AA1200000000000000002001 /* WKHLSCookieProxyUITests.swift */,
 				AA1300000000000000002001 /* BotGuardPoTokenUITests.swift */,
 				AA1400000000000000002001 /* BotGuardLivePipelineUITests.swift */,
+				AA1500000000000000002001 /* SIDPlaybackStallingUITests.swift */,
 				AA11000000000000000020A1 /* ShortsVerticalSwipeUITests.swift */,
 				AA1100000000000000000CA1 /* RecommendedChipUITests.swift */,
 				AA1100000000000000000DA1 /* TVPlayerSettingsUITests.swift */,
@@ -847,6 +850,7 @@
 				AA1200000000000000002002 /* WKHLSCookieProxyUITests.swift in Sources */,
 				AA1300000000000000002002 /* BotGuardPoTokenUITests.swift in Sources */,
 				AA1400000000000000002002 /* BotGuardLivePipelineUITests.swift in Sources */,
+				AA1500000000000000002002 /* SIDPlaybackStallingUITests.swift in Sources */,
 				AA11000000000000000020A2 /* ShortsVerticalSwipeUITests.swift in Sources */,
 				AA1100000000000000000CA2 /* RecommendedChipUITests.swift in Sources */,
 				AA1100000000000000000EA2 /* AudioOnlyModeUITests.swift in Sources */,
@@ -1038,7 +1042,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1471,7 +1475,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;

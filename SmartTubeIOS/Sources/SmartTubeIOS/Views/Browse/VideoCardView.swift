@@ -464,7 +464,26 @@ public struct VideoCardView: View {
     }
 
     private var uploadDateLabel: String? {
-        guard !video.isLive, !video.isUpcoming else { return nil }
+        guard !video.isLive else { return nil }
+        // Upcoming/scheduled: show when the stream starts instead of an upload date.
+        if video.isUpcoming {
+            guard let date = video.publishedAt else { return nil }
+            let cal = Calendar.current
+            let timeFmt = DateFormatter()
+            timeFmt.locale = .autoupdatingCurrent
+            timeFmt.timeStyle = .short
+            if cal.isDateInToday(date) {
+                return "Scheduled: Today, \(timeFmt.string(from: date))"
+            }
+            if cal.isDateInTomorrow(date) {
+                return "Scheduled: Tomorrow, \(timeFmt.string(from: date))"
+            }
+            let dateFmt = DateFormatter()
+            dateFmt.locale = .autoupdatingCurrent
+            dateFmt.dateStyle = .medium
+            dateFmt.timeStyle = .short
+            return "Scheduled: \(dateFmt.string(from: date))"
+        }
         guard let date = video.publishedAt else { return nil }
         let now = Date()
         let elapsed = now.timeIntervalSince(date)

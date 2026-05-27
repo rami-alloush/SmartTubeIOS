@@ -165,6 +165,16 @@ extension PlaybackViewModel {
         player.pause()
         isPlaying = false
         controlsTimer?.cancel()
+        // Cancel in-flight load tasks so their @Observable state mutations do not
+        // fire after the PlayerView has been removed from the SwiftUI hierarchy.
+        // Without this, exhaustiveRetry callbacks crash with "No Observable object of
+        // type SettingsStore found" when a sub-view rebuilds after dismiss.
+        // Firebase: a013be1c (EXC_BREAKPOINT in EnvironmentValues.subscript.getter).
+        loadTask?.cancel()
+        loadTask = nil
+        exhaustiveRetryTask?.cancel()
+        exhaustiveRetryTask = nil
+        isLoading = false
         #if canImport(UIKit)
         UIApplication.shared.isIdleTimerDisabled = false
         updateNowPlayingPlayback()
@@ -654,7 +664,22 @@ extension PlaybackViewModel {
             // banner on the next video open.
             guard !(error is CancellationError) else { return }
             playerLog.error("❌ loadAsync error: \(String(describing: error))")
-            self.error = error
+            // signInRequired from the primary iOS client can be a false-positive when
+            // the user's auth session is broken (Multilogin INVALID_TOKENS): YouTube
+            // returns LOGIN_REQUIRED even for public content. Route to exhaustiveRetry
+            // so fallback clients (WKWebView, TVEmbedded, WebSafari) can try without
+            // the broken auth token. Only applies when signed-in — unsigned users
+            // hitting truly age-restricted content get the error immediately.
+            // Firebase: 0edf6a2f (AutoDiagnostic(1)) + db9e0581 (APIError(6)).
+            if let apiErr = error as? APIError, case .signInRequired = apiErr, hasAuthToken {
+                playerLog.notice("⚠️ signInRequired from primary client (signed-in user) — routing to exhaustiveRetry for fallback clients")
+                exhaustiveRetryTask?.cancel()
+                exhaustiveRetryTask = Task { [weak self] in
+                    await self?.exhaustiveRetry(video: video, originalError: error)
+                }
+            } else {
+                self.error = error
+            }
         }
     }
 

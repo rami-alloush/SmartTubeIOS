@@ -51,37 +51,54 @@ extension InnerTubeAPI {
         switch title.lowercased() {
         case "today":
             let d = startOfToday
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → today (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → today (\(fmt(d), privacy: .public))")
             return d
         case "yesterday":
             let d = cal.date(byAdding: .day, value: -1, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -1d (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -1d (\(fmt(d), privacy: .public))")
             return d
         case "this week":
             let d = cal.date(byAdding: .day, value: -4, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -4d (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -4d (\(fmt(d), privacy: .public))")
             return d
         case "last week":
             let d = cal.date(byAdding: .day, value: -10, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -10d (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -10d (\(fmt(d), privacy: .public))")
             return d
         case "earlier this month":
             let d = cal.date(byAdding: .day, value: -15, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -15d (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -15d (\(fmt(d), privacy: .public))")
             return d
         case "this month":
             let d = cal.date(byAdding: .day, value: -7, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -7d (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -7d (\(fmt(d), privacy: .public))")
             return d
         case "last month":
             let d = cal.date(byAdding: .month, value: -1, to: startOfToday)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → -1mo (\(fmt(d), privacy: .public))")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → -1mo (\(fmt(d), privacy: .public))")
             return d
         default:
             let d = parseRelativeDate(title)
-            tubeLog.debug("parseSectionDate '\(title, privacy: .public)' → relativeDate fallback → \(fmt(d), privacy: .public)")
+            tubeLog.notice("parseSectionDate '\(title, privacy: .public)' → relativeDate fallback → \(fmt(d), privacy: .public)")
             return d
         }
+    }
+
+    /// Parses "Scheduled for 5/27/26, 4:00 PM" style strings from upcoming video tiles.
+    /// Returns the scheduled future date, or nil if the format is not recognised.
+    func parseScheduledDate(_ text: String) -> Date? {
+        let stripped = text.replacingOccurrences(
+            of: #"^Scheduled for\s+"#, with: "", options: .regularExpression)
+        guard stripped != text else { return nil }   // no "Scheduled for" prefix → bail early
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "M/d/yy, h:mm a"
+        if let date = formatter.date(from: stripped) {
+            tubeLog.notice("parseScheduledDate '\(text, privacy: .public)' → \(ISO8601DateFormatter().string(from: date), privacy: .public)")
+            return date
+        }
+        tubeLog.notice("parseScheduledDate '\(text, privacy: .public)' → no match")
+        return nil
     }
 
     func parseRelativeDate(_ text: String) -> Date? {
@@ -95,7 +112,7 @@ extension InnerTubeAPI {
               let unitRange = Range(match.range(at: 2), in: stripped),
               let value = Int(stripped[valueRange])
         else {
-            tubeLog.debug("parseRelativeDate '\(text, privacy: .public)' → no regex match")
+            tubeLog.notice("parseRelativeDate '\(text, privacy: .public)' → no regex match")
             return nil
         }
         let unit = String(stripped[unitRange])
@@ -111,7 +128,7 @@ extension InnerTubeAPI {
         default:       return nil
         }
         let result = Date(timeIntervalSinceNow: -seconds)
-        tubeLog.debug("parseRelativeDate '\(text, privacy: .public)' → \(value, privacy: .public) \(unit, privacy: .public)(s) ago → \(ISO8601DateFormatter().string(from: result), privacy: .public)")
+        tubeLog.notice("parseRelativeDate '\(text, privacy: .public)' → \(value, privacy: .public) \(unit, privacy: .public)(s) ago → \(ISO8601DateFormatter().string(from: result), privacy: .public)")
         return result
     }
 
