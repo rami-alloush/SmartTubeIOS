@@ -13,6 +13,15 @@ extension InnerTubeAPI {
     // MARK: - Player stream URLs
 
     public func fetchPlayerInfo(videoId: String) async throws -> PlayerInfo {
+        // Fetch a PO token from the configured provider when we don't have a fresh one
+        // for this video. BotGuardClient caches within TTL so repeated calls are fast.
+        if let provider = poTokenProvider, poToken == nil || poTokenVideoId != videoId {
+            if let pot = try? await provider.token(for: videoId) {
+                poToken = pot
+                poTokenVideoId = videoId
+                tubeLog.notice("[InnerTube] poTokenProvider → PO token set (len=\(pot.count)) for \(videoId, privacy: .public)")
+            }
+        }
         var body = makeBody(client: iosClientContext)
         body["videoId"] = videoId
         body["racyCheckOk"] = true
@@ -207,6 +216,14 @@ extension InnerTubeAPI {
     /// may cause YouTube to return an HLS manifest and adaptive streams without `rqh=1`.
     /// Falls back to `fetchPlayerInfo` (unauthenticated) when no auth token is stored.
     public func fetchPlayerInfoiOSAuthenticated(videoId: String) async throws -> PlayerInfo {
+        // Fetch PO token from provider if we don't already have a fresh one.
+        if let provider = poTokenProvider, poToken == nil || poTokenVideoId != videoId {
+            if let pot = try? await provider.token(for: videoId) {
+                poToken = pot
+                poTokenVideoId = videoId
+                tubeLog.notice("[InnerTube] poTokenProvider → PO token set (len=\(pot.count)) for \(videoId, privacy: .public)")
+            }
+        }
         var body = makeBody(client: iosClientContext, includePoToken: true)
         body["videoId"] = videoId
         body["racyCheckOk"] = true

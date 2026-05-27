@@ -73,7 +73,8 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         // Return cached token if still valid — websafeFallbackToken from GenerateIT is
         // not video-specific so it can be reused across sequential video loads.
         if let cached = cachedPoToken, let expiry = cachedPoTokenExpiry, Date() < expiry {
-            bgLog.notice("[BotGuard] ✅ cached PO token (ttl=\(Int(expiry.timeIntervalSinceNow), privacy: .public)s) for \(videoId, privacy: .public)")
+            let ttlRemaining = Int(expiry.timeIntervalSinceNow)
+            bgLog.notice("[BotGuard] ✅ cached PO token (ttl=\(ttlRemaining, privacy: .public)s) for \(videoId, privacy: .public)")
             return cached
         }
 
@@ -486,7 +487,7 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         // Returns (integrityToken: json[0], websafeFallback: json[3]).
         // json[0] is the token passed to getMinter; json[3] is used directly when getMinter is unavailable.
         let (integrityToken, websafeFallback, ttl) = try fetchIntegrityTokenSync(bgResponse: bgResponse)
-        bgLog.notice("[BotGuard] Phase 4 \u2705 integrityToken=\(integrityToken?.count ?? 0) websafeFallback=\(websafeFallback?.count ?? 0)")
+        bgLog.notice("[BotGuard] Phase 4 ✅ integrityToken=\(integrityToken?.count ?? 0) websafeFallback=\(websafeFallback?.count ?? 0)")
 
         // --- Phase 5: mint PO token ---
         let token = try mintSync(

@@ -44,11 +44,18 @@ struct AppEntry: App {
 
     init() {
         FirebaseApp.configure()
-        let api = InnerTubeAPI()
+        let settingsStore = SettingsStore()
+        let poTokenProvider: (any PoTokenProvider)? = {
+            if let url = settingsStore.settings.poTokenServiceURL {
+                return ServerPoTokenProvider(serviceURL: url)
+            }
+            return BotGuardClient()
+        }()
+        let api = InnerTubeAPI(authToken: nil, poTokenProvider: poTokenProvider)
         _api             = State(initialValue: api)
         _authService     = State(initialValue: AuthService())
         _browseViewModel = State(initialValue: BrowseViewModel(api: api))
-        _settingsStore   = State(initialValue: SettingsStore())
+        _settingsStore   = State(initialValue: settingsStore)
         #if os(iOS)
         _playerStateStore = State(initialValue: PlayerStateStore(api: api))
         #endif
