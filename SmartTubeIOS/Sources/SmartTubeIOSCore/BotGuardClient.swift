@@ -53,6 +53,14 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
     /// `DispatchSemaphore.wait()` inside blocks here does NOT block the Swift cooperative pool.
     private let jsQueue = DispatchQueue(label: "st.botguard.js", qos: .userInitiated)
 
+    // MARK: - PO token cache
+    // The websafeFallbackToken from GenerateIT is a generic attestation — not video-specific
+    // — so it can be reused across sequential video loads within its TTL window.
+    // nonisolated(unsafe): BotGuardClient is @unchecked Sendable; token() is awaited
+    // sequentially per video so concurrent mutation is benign in practice.
+    nonisolated(unsafe) private var cachedPoToken: String?
+    nonisolated(unsafe) private var cachedPoTokenExpiry: Date?
+
     // MARK: - Init
 
     public init(session: URLSession = .shared) {
@@ -62,6 +70,13 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
     // MARK: - PoTokenProvider
 
     public func token(for videoId: String) async throws -> String {
+        // Return cached token if still valid — websafeFallbackToken from GenerateIT is
+        // not video-specific so it can be reused across sequential video loads.
+        if let cached = cachedPoToken, let expiry = cachedPoTokenExpiry, Date() < expiry {
+            bgLog.notice("[BotGuard] ✅ cached PO token (ttl=\(Int(expiry.timeIntervalSinceNow), privacy: .public)s) for \(videoId, privacy: .public)")
+            return cached
+        }
+
         bgLog.notice("[BotGuard] token requested for \(videoId, privacy: .public)")
 
         // Phase 1 – fetch challenge (async Swift network call, off jsQueue).
@@ -69,18 +84,22 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         bgLog.notice("[BotGuard] challenge ok, globalName=\(challenge.globalName, privacy: .public) jsLen=\(challenge.interpreterJS.count)")
 
         // Phase 2–5 – run entirely on jsQueue to keep all JSValue references on one thread.
-        let token = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+        let (token, ttl) = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(String, Int), Error>) in
             jsQueue.async {
                 do {
-                    let tok = try self.runPipelineSync(challenge: challenge, videoId: videoId)
-                    cont.resume(returning: tok)
+                    let result = try self.runPipelineSync(challenge: challenge, videoId: videoId)
+                    cont.resume(returning: result)
                 } catch {
                     cont.resume(throwing: error)
                 }
             }
         }
 
-        bgLog.notice("[BotGuard] ✅ PO token minted (len=\(token.count)) for \(videoId, privacy: .public)")
+        // Cache for reuse within the TTL window.
+        cachedPoToken = token
+        cachedPoTokenExpiry = Date().addingTimeInterval(TimeInterval(ttl > 0 ? ttl : 3600))
+
+        bgLog.notice("[BotGuard] ✅ PO token minted (len=\(token.count), ttl=\(ttl)s) for \(videoId, privacy: .public)")
         return token
     }
 
@@ -347,7 +366,7 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
     /// Runs the entire BotGuard pipeline synchronously:
     /// JS VM execution → integrity token fetch (blocking) → mint (JS).
     /// Must be called from `jsQueue` only.
-    private func runPipelineSync(challenge: BotGuardChallenge, videoId: String) throws -> String {
+    private func runPipelineSync(challenge: BotGuardChallenge, videoId: String) throws -> (token: String, ttl: Int) {
 
         // --- Set up JSContext with minimal polyfills ---
         guard let ctx = JSContext() else {
@@ -466,17 +485,18 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         // --- Phase 4: fetch integrity token (blocking URLSession, safe on jsQueue) ---
         // Returns (integrityToken: json[0], websafeFallback: json[3]).
         // json[0] is the token passed to getMinter; json[3] is used directly when getMinter is unavailable.
-        let (integrityToken, websafeFallback) = try fetchIntegrityTokenSync(bgResponse: bgResponse)
-        bgLog.notice("[BotGuard] Phase 4 ✅ integrityToken=\(integrityToken?.count ?? 0) websafeFallback=\(websafeFallback?.count ?? 0)")
+        let (integrityToken, websafeFallback, ttl) = try fetchIntegrityTokenSync(bgResponse: bgResponse)
+        bgLog.notice("[BotGuard] Phase 4 \u2705 integrityToken=\(integrityToken?.count ?? 0) websafeFallback=\(websafeFallback?.count ?? 0)")
 
         // --- Phase 5: mint PO token ---
-        return try mintSync(
+        let token = try mintSync(
             ctx: ctx,
             signalOutput: webPoSignalOutput,
             integrityToken: integrityToken,
             websafeFallback: websafeFallback,
             videoId: videoId
         )
+        return (token, ttl)
     }
 
     // MARK: - Phase 4: integrity token (blocking, on jsQueue)
@@ -489,7 +509,7 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         init(_ value: T) { self.value = value }
     }
 
-    private func fetchIntegrityTokenSync(bgResponse: String) throws -> (integrityToken: String?, websafeFallback: String?) {
+    private func fetchIntegrityTokenSync(bgResponse: String) throws -> (integrityToken: String?, websafeFallback: String?, ttl: Int) {
         let payload = [Self.requestKey, bgResponse]
         var req = URLRequest(url: Self.waaGenerateITURL, timeoutInterval: 12)
         req.httpMethod = "POST"
@@ -498,7 +518,7 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
         req.setValue("grpc-web-javascript/0.1",   forHTTPHeaderField: "x-user-agent")
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        let box = _ResultBox<Result<(integrityToken: String?, websafeFallback: String?), Error>?>(nil)
+        let box = _ResultBox<Result<(integrityToken: String?, websafeFallback: String?, ttl: Int), Error>?>(nil)
         let sema = DispatchSemaphore(value: 0)
         let log = bgLog   // capture logger value to avoid 'self' capture in closure
 
@@ -520,13 +540,14 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
                 ))
                 return
             }
-            let integrityToken    = json[0] as? String          // may be nil
-            let websafeFallback   = json.count > 3 ? json[3] as? String : nil  // ready-to-use PO token fallback
+            let integrityToken  = json[0] as? String          // may be nil
+            let ttlSeconds      = json.count > 1 ? (json[1] as? Int ?? 3600) : 3600
+            let websafeFallback = json.count > 3 ? json[3] as? String : nil  // ready-to-use PO token fallback
             guard integrityToken != nil || websafeFallback != nil else {
                 box.value = .failure(BotGuardError.integrityTokenFailed("both integrityToken and websafeFallback are nil"))
                 return
             }
-            box.value = .success((integrityToken, websafeFallback))
+            box.value = .success((integrityToken, websafeFallback, ttlSeconds))
         }.resume()
 
         sema.wait()
