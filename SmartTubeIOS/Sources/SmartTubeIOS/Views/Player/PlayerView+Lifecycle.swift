@@ -736,6 +736,16 @@ extension PlayerView {
             Alert(title: Text(item.title), message: Text(item.message), dismissButton: .default(Text("OK")))
         }
         #endif
+        // Intercept smarttube://seek/<seconds> links emitted by timestamp spans in
+        // descriptions and comments, and forward them to the player seek function.
+        .environment(\.openURL, OpenURLAction { url in
+            if url.scheme == "smarttube", url.host == "seek",
+               let seconds = TimeInterval(url.lastPathComponent) {
+                vm.seek(to: seconds)
+                return .handled
+            }
+            return .systemAction
+        })
     }
 
     // MARK: - Controls overlay

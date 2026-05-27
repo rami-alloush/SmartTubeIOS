@@ -275,6 +275,14 @@ extension PlayerView {
                   let attrRange = Range(range, in: attributed) else { continue }
             attributed[attrRange].link = url
         }
+        // Timestamp linkification: add smarttube://seek/<seconds> links for MM:SS / HH:MM:SS spans.
+        // Only applied where NSDataDetector has not already set a link (URLs take precedence).
+        for (range, seconds) in findTimestamps(in: string) {
+            guard let attrRange = Range(range, in: attributed) else { continue }
+            if attributed[attrRange].link == nil {
+                attributed[attrRange].link = URL(string: "smarttube://seek/\(Int(seconds))")
+            }
+        }
         return attributed
     }
 

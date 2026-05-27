@@ -111,7 +111,7 @@ struct CommentRowView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(comment.text)
+                Text(timestampLinkedAttributedString(comment.text))
                     .font(.callout)
                 if !comment.likeCount.isEmpty {
                     HStack(spacing: 4) {
@@ -124,6 +124,15 @@ struct CommentRowView: View {
                 }
             }
         }
+    }
+
+    private func timestampLinkedAttributedString(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        for (range, seconds) in findTimestamps(in: text) {
+            guard let attrRange = Range(range, in: attributed) else { continue }
+            attributed[attrRange].link = URL(string: "smarttube://seek/\(Int(seconds))")
+        }
+        return attributed
     }
 }
 

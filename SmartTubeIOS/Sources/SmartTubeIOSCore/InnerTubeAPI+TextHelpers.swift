@@ -25,6 +25,7 @@ extension InnerTubeAPI {
     }
 
     /// Extracts the display title from an itemSectionRenderer header dict.
+
     func extractSectionTitle(from header: [String: Any]) -> String? {
         let rendererKeys = [
             "tileGroupHeaderRenderer",
@@ -157,4 +158,31 @@ extension InnerTubeAPI {
             .components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         return digits.isEmpty ? nil : Int(digits)
     }
+}
+
+// MARK: - Timestamp detection (public, used by UI layer for linkification)
+
+/// Finds all MM:SS and HH:MM:SS timestamp patterns in `text` and returns their
+/// string ranges paired with the corresponding `TimeInterval` in seconds.
+/// Used by `descriptionAttributedString` and `CommentRowView` to make timestamps tappable.
+public func findTimestamps(in text: String) -> [(range: Range<String.Index>, seconds: TimeInterval)] {
+    // Negative look-behind/ahead ensure we don't partially match longer digit strings
+    // (e.g. "12:345" should not produce a 12:34 match).
+    let pattern = #"(?<!\d)(\d{1,2}:\d{2}(?::\d{2})?)(?!\d)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+    var results: [(Range<String.Index>, TimeInterval)] = []
+    let fullRange = NSRange(text.startIndex..., in: text)
+    for match in regex.matches(in: text, range: fullRange) {
+        guard let range = Range(match.range(at: 0), in: text) else { continue }
+        let str = String(text[range])
+        let parts = str.split(separator: ":").compactMap { Int($0) }
+        let seconds: TimeInterval
+        switch parts.count {
+        case 2: seconds = TimeInterval(parts[0] * 60 + parts[1])
+        case 3: seconds = TimeInterval(parts[0] * 3600 + parts[1] * 60 + parts[2])
+        default: continue
+        }
+        results.append((range, seconds))
+    }
+    return results
 }
