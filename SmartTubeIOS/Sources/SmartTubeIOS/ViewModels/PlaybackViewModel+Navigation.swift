@@ -42,7 +42,7 @@ extension PlaybackViewModel {
                     videoId: afterNext.id,
                     sponsorCategories: sponsorCats,
                     authToken: token,
-                    priority: .speculative
+                    priority: .visible   // beats home-feed card prefetches so it finishes before the user taps twice
                 )
             }
         }
