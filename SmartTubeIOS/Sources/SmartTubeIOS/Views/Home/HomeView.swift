@@ -265,41 +265,39 @@ public struct HomeView: View {
                 let hideShorts = store.settings.hideShorts
                 let regularVideos = homeVM.homeRegularVideos
                 let shortsVideos = hideShorts ? [] : homeVM.homeShortsVideos
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if !shortsVideos.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Shorts")
-                                    .font(.headline)
-                                    .padding(.horizontal)
-                                    .padding(.top, 16)
-                                    .padding(.bottom, 4)
-                                ShortsRowSection(
-                                    videos: shortsVideos,
-                                    onSelect: { selectVideo($0, from: shortsVideos) },
-                                    accessibilityID: "home.shortsRow",
-                                    loadMore: { homeVM.loadNextShortsPage() }
-                                )
-                            }
-                            #if os(tvOS)
-                            .focusSection()
-                            #endif
-                        }
-                        VideoGridSection(
-                            videos: regularVideos,
-                            onSelect: { selectVideo($0, from: regularVideos) },
-                            loadMore: { homeVM.loadMoreMerged() }
+                // ShortsRowSection is placed OUTSIDE the ScrollView so it stays
+                // pinned at the top while the video grid scrolls beneath it.
+                VStack(spacing: 0) {
+                    if !shortsVideos.isEmpty {
+                        ShortsRowSection(
+                            videos: shortsVideos,
+                            onSelect: { selectVideo($0, from: shortsVideos) },
+                            accessibilityID: "home.shortsRow",
+                            loadMore: { homeVM.loadNextShortsPage() }
                         )
-                        let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }
-                        if isLoadingMore {
-                            ProgressView().frame(maxWidth: .infinity).padding()
+                        #if os(tvOS)
+                        .focusSection()
+                        #endif
+                        Divider()
+                    }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            VideoGridSection(
+                                videos: regularVideos,
+                                onSelect: { selectVideo($0, from: regularVideos) },
+                                loadMore: { homeVM.loadMoreMerged() }
+                            )
+                            let isLoadingMore = homeVM.sections.contains { $0.isLoadingMore }
+                            if isLoadingMore {
+                                ProgressView().frame(maxWidth: .infinity).padding()
+                            }
                         }
                     }
+                    .refreshable { homeVM.load() }
+                    #if os(tvOS)
+                    .focusSection()
+                    #endif
                 }
-                .refreshable { homeVM.load() }
-                #if os(tvOS)
-                .focusSection()
-                #endif
             }
         }
     }
@@ -320,72 +318,107 @@ public struct HomeView: View {
 
     private var feedContent: some View {
         let hideShorts = store.settings.hideShorts
+        let isShorts = selectedSection.type == .shorts
         let applyHideShorts = hideShorts && selectedSection.type != .history
+
+        // Pinned shorts row: shown above the scrollable content for all chips
+        // except the Shorts chip itself (which shows a full vertical list instead).
+        // For Recommended, use the separately-fetched recommendedShortsVideos so
+        // there is no double-counting with the grid below.
+        // For all other chips, extract any shorts that appear in the video groups.
+        let pinnedShorts: [Video]
+        if isShorts || applyHideShorts {
+            pinnedShorts = []
+        } else if selectedSection.type == .recommended {
+            pinnedShorts = sectionVM.recommendedShortsVideos
+        } else {
+            pinnedShorts = sectionVM.videoGroups.flatMap(\.videos).filter(\.isShort)
+        }
+
         let rowGroups: [VideoGroup] = sectionVM.videoGroups.filter { $0.layout == .row }.map { g in
             guard applyHideShorts else { return g }
             var copy = g
             copy.videos = g.videos.filter { !$0.isShort }
             return copy
         }
-        let gridVideos = sectionVM.videoGroups.filter { $0.layout != .row }.flatMap(\.videos).filter { !applyHideShorts || !$0.isShort }
+        // For non-Shorts chips, exclude shorts from the grid — they appear in the
+        // pinned row above. For the Shorts chip itself, keep all videos.
         // VStack (not LazyVStack) is required here. LazyVGrid inside LazyVStack
         // collapses to zero height — grid items become invisible and non-tappable
         // because LazyVStack never provides a measured height to LazyVGrid.
         // Row groups are few (typically ≤15 carousels) so eager rendering is fine.
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if selectedSection.type == .playlists, queueVideosCount > 0 {
-                    currentQueueRow
-                }
-                // Shorts row for Recommended section.
-                // FEwhat_to_watch (TV client) never includes a Shorts shelf, so
-                // BrowseViewModel fetches FEshorts separately and stores them here.
-                if selectedSection.type == .recommended,
-                   !applyHideShorts,
-                   !sectionVM.recommendedShortsVideos.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Shorts")
-                            .font(.headline)
-                            .padding(.horizontal)
-                            .padding(.top, 16)
-                            .padding(.bottom, 4)
-                        ShortsRowSection(
-                            videos: sectionVM.recommendedShortsVideos,
-                            onSelect: { selectVideo($0, from: sectionVM.recommendedShortsVideos) },
-                            accessibilityID: "recommended.shortsRow"
-                        )
+        let gridVideos = sectionVM.videoGroups.filter { $0.layout != .row }
+            .flatMap(\.videos)
+            .filter { !applyHideShorts || !$0.isShort }
+            .filter { isShorts || !$0.isShort }
+
+        return VStack(spacing: 0) {
+            // Pinned ShortsRowSection — outside the ScrollView so it stays fixed
+            // at the top while the video content below scrolls.
+            if !pinnedShorts.isEmpty {
+                ShortsRowSection(
+                    videos: pinnedShorts,
+                    onSelect: { selectVideo($0, from: pinnedShorts) },
+                    accessibilityID: selectedSection.type == .recommended
+                        ? "recommended.shortsRow"
+                        : "browse.shortsRow"
+                )
+                #if os(tvOS)
+                .focusSection()
+                #endif
+                Divider()
+            }
+            if isShorts {
+                // Shorts chip: vertical portrait card list driven by ShortsRowSection's
+                // internal ScrollView. frame(maxHeight: .infinity) ensures the internal
+                // ScrollView gets the full remaining height rather than sizing to content.
+                let shortsVideos = sectionVM.videoGroups.flatMap(\.videos)
+                ShortsRowSection(
+                    videos: shortsVideos,
+                    onSelect: { selectVideo($0, from: shortsVideos) },
+                    accessibilityID: "shorts.section",
+                    loadMore: { if let last = shortsVideos.last { sectionVM.loadMoreIfNeeded(lastVideo: last) } },
+                    scrollAxis: .vertical
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if os(tvOS)
+                .focusSection()
+                #endif
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if selectedSection.type == .playlists, queueVideosCount > 0 {
+                            currentQueueRow
+                        }
+                        ForEach(rowGroups) { group in
+                            if let title = group.title, !title.isEmpty {
+                                Text(title)
+                                    .font(.headline)
+                                    .padding(.horizontal)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 4)
+                            }
+                            VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
+                        }
+                        if !gridVideos.isEmpty {
+                            VideoGridSection(
+                                videos: gridVideos,
+                                onSelect: { selectVideo($0, from: gridVideos) },
+                                loadMore: { if let last = gridVideos.last { sectionVM.loadMoreIfNeeded(lastVideo: last) } }
+                            )
+                        }
+                        if sectionVM.isLoading {
+                            ProgressView().frame(maxWidth: .infinity).padding()
+                        }
                     }
-                    #if os(tvOS)
-                    .focusSection()
-                    #endif
                 }
-                ForEach(rowGroups) { group in
-                    if let title = group.title, !title.isEmpty {
-                        Text(title)
-                            .font(.headline)
-                            .padding(.horizontal)
-                            .padding(.top, 16)
-                            .padding(.bottom, 4)
-                    }
-                    VideoRowSection(videos: group.videos, onSelect: { selectVideo($0, from: group.videos) })
-                }
-                if !gridVideos.isEmpty {
-                    VideoGridSection(
-                        videos: gridVideos,
-                        onSelect: { selectVideo($0, from: gridVideos) },
-                        loadMore: { if let last = gridVideos.last { sectionVM.loadMoreIfNeeded(lastVideo: last) } }
-                    )
-                }
-                if sectionVM.isLoading {
-                    ProgressView().frame(maxWidth: .infinity).padding()
-                }
+                .accessibilityIdentifier("home.sectionFeed")
+                .refreshable { sectionVM.loadContent(refresh: true) }
+                #if os(tvOS)
+                .focusSection()
+                #endif
             }
         }
-        .accessibilityIdentifier("home.sectionFeed")
-        .refreshable { sectionVM.loadContent(refresh: true) }
-        #if os(tvOS)
-        .focusSection()
-        #endif
     }
 
     @ViewBuilder private var currentQueueRow: some View {
