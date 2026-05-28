@@ -381,13 +381,16 @@ public struct HomeView: View {
                         ? "recommended.shortsRow"
                         : "browse.shortsRow",
                     loadMore: {
-                        // Trigger from the shorts row: fires when the last short card
-                        // becomes visible. Record the current shorts count so onChange
-                        // can detect whether the next page actually added any shorts,
-                        // and keep re-triggering until it does.
+                        // Reaching the end of the shorts row means the user wants more
+                        // content of ALL types — set both flags so onChange keeps
+                        // retrying until both shorts AND non-shorts have grown (or pages
+                        // are exhausted). Without setting needsMoreNonShorts here, pages
+                        // that arrive with only non-shorts would not re-trigger the loop.
                         let allVideos = sectionVM.videoGroups.flatMap(\.videos)
                         shortsCountAtTrigger = allVideos.filter(\.isShort).count
+                        nonShortsCountAtTrigger = allVideos.filter { !$0.isShort }.count
                         needsMoreShorts = true
+                        needsMoreNonShorts = true
                         if let last = paginationTrigger {
                             sectionVM.loadMoreIfNeeded(lastVideo: last)
                         }
@@ -439,14 +442,19 @@ public struct HomeView: View {
                                 videos: gridVideos,
                                 onSelect: { selectVideo($0, from: gridVideos) },
                                 loadMore: {
-                                    // Trigger from the main grid: fires when the last
-                                    // visible grid card appears. Record the current
-                                    // non-shorts count so onChange can detect whether
-                                    // the next page actually added any grid videos, and
-                                    // keep re-triggering until it does.
+                                    // Reaching the end of the grid means the user wants
+                                    // more content of ALL types — set both flags so
+                                    // onChange keeps retrying until both non-shorts AND
+                                    // shorts have grown (or pages are exhausted). Without
+                                    // setting needsMoreShorts here, pages that contain
+                                    // only shorts (no new grid videos) would stall the
+                                    // retry — and the pinned shorts row would never grow
+                                    // unless the user also manually scrolls it to the end.
                                     let allVideos = sectionVM.videoGroups.flatMap(\.videos)
                                     nonShortsCountAtTrigger = allVideos.filter { !$0.isShort }.count
+                                    shortsCountAtTrigger = allVideos.filter(\.isShort).count
                                     needsMoreNonShorts = true
+                                    needsMoreShorts = true
                                     if let last = paginationTrigger {
                                         sectionVM.loadMoreIfNeeded(lastVideo: last)
                                     }
