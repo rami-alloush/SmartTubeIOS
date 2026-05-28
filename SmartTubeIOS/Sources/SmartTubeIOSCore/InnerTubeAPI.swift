@@ -49,6 +49,10 @@ public actor InnerTubeAPI {
 
     // MARK: - External PoToken API (Option B)
 
+    /// Returns the current visitor data identifier (from the most recent InnerTube response).
+    /// Used by BotGuardWebViewRunner to mint a PoToken for the correct session identifier.
+    public func currentVisitorData() -> String? { visitorData }
+
     /// Stores a PO token that was extracted from the YouTube player running inside a
     /// hidden WKWebView (see `YouTubeWebViewHLSExtractor.extractedPoToken`).
     /// The token is applied to all subsequent `fetchPlayerInfo` calls for `videoId`

@@ -13,7 +13,11 @@ extension InnerTubeAPI {
     // MARK: - Player stream URLs
 
     public func fetchPlayerInfo(videoId: String) async throws -> PlayerInfo {
-        var body = makeBody(client: iosClientContext)
+        // Include serviceIntegrityDimensions.poToken in the request body when a token
+        // is stored — this tells YouTube's backend the request is pot-authenticated so
+        // the returned stream URLs can be accessed by the CDN with &pot= validation.
+        let hasPot = poToken != nil && poTokenVideoId == videoId
+        var body = makeBody(client: iosClientContext, includePoToken: hasPot)
         body["videoId"] = videoId
         body["racyCheckOk"] = true
         body["contentCheckOk"] = true
@@ -22,7 +26,7 @@ extension InnerTubeAPI {
         // Apply a WKWebView-extracted pot= token (Option B) when available.
         // The token is stored by storeExternalPoToken() after the hidden WKWebView
         // extracts it from the YouTube player's /player API request body.
-        if let pot = poToken, poTokenVideoId == videoId {
+        if hasPot, let pot = poToken {
             tubeLog.notice("[InnerTube] ✅ poToken applied to \(videoId, privacy: .public) via iOS client (len=\(pot.count))")
             info = info.applyingPoToken(pot)
         }
@@ -40,6 +44,59 @@ extension InnerTubeAPI {
         body["contentCheckOk"] = true
         let data = try await post(endpoint: "player", body: body)
         return try parsePlayerInfo(from: data, videoId: videoId)
+    }
+
+    /// Fetches player info using the WebSafari client with `serviceIntegrityDimensions.poToken`
+    /// and the WKWebView's WEB session `visitorData` in the client context.
+    ///
+    /// Uses `postWebSafari` (not the generic `post()`) because the WebSafari POST method
+    /// sends a proper Safari browser User-Agent and `X-Goog-Visitor-Id` header — without
+    /// these, YouTube returns `playabilityStatus: "ERROR"` ("Video unavailable") with no
+    /// `streamingData` for all videos, regardless of content type.
+    ///
+    /// This mirrors yt-dlp's `web_safari` client approach for BotGuard token delivery:
+    /// pot= token in `serviceIntegrityDimensions`, visitorData in `context.client`,
+    /// html5Preference + signatureTimestamp in `playbackContext`.
+    ///
+    /// Returns a `PlayerInfo` with `&pot=<token>` appended to all format URLs.
+    public func fetchPlayerInfoWebWithPoToken(videoId: String, visitorData webVD: String?) async throws -> PlayerInfo {
+        let hasPot = poToken != nil && poTokenVideoId == videoId
+
+        // Inject the WKWebView's WEB session visitorData into context.client so
+        // YouTube can validate the minted pot= token against the correct session.
+        // Fall back to the API's own visitorData when webVD is not available.
+        var clientFields = (webSafariClientContext["client"] as? [String: Any]) ?? [:]
+        let apiVD = visitorData ?? ""
+        let useWebVD = webVD != nil && !webVD!.isEmpty
+        tubeLog.notice("[InnerTube] fetchPlayerInfoWebWithPoToken: apiVD.len=\(apiVD.count) webVD.len=\(webVD?.count ?? 0) match=\(apiVD == (webVD ?? ""))")
+        if let vd = webVD, !vd.isEmpty {
+            clientFields["visitorData"] = vd
+        } else if let vd = visitorData {
+            clientFields["visitorData"] = vd
+        }
+
+        let sts = await fetchSignatureTimestampIfNeeded()
+        var cpbc: [String: Any] = ["html5Preference": "HTML5_PREF_WANTS"]
+        if let sts { cpbc["signatureTimestamp"] = sts }
+
+        var body = makeBody(client: ["client": clientFields], includePoToken: hasPot)
+        body["videoId"] = videoId
+        body["racyCheckOk"] = true
+        body["contentCheckOk"] = true
+        body["playbackContext"] = ["contentPlaybackContext": cpbc]
+
+        // Pass webVD as X-Goog-Visitor-Id override: ensures the visitor ID in the header
+        // matches context.client.visitorData in the body and the minted pot= token identifier.
+        // Without this, postWebSafari sends api.visitorData (iOS session) in the header
+        // while the body has webVD (WEB session) — YouTube would tie CDN URLs to the iOS
+        // session but our token is minted for the WEB session → CDN validation fails (403).
+        let data = try await postWebSafari(body: body, visitorIdOverride: webVD)
+        var info = try parsePlayerInfo(from: data, videoId: videoId)
+        if hasPot, let pot = poToken {
+            tubeLog.notice("[InnerTube] ✅ poToken applied to \(videoId, privacy: .public) via WebSafari+pot client (len=\(pot.count))")
+            info = info.applyingPoToken(pot)
+        }
+        return info
     }
 
     /// Fetches player info using the Android client.

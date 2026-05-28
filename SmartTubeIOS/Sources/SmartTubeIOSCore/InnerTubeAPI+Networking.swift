@@ -506,7 +506,7 @@ extension InnerTubeAPI {
     /// Unlike the Chrome-UA WEB client, this returns `hlsManifestUrl` for non-embeddable
     /// videos. Uses the same www.youtube.com endpoint as postMWEB; no Bearer auth
     /// (cookie-based auth in yt-dlp, but HLS manifest works without auth for VOD).
-    func postWebSafari(body: [String: Any]) async throws -> [String: Any] {
+    func postWebSafari(body: [String: Any], visitorIdOverride: String? = nil) async throws -> [String: Any] {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent("player"),
                                         resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL("player")
@@ -520,7 +520,11 @@ extension InnerTubeAPI {
         request.setValue(InnerTubeClients.WebSafari.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(InnerTubeClients.WebSafari.nameID, forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(InnerTubeClients.WebSafari.version, forHTTPHeaderField: "X-YouTube-Client-Version")
-        if let vd = visitorData {
+        // Use the override visitor ID (from WKWebView guide call) when provided, so the
+        // X-Goog-Visitor-Id header matches the context.client.visitorData in the body and
+        // the minted BotGuard pot= token identifier — required for CDN URL validation.
+        let effectiveVD = visitorIdOverride ?? visitorData
+        if let vd = effectiveVD {
             request.setValue(vd, forHTTPHeaderField: "X-Goog-Visitor-Id")
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

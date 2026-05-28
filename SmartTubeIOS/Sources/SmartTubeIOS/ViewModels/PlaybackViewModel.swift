@@ -253,6 +253,12 @@ public final class PlaybackViewModel {
     /// True while `replaceCurrentItem` is executing; guards the rate observer from
     /// treating the transient rate-drop as an unexpected external pause.
     var isSwappingItem: Bool = false
+    #if canImport(WebKit)
+    /// Set to true when BotGuardWebViewRunner successfully produces a minted (non-websafe-fallback)
+    /// PO token for the current video. Allows the inner rqh=1 guard in attemptComposition to
+    /// proceed — the CDN accepts minted tokens from the full getMinter() path.
+    var hasMintedPoToken: Bool = false
+    #endif
     /// True from when a quality-change replaceCurrentItem fires until readyToPlay is
     /// handled. The time observer skips currentTime updates during this window so the
     /// UI position is preserved and any user seek during transition is not lost.

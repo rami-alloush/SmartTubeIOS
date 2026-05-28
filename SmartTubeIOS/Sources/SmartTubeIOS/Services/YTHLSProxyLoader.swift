@@ -49,15 +49,26 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
     /// variants whose YT-EXT-AUDIO-CONTENT-ID matches this value (dubbed language selection).
     /// When nil, only variants WITHOUT YT-EXT-AUDIO-CONTENT-ID are served (original audio).
     let selectedLanguageContentID: String?
+    /// When non-nil, the proxy:
+    ///  - Rewrites #EXT-X-STREAM-INF variant URIs in the master manifest to the proxy scheme
+    ///    so that variant quality playlists are intercepted and their segment URLs patched.
+    ///  - Appends `?pot=<token>` to every segment URL in variant playlists so that
+    ///    AVFoundation's native CDN fetch includes the BotGuard proof-of-origin token.
+    ///    Segments remain https:// (not proxied); only the URL query params are enriched.
+    /// This unlocks rqh=1-enforced HLS segments served via the WEB client (web_safari)
+    /// when a valid minted BotGuard token is available but spc= is not.
+    let poToken: String?
     private let lock = NSLock()
     private var activeTasks: [ObjectIdentifier: URLSessionDataTask] = [:]
 
     init(ua: String, nSolver: (unsolved: String, solved: String)? = nil,
-         webViewCookies: [HTTPCookie] = [], selectedLanguageContentID: String? = nil) {
+         webViewCookies: [HTTPCookie] = [], selectedLanguageContentID: String? = nil,
+         poToken: String? = nil) {
         self.ua = ua
         self.nSolver = nSolver
         self.webViewCookies = webViewCookies
         self.selectedLanguageContentID = selectedLanguageContentID
+        self.poToken = poToken
     }
 
     // MARK: AVAssetResourceLoaderDelegate
@@ -150,7 +161,16 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
             // (Uniform Type Identifier), NOT a raw MIME type. Supplying a MIME type causes
             // AVFoundation to misidentify the resource and fail with CoreMediaErrorDomain -12881.
             if let infoReq = loadingRequest.contentInformationRequest {
-                let uti = isPlaylist ? "public.m3u-playlist" : "public.mpeg-2-transport-stream"
+                let uti: String
+                if isPlaylist {
+                    uti = "public.m3u-playlist"
+                } else if mimeTypeLower.contains("mp4") || mimeTypeLower.contains("mpeg-4") {
+                    // fMP4 segments (YouTube uses video/mp4 for fragmented MP4 HLS)
+                    uti = "public.mpeg-4"
+                } else {
+                    // Default: MPEG-2 TS (video/MP2T)
+                    uti = "public.mpeg-2-transport-stream"
+                }
                 infoReq.contentType = uti
                 infoReq.contentLength = Int64(responseData.count)
                 infoReq.isByteRangeAccessSupported = false
@@ -268,11 +288,17 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
         // manifest.googlevideo.com rejects → loadMediaSelectionGroup returns nil/empty →
         // availableAudioTracks stays empty → audio language selector never appears.
         //
-        // Only #EXT-X-MEDIA playlist URIs are rewritten. Segment URLs inside rendition
+        // When poToken is set (BotGuard WEB client HLS path), also rewrite #EXT-X-STREAM-INF
+        // variant URIs to the proxy scheme. This lets the proxy intercept the per-quality variant
+        // playlists and append ?pot=<token> to every segment URL within them (Step 4). Segment
+        // binary data remains https:// (never proxied) to avoid CoreMediaErrorDomain -12881.
+        // Without this, AVPlayer fetches variant playlists natively and then fetches segments
+        // without pot=, which YouTube CDN rejects with 403 (rqh=1 enforcement).
+        //
+        // Only #EXT-X-MEDIA playlist URIs are rewritten normally. Segment URLs inside rendition
         // playlists remain https:// and are served natively by AVPlayer (binary media data
         // cannot be routed through AVAssetResourceLoaderDelegate without -12881).
-        // #EXT-X-STREAM-INF variant URIs are intentionally left as https:// because quality
-        // switching already works natively for those (spc= token provides CDN auth).
+        // #EXT-X-STREAM-INF variant URIs are left as https:// UNLESS poToken is set (see above).
         if isMasterManifest {
             let lines = text.components(separatedBy: "\n")
             // Diagnostic: log first #EXT-X-MEDIA:TYPE=AUDIO line to verify URI quote format.
@@ -280,21 +306,32 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
                 proxyLog.notice("[HLSProxy] first AUDIO EXT-X-MEDIA sample: \(sample.prefix(300))")
             }
             var audioGroupCount = 0
+            var variantCount = 0
+            let hasPoToken = poToken != nil
             let rewrittenLines: [String] = lines.map { line in
-                guard line.hasPrefix("#EXT-X-MEDIA:") else { return line }
-                // Rewrite URI="https://..." (quoted) or URI=https://... (unquoted).
-                // Both forms appear in YouTube manifests depending on client/version.
-                if line.contains("URI=\"https://") {
-                    audioGroupCount += 1
-                    return line.replacingOccurrences(of: "URI=\"https://", with: "URI=\"\(proxyScheme)://")
-                } else if line.contains("URI=https://") {
-                    audioGroupCount += 1
-                    return line.replacingOccurrences(of: "URI=https://", with: "URI=\(proxyScheme)://")
+                guard line.hasPrefix("#EXT-X-MEDIA:") || (!line.hasPrefix("#") && hasPoToken) else { return line }
+                // Rewrite #EXT-X-MEDIA playlist URIs to proxy scheme (audio renditions).
+                if line.hasPrefix("#EXT-X-MEDIA:") {
+                    if line.contains("URI=\"https://") {
+                        audioGroupCount += 1
+                        return line.replacingOccurrences(of: "URI=\"https://", with: "URI=\"\(proxyScheme)://")
+                    } else if line.contains("URI=https://") {
+                        audioGroupCount += 1
+                        return line.replacingOccurrences(of: "URI=https://", with: "URI=\(proxyScheme)://")
+                    }
+                    return line
+                }
+                // When poToken is set: rewrite #EXT-X-STREAM-INF variant URLs to proxy scheme
+                // so the proxy intercepts each quality playlist and injects pot= into segment URLs.
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if hasPoToken && !trimmed.isEmpty && trimmed.hasPrefix("https://") {
+                    variantCount += 1
+                    return trimmed.replacingOccurrences(of: "https://", with: "\(proxyScheme)://")
                 }
                 return line
             }
-            if audioGroupCount > 0 {
-                proxyLog.notice("[HLSProxy] rewrote \(audioGroupCount) #EXT-X-MEDIA URI(s) to \(proxyScheme)://")
+            if audioGroupCount > 0 || variantCount > 0 {
+                proxyLog.notice("[HLSProxy] rewrote \(audioGroupCount) #EXT-X-MEDIA + \(variantCount) variant URIs to \(proxyScheme)://")
                 text = rewrittenLines.joined(separator: "\n")
             } else {
                 let extMediaCount = lines.filter { $0.hasPrefix("#EXT-X-MEDIA:") }.count
@@ -302,23 +339,18 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
             }
 
             // Step 3: Filter #EXT-X-STREAM-INF variants by selected dubbed-audio language.
-            // YouTube's HLS manifests encode dubbed audio via YT-EXT-AUDIO-CONTENT-ID attributes
-            // on #EXT-X-STREAM-INF lines (not via #EXT-X-MEDIA TYPE=AUDIO groups). Each quality
-            // level has N variants — one original (no attribute) and one per dubbed language.
-            // Filter to only the variants for the selected language so AVPlayer doesn't mix
-            // languages during ABR quality adaptation.
-            //
-            // FALLBACK: if no variants survive the filter (e.g. YouTube changes manifest format
-            // so all entries carry YT-EXT-AUDIO-CONTENT-ID), serve the original unfiltered
-            // manifest so AVPlayer can always load the video.
-            let hasVariants = lines.contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("#EXT-X-STREAM-INF:") }
+            // IMPORTANT: use the CURRENT `text` (after Step 2 URL rewrites), not the original
+            // `lines` variable. If we iterated `lines` here, Step 2's ytwebhls:// rewrites would
+            // be overwritten with the original https:// URLs — AVFoundation would bypass the proxy.
+            let currentLines = text.components(separatedBy: "\n")
+            let hasVariants = currentLines.contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("#EXT-X-STREAM-INF:") }
             if hasVariants {
                 let selectedLang = selectedLanguageContentID
                 var filteredLines: [String] = []
                 var pendingKeep: Bool? = nil
                 var keptVariantCount = 0
 
-                for line in lines {
+                for line in currentLines {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     if trimmed.hasPrefix("#EXT-X-STREAM-INF:") {
                         let hasContentID = trimmed.contains("YT-EXT-AUDIO-CONTENT-ID=")
@@ -351,6 +383,36 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
                     // No variants matched — serve unfiltered manifest so AVPlayer can always load.
                     proxyLog.notice("[HLSProxy] language filter: lang=\(langDisplay) matched 0 variants — serving unfiltered manifest")
                 }
+            }
+        }
+
+        // Step 4: For variant quality playlists (non-master), inject pot= into segment URLs.
+        // When poToken is set, AVFoundation routes variant playlist requests through this proxy
+        // (because the master manifest rewriting in Step 2 converted variant URLs to proxy scheme).
+        // Here, we append ?pot=<token> to every segment URL in the variant playlist so that
+        // AVFoundation's native CDN fetch for each segment includes the BotGuard token.
+        // Segments remain https:// (NOT converted to proxy scheme) to avoid -12881.
+        // This enables rqh=1 HLS segments from the WEB client to be served with pot= auth.
+        if !isMasterManifest, let pot = poToken {
+            let lines = text.components(separatedBy: "\n")
+            var injectedCount = 0
+            let patchedLines: [String] = lines.map { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return line }
+                // Segment URL: append pot= AND proxy via ytwebhls:// so URLSession
+                // sends youtube.com cookies (VISITOR_INFO1_LIVE) cross-domain to
+                // googlevideo.com — required by CDN to validate rqh=1 segment auth.
+                let sep = trimmed.contains("?") ? "&" : "?"
+                let withPot = trimmed + "\(sep)pot=\(pot)"
+                injectedCount += 1
+                if withPot.hasPrefix("https://") {
+                    return "\(proxyScheme)://" + withPot.dropFirst("https://".count)
+                }
+                return withPot
+            }
+            if injectedCount > 0 {
+                proxyLog.notice("[HLSProxy] pot= injected into \(injectedCount) segment URL(s) in variant playlist")
+                text = patchedLines.joined(separator: "\n")
             }
         }
 

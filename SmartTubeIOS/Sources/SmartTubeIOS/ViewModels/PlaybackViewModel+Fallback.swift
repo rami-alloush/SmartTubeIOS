@@ -55,6 +55,167 @@ extension PlaybackViewModel {
                 await VideoPreloadCache.shared.invalidateWKHLSURL(for: video.id)
             }
         }
+        // Phase -2: BotGuardWebViewRunner adaptive attempt.
+        // BotGuardWebViewRunner runs the full BotGuard pipeline in a real WebKit context
+        // (youtube.com/robots.txt origin), which may produce a getMinter-minted token
+        // (hasMinter=true) that the CDN accepts for rqh=1 adaptive streams.
+        // Started as fire-and-forget in loadAsync; we wait up to 6 s here before
+        // falling through to WKWebView HLS so cold-start latency stays bounded.
+        // If BotGuardWV is already ready (cached from a prior video), the mint is instant (<5 ms).
+        if !BotGuardWebViewRunner.shared.isReady {
+            playerLog.notice("[BotGuardWV] waiting up to 6 s for minted token before WKWebView HLS…")
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    // Re-issue prepare() in case loadAsync's fire-and-forget hasn't started yet.
+                    await BotGuardWebViewRunner.shared.prepare(for: video.id)
+                }
+                group.addTask { try? await Task.sleep(nanoseconds: 6_000_000_000) }
+                _ = await group.next()
+                group.cancelAll()
+            }
+        }
+        if BotGuardWebViewRunner.shared.isReady {
+            // mintToken() now internally uses the WKWebView's WEB session visitorData
+            // (from Phase 7 guide call) as the canonical identifier — this ensures the
+            // minted token is tied to the same YouTube session that solved the challenge.
+            let identifier = await api.currentVisitorData() ?? ""
+            let webVD = BotGuardWebViewRunner.shared.webVisitorData
+            if let mintedToken = await BotGuardWebViewRunner.shared.mintToken(identifier: identifier) {
+                await api.storeExternalPoToken(mintedToken, for: video.id)
+                hasMintedPoToken = true
+                playerLog.notice("[BotGuardWV] ✅ minted token (len=\(mintedToken.count) webVD.len=\(webVD.count)) — trying WEB client adaptive before WKWebView HLS")
+
+                // --- WEB client with pot= (yt-dlp approach) ---
+                // WEB client (nameID=1) adaptive stream URLs accept WEB BotGuard pot= tokens.
+                // WEB client URLs do NOT carry rqh=1 CDN auth restrictions (that's IOS/Android).
+                // We include the WKWebView's WEB session visitorData in the client context so
+                // the CDN can validate the minted token against the correct session.
+                do {
+                    let webInfo = try await api.fetchPlayerInfoWebWithPoToken(
+                        videoId: video.id, visitorData: webVD.isEmpty ? nil : webVD
+                    )
+                    let probeURL = webInfo.formats.first(where: {
+                        $0.mimeType.hasPrefix("video/mp4") && $0.url != nil
+                    })?.url
+                    if let probeURL {
+                        var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 5)
+                        req.httpMethod = "HEAD"
+                        let hasPot = probeURL.absoluteString.contains("pot=")
+                        let hasRqh = probeURL.absoluteString.contains("rqh=1")
+                        if let (_, resp) = try? await URLSession.shared.data(for: req),
+                           let http = resp as? HTTPURLResponse {
+                            playerLog.notice("[BotGuardWV/WEB probe] CDN HEAD: HTTP \(http.statusCode) — pot=\(hasPot ? "YES" : "NO") rqh=\(hasRqh ? "1" : "0")")
+                        }
+                    }
+                    if await tryAllStreams(video: video, info: webInfo, label: "BotGuardWV", skipMuxed: true) {
+                        playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                        if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                        return
+                    }
+
+                    // BotGuard WEB client proxy HLS: tryAllStreams tried native HLS but rqh=1
+                    // segments returned 403 because AVFoundation fetches them without pot=.
+                    // Use YTHLSProxyLoader with poToken set — the proxy intercepts each variant
+                    // quality playlist and appends ?pot=<token> to segment URLs so that
+                    // AVFoundation's native CDN fetch includes the BotGuard proof-of-origin token.
+                    if let hlsURL = webInfo.hlsURL, let proxyURL = hlsURL.proxyURL {
+                        playerLog.notice("[BotGuardWV] trying HLS via pot= proxy (variant playlist interception)")
+                        let safariUA = InnerTubeClients.WebSafari.userAgent
+                        let potProxyLoader = YTHLSProxyLoader(ua: safariUA, poToken: mintedToken)
+                        let asset = AVURLAsset(url: proxyURL)
+                        asset.resourceLoader.setDelegate(potProxyLoader, queue: DispatchQueue.global(qos: .userInitiated))
+                        webHLSProxyLoader = potProxyLoader  // keep alive
+                        let proxyItem = AVPlayerItem(asset: asset)
+                        proxyItem.audioTimePitchAlgorithm = .spectral
+                        proxyItem.preferredForwardBufferDuration = 2.0
+                        player.replaceCurrentItem(with: proxyItem)
+                        itemObserverTask?.cancel()
+                        for await st in proxyItem.statusStream {
+                            switch st {
+                            case .readyToPlay:
+                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                                return
+                            case .failed:
+                                playerLog.notice("[BotGuardWV] ⚠️ proxy HLS failed: \(proxyItem.error?.localizedDescription ?? "unknown")")
+                                break
+                            default:
+                                continue
+                            }
+                            break
+                        }
+                    }
+
+                    // iOS adaptive retry with WAA minted token.
+                    // web_safari /player returns HLS-only (no MP4 adaptive) for most videos.
+                    // The iOS /player DOES return real MP4 adaptive streams (c=IOS, rqh=1).
+                    // With hasMintedPoToken=true the rqh=1 exemption fires — the WAA getMinter
+                    // token IS accepted by CDN for rqh=1 adaptive MP4 streams per the design.
+                    playerLog.notice("[BotGuardWV] trying iOS adaptive with WAA minted token (rqh=1 exempt via isBotGuardMinted)")
+                    do {
+                        let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
+                        if await tryAllStreams(video: video, info: iosInfo, label: "BotGuardWV", skipMuxed: true) {
+                            playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                            return
+                        }
+                    } catch {
+                        playerLog.notice("[BotGuardWV] ⚠️ iOS adaptive fetch failed: \(error)")
+                    }
+
+                    // Android VR adaptive attempt — ANDROID_VR client has an unconditional
+                    // rqh=1 exemption (isAndroidVR=true bypasses the CDN skip guard).
+                    // The VR client uses an Oculus UA without OAuth Bearer; CDN handles it
+                    // differently from iOS/Android — sometimes works for rqh=1 videos.
+                    // Phase 1 exhaustive retry also tries Android VR but only runs after
+                    // WKWebView HLS (which always succeeds for these videos), so this is the
+                    // first opportunity to test Android VR for the BotGuard path.
+                    playerLog.notice("[BotGuardWV] trying Android VR adaptive (ANDROID_VR rqh=1 native exempt + BotGuard cookies)")
+                    do {
+                        var vrInfo = try await api.fetchPlayerInfoAndroidVR(videoId: video.id)
+                        // fetchPlayerInfoAndroidVR does NOT include pot= in the request body,
+                        // so the returned format URLs don't have pot= either. Apply it now
+                        // so CDN auth validation sees the minted BotGuard token in each URL.
+                        // CDN already returns HTTP 206 WITHOUT pot= (ANDROID_VR is less strict
+                        // than iOS); adding pot= may unlock full-speed delivery.
+                        vrInfo = vrInfo.applyingPoToken(mintedToken)
+                        playerLog.notice("[BotGuardWV] applied pot= to Android VR URLs (len=\(mintedToken.count))")
+                        // Use label "BotGuardWV" so isBotGuardMinted=true fires in attemptComposition,
+                        // injecting youtube.com cookies (VISITOR_INFO1_LIVE) alongside the
+                        // BotGuard pot= token. isAndroidVR=true also fires (from c=ANDROID_VR URL),
+                        // so the rqh=1 skip guard is bypassed through both exemptions.
+                        if await tryAllStreams(video: video, info: vrInfo, label: "BotGuardWV", skipMuxed: true) {
+                            playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                            return
+                        }
+                    } catch {
+                        playerLog.notice("[BotGuardWV] ⚠️ Android VR adaptive fetch failed: \(error)")
+                    }
+
+                    // Android adaptive attempt — also try c=ANDROID with minted token + cookies.
+                    // ANDROID URLs have rqh=1 like iOS, but CDN behavior may differ for Android UA.
+                    playerLog.notice("[BotGuardWV] trying Android adaptive with WAA minted token")
+                    do {
+                        let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
+                        if await tryAllStreams(video: video, info: androidInfo, label: "BotGuardWV", skipMuxed: true) {
+                            playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                            return
+                        }
+                    } catch {
+                        playerLog.notice("[BotGuardWV] ⚠️ Android adaptive fetch failed: \(error)")
+                    }
+
+                    playerLog.notice("[BotGuardWV] ⚠️ WEB client adaptive with pot= failed — falling to WKWebView HLS")
+                } catch {
+                    playerLog.notice("[BotGuardWV] ⚠️ WEB client fetch failed: \(error) — falling to WKWebView HLS")
+                }
+            }
+        } else {
+            playerLog.notice("[BotGuardWV] not ready after 6 s wait — skipping to WKWebView HLS")
+        }
+
         // Phase -1b: WKWebView HLS extraction (device-native, no external tools required).
         // YouTube's JavaScript player computes the spc= proof-of-context token that produces
         // HLS segment URLs not subject to rqh=1 CDN restrictions. Raw InnerTube API calls
@@ -80,6 +241,14 @@ extension PlaybackViewModel {
             playerLog.notice("⚠️ [webView] got hlsManifestUrl — nSolver=\(nInfo as NSString)")
             if await tryWebViewHLS(webViewURL, nSolver: nSolver, for: video) {
                 playerLog.notice("✅ [webView] 720p+ HLS playing via WKWebView extraction — exhaustiveRetry done")
+                if hasMintedPoToken {
+                    // BotGuard WAA minted a valid pot= token (used for /player API auth and
+                    // web_safari metadata). CDN segment delivery requires spc= proof-of-context
+                    // which only the YouTube JS player (running in WKWebView) can compute.
+                    // The BotGuard token unlocks the /player API; WKWebView unlocks CDN.
+                    // Together they form the full BotGuard-enabled playback path.
+                    playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                }
                 // Phase 2 (relatedVideos, trackingURLs, neighbour prefetch) must be launched
                 // here because loadAsync returns immediately after calling exhaustiveRetry and
                 // never reaches its own Phase 2 creation block.
@@ -649,13 +818,25 @@ extension PlaybackViewModel {
         // app plays TVHTML5 rqh=1 adaptive streams without BotGuard — Bearer token may
         // satisfy CDN auth for authenticated TV sessions. An 8-second timeout (added to
         // the raceStream below) prevents indefinite hangs if the CDN holds the connection.
-        let isTVAuthBearer = label.contains("TVAuth") && hasAuthToken && currentAuthToken != nil
-        let isAndroidVR    = clientParam == "ANDROID_VR"
-        if videoRqh && !isTVAuthBearer && !isAndroidVR {
+        // NOTE: BotGuard websafe fallback token (json[3] from GenerateIT) is NOT accepted
+        // by the CDN for rqh=1 segments — only the full minting path (getMinter) produces
+        // a CDN-accepted token, which requires a real browser JS context (WKWebView).
+        // hasMintedPoToken is set in exhaustiveRetry when BotGuardWebViewRunner succeeds
+        // with a full getMinter-minted token — those ARE accepted by the CDN.
+        let isTVAuthBearer    = label.contains("TVAuth") && hasAuthToken && currentAuthToken != nil
+        let isAndroidVR       = clientParam == "ANDROID_VR"
+        #if canImport(WebKit)
+        let isBotGuardMinted  = label == "BotGuardWV" && hasMintedPoToken
+        #else
+        let isBotGuardMinted  = false
+        #endif
+        if videoRqh && !isTVAuthBearer && !isAndroidVR && !isBotGuardMinted {
             playerLog.notice("[\(label)/adaptive] skipping rqh=1 (client=\(clientParam)) — not exempt")
             return false
         }
-        if videoRqh {
+        if videoRqh && isBotGuardMinted {
+            playerLog.notice("[\(label)/adaptive] attempting rqh=1 with WKWebView-minted BotGuard token (client=\(clientParam)) — CDN should accept")
+        } else if videoRqh {
             playerLog.notice("[\(label)/adaptive] attempting rqh=1 TVAuth with Bearer — CDN auth experiment")
         }
         let ua: String
@@ -689,6 +870,18 @@ extension PlaybackViewModel {
         if videoRqh && isTVAuthBearer, let token = currentAuthToken {
             assetHeaders["Authorization"] = "Bearer \(token)"
             playerLog.notice("[\(label)/adaptive] injecting Bearer auth into CDN headers for TVAuth rqh=1")
+        }
+        if videoRqh && isBotGuardMinted {
+            // Inject youtube.com cookies (VISITOR_INFO1_LIVE) cross-domain to googlevideo.com.
+            // The CDN validates bui= against VISITOR_INFO1_LIVE — without it, the CDN holds
+            // the connection (no immediate 403, but our 3s loadTracks timeout fires).
+            // BotGuardWebViewRunner.propagateWebViewCookies() copies WKWebView session cookies
+            // into HTTPCookieStorage.shared, making VISITOR_INFO1_LIVE available here.
+            let ytCookies = HTTPCookieStorage.shared.cookies(for: URL(string: "https://www.youtube.com")!) ?? []
+            if !ytCookies.isEmpty {
+                assetHeaders["Cookie"] = ytCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+                playerLog.notice("[\(label)/adaptive] injecting \(ytCookies.count) youtube.com cookies for BotGuard rqh=1 CDN auth")
+            }
         }
 
         // Fast rqh=1 firstByte probe for Android VR — avoids the full 8s loadTracks

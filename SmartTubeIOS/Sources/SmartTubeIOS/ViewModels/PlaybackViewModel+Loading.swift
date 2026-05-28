@@ -222,15 +222,34 @@ extension PlaybackViewModel {
         // completed on slow networks (GitHub issue #53).
         playerLog.notice("[loadAsync] start id=\(video.id) title=\(video.title) player.rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue)")
 
-        // Pre-fetch a BotGuard PO token in the background so the cache is warm for
-        // subsequent retry attempts (Phase 1 exhaustiveRetry, next video load, etc.).
-        // Fire-and-forget — do NOT await here; BotGuardClient takes ~22 s for the first
-        // pipeline run and must not block the primary video load path.
+        // Fetch the BotGuard PO token before the primary stream attempt.
+        // Awaited (with a 2 s safety timeout) so api.hasPoToken(for:) returns true during
+        // the rqh=1 adaptive stream check in tryAllStreams — preventing an unnecessary
+        // WKWebView fallback on every cold start.
+        // BotGuardClient completes in <500 ms on first run; cached result returns in <1 ms
+        // thereafter (TTL ~12 h). The 2 s timeout is a safety net for slow networks only.
         let capturedAPI = api
         let capturedVideoId = video.id
-        Task.detached(priority: .background) {
-            await capturedAPI.prefetchPoToken(for: capturedVideoId)
+        if !(await api.hasPoToken(for: video.id)) {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await capturedAPI.prefetchPoToken(for: capturedVideoId) }
+                group.addTask { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+                _ = await group.next()
+                group.cancelAll()
+            }
         }
+        #if canImport(WebKit)
+        // Fire-and-forget: start WKWebView BotGuard pipeline in the background.
+        // Takes 3–8 s; by the time the primary attempt fails and exhaustiveRetry runs,
+        // it may be ready to provide a full getMinter-minted token (CDN-accepted for rqh=1).
+        // Zero impact on primary path timing — runs concurrently.
+        if !BotGuardWebViewRunner.shared.isReady {
+            let capturedVideoIdForWV = video.id
+            Task { @MainActor in
+                await BotGuardWebViewRunner.shared.prepare(for: capturedVideoIdForWV)
+            }
+        }
+        #endif
 
         // Local-file fast path — bypass all network fetches for downloaded videos.
         // The path must be inside Documents/SmartTubeDownloads/ to prevent path-traversal

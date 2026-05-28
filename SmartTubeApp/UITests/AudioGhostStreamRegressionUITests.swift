@@ -77,6 +77,23 @@ final class PlayerGhostStreamRegressionUITests: XCTestCase {
     /// (and audioSessionObserver) could re-activate the first player's AVAudioSession
     /// while the second video was loading, causing an audio conflict or state corruption
     /// that surfaced as an error banner.
+    ///
+    // AGENT-POST-RUN-CHECK
+    // After this test runs, inspect the app log for the following to determine which playback path was taken:
+    //
+    // BotGuard primary path (ideal):
+    //   grep "[BotGuard].*PO token" "$APP_LOG"          → should show "✅ PO token minted" or "✅ cached PO token"
+    //   grep "rqh=1.*pot=.*token available" "$APP_LOG"  → adaptive attempted with BotGuard token
+    //   grep "\[webView\]" "$APP_LOG" | wc -l           → should be 0 (WKWebView never triggered)
+    //
+    // WKWebView fallback path (means primary failed):
+    //   grep "⚠️.*webView.*fetching HLS" "$APP_LOG"    → WKWebView was triggered
+    //   grep "✅.*webView.*HLS playing" "$APP_LOG"      → WKWebView succeeded
+    //
+    // exhaustiveRetry triggered (means primary stream failed entirely):
+    //   grep "exhaustiveRetry\|Phase -1" "$APP_LOG"     → primary path failed
+    //
+    // END AGENT-POST-RUN-CHECK
     func testOpenSecondVideoAfterFirstNoErrorBanner() throws {
         let firstTitle = try openPlayerFromHome()
         XCTAssertTrue(backButton.waitForExistence(timeout: 5),

@@ -52,7 +52,7 @@ import XCTest
 
 final class BotGuardPoTokenUITests: XCTestCase {
 
-    private static let videoID = "LSMQ3U1Thzw"
+    private static let videoID = "9bZkp7q19f0"  // PSY - Gangnam Style (standard video, no multi-track)
 
     private static var sharedApp: XCUIApplication!
     private static var skipAllTests = false
