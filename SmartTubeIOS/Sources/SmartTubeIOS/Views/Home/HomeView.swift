@@ -411,6 +411,11 @@ public struct HomeView: View {
                     onSelect: { selectVideo($0, from: shortsVideos) },
                     accessibilityID: "shorts.section",
                     loadMore: {
+                        // Set retry flag so onChange keeps fetching pages until the
+                        // Shorts chip has more videos — guards in loadMoreIfNeeded
+                        // prevent duplicate in-flight requests.
+                        shortsCountAtTrigger = sectionVM.videoGroups.flatMap(\.videos).count
+                        needsMoreShorts = true
                         if let last = paginationTrigger {
                             sectionVM.loadMoreIfNeeded(lastVideo: last)
                         }
@@ -486,29 +491,41 @@ public struct HomeView: View {
             // is already in flight.
             let isShortsSectionActive = selectedSection.type == .shorts
             let applyHide = store.settings.hideShorts && selectedSection.type != .history
-            guard !isShortsSectionActive,
-                  !applyHide,
+            guard !applyHide,
                   let trigger = sectionVM.videoGroups.last?.videos.last
             else { return }
 
             let allVideos = sectionVM.videoGroups.flatMap(\.videos)
             var shouldTrigger = false
 
-            if needsMoreShorts {
-                let currentShortsCount = allVideos.filter(\.isShort).count
-                if currentShortsCount > shortsCountAtTrigger {
-                    needsMoreShorts = false  // pinned row got new shorts — satisfied
-                } else {
-                    shouldTrigger = true     // page had no new shorts — fetch another
+            if isShortsSectionActive {
+                // Shorts chip: all videos are shorts — compare total count against snapshot.
+                // Keep triggering until the count grows or pages are exhausted.
+                if needsMoreShorts {
+                    if allVideos.count > shortsCountAtTrigger {
+                        needsMoreShorts = false  // new shorts arrived — satisfied
+                    } else {
+                        shouldTrigger = true     // page had nothing new — fetch another
+                    }
                 }
-            }
+            } else {
+                // Mixed feed: check each type independently.
+                if needsMoreShorts {
+                    let currentShortsCount = allVideos.filter(\.isShort).count
+                    if currentShortsCount > shortsCountAtTrigger {
+                        needsMoreShorts = false  // pinned row got new shorts — satisfied
+                    } else {
+                        shouldTrigger = true     // page had no new shorts — fetch another
+                    }
+                }
 
-            if needsMoreNonShorts {
-                let currentNonShortsCount = allVideos.filter { !$0.isShort }.count
-                if currentNonShortsCount > nonShortsCountAtTrigger {
-                    needsMoreNonShorts = false  // grid got new regular videos — satisfied
-                } else {
-                    shouldTrigger = true         // page had no new regulars — fetch another
+                if needsMoreNonShorts {
+                    let currentNonShortsCount = allVideos.filter { !$0.isShort }.count
+                    if currentNonShortsCount > nonShortsCountAtTrigger {
+                        needsMoreNonShorts = false  // grid got new regular videos — satisfied
+                    } else {
+                        shouldTrigger = true         // page had no new regulars — fetch another
+                    }
                 }
             }
 

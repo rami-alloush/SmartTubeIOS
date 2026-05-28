@@ -561,7 +561,7 @@ public final class BrowseViewModel {
                 break  // channel list doesn't paginate via videoGroups
             case .shorts:
                 let group = try await retryWithBackoff(label: "BrowseVM[\(section.title)]") {
-                    try await api.fetchShorts()
+                    try await api.fetchShortsMore(continuationToken: token)
                 }
                 if Task.isCancelled {
                     browseLog.notice("fetchNextPage cancelled: section=\(section.title)")
