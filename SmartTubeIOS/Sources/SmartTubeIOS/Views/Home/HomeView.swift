@@ -448,6 +448,36 @@ public struct HomeView: View {
                 #endif
             }
         }
+        .onChange(of: sectionVM.videoGroups.flatMap(\.videos).count) { _, _ in
+            // After each page load, check whether the newly appended page contained
+            // videos of the type each visible section needs. If not, auto-trigger
+            // another page so both the pinned shorts row and the grid can fill up.
+            //
+            // This handles the common case where the API returns a page that is
+            // entirely shorts (grid gets nothing new) or entirely regular videos
+            // (pinned row gets nothing new).
+            //
+            // loadMoreIfNeeded's own guards (nextPageToken, isLoadingMore) prevent
+            // runaway loops — pagination stops when pages are exhausted or one is
+            // already in flight.
+            let isShortsSectionActive = selectedSection.type == .shorts
+            let applyHide = store.settings.hideShorts && selectedSection.type != .history
+            guard !isShortsSectionActive,
+                  !applyHide,
+                  let trigger = sectionVM.videoGroups.last?.videos.last
+            else { return }
+
+            let lastPageVideos = sectionVM.videoGroups.last?.videos ?? []
+            let lastPageHasShorts    = lastPageVideos.contains { $0.isShort }
+            let lastPageHasNonShorts = lastPageVideos.contains { !$0.isShort }
+
+            // Last page was all-non-shorts → pinned row got no new cards → re-trigger.
+            // Last page was all-shorts → grid got no new cards → re-trigger.
+            // If the page had both types, both sections grew — no re-trigger needed.
+            if !lastPageHasShorts || !lastPageHasNonShorts {
+                sectionVM.loadMoreIfNeeded(lastVideo: trigger)
+            }
+        }
     }
 
     @ViewBuilder private var currentQueueRow: some View {
