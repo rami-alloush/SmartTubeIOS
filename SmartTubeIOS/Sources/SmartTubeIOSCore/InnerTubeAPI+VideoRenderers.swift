@@ -169,8 +169,8 @@ extension InnerTubeAPI {
         // WEB grid (gridVideoRenderer), and TVHTML5 tileRenderer (subs/history/home on TV client).
         // Matches Android MediaServiceCore ItemWrapper renderer dispatch order.
         func walk(_ obj: Any, depth: Int = 0) {
-            guard depth < 20 else {
-                tubeLog.warning("parseVideoGroup: walk depth limit (20) reached — skipping subtree")
+            guard depth < 30 else {
+                tubeLog.warning("parseVideoGroup: walk depth limit (30) reached — skipping subtree")
                 return
             }
             if let dict = obj as? [String: Any] {
@@ -183,6 +183,56 @@ extension InnerTubeAPI {
                        .flatMap({ $0["nextContinuationData"] as? [String: Any] })
                        .flatMap({ $0["continuation"] as? String }) {
                     nextPageToken = token
+                }
+
+                // TVHTML5 top-level browse response wrapper — jump straight to content.
+                // tvBrowseRenderer wraps everything inside a deep nav/surface stack
+                // (tvSecondaryNavRenderer → tvSecondaryNavSectionRenderer → tabRenderer →
+                //  tvSurfaceContentRenderer → sectionListRenderer) that adds ~15 levels of
+                // depth before reaching the first tileRenderer. Pass-through each wrapper
+                // so we don't burn depth budget on structural-only nodes.
+                if let r = dict["tvBrowseRenderer"] as? [String: Any] {
+                    walk(r["content"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["tvSecondaryNavRenderer"] as? [String: Any] {
+                    walk(r["sections"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["tvSecondaryNavSectionRenderer"] as? [String: Any] {
+                    walk(r["tabs"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["tabRenderer"] as? [String: Any] {
+                    walk(r["content"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["tvSurfaceContentRenderer"] as? [String: Any] {
+                    walk(r["content"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["sectionListRenderer"] as? [String: Any] {
+                    // Check for TV-style continuation token here too.
+                    if let continuations = r["continuations"] as? [[String: Any]],
+                       let token = continuations.first
+                           .flatMap({ $0["nextContinuationData"] as? [String: Any] })
+                           .flatMap({ $0["continuation"] as? String }) {
+                        nextPageToken = token
+                    }
+                    walk(r["contents"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["shelfRenderer"] as? [String: Any] {
+                    // Extract shelf-level continuation if present.
+                    if let contToken = (r["continuations"] as? [[String: Any]])?.first
+                           .flatMap({ $0["nextContinuationData"] as? [String: Any] })
+                           .flatMap({ $0["continuation"] as? String }) {
+                        nextPageToken = contToken
+                    }
+                    walk(r["content"] as Any, depth: depth + 1); return
+                }
+                if let r = dict["horizontalListRenderer"] as? [String: Any] {
+                    // Extract continuation from horizontalListRenderer.continuations if present.
+                    if let contToken = (r["continuations"] as? [[String: Any]])?.first
+                           .flatMap({ $0["nextContinuationData"] as? [String: Any] })
+                           .flatMap({ $0["continuation"] as? String }) {
+                        nextPageToken = contToken
+                    }
+                    walk(r["items"] as Any, depth: depth + 1); return
                 }
 
                 // TVHTML5 History groups tiles under itemSectionRenderer with a date
