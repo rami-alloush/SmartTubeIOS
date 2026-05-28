@@ -392,8 +392,26 @@ extension PlayerView {
         Divider()
     }
 
+    /// On iOS, Quality and Audio Track are already exposed as pills below the scrubber
+    /// when controls are visible, so we hide them from the overflow menu to avoid duplication.
+    private var shouldShowQualityInMoreMenu: Bool {
+        #if os(tvOS)
+        !vm.isAudioOnlyMode
+        #else
+        !vm.isAudioOnlyMode && !vm.controlsVisible
+        #endif
+    }
+
+    private var shouldShowAudioTrackInMoreMenu: Bool {
+        #if os(tvOS)
+        vm.availableAudioTracks.count > 1
+        #else
+        vm.availableAudioTracks.count > 1 && !vm.controlsVisible
+        #endif
+    }
+
     @ViewBuilder private var moreMenuQualityRow: some View {
-        if !vm.isAudioOnlyMode {
+        if shouldShowQualityInMoreMenu {
             Button {
                 menuLog.notice("[moreMenu] Quality row tapped — closing moreMenu, opening qualityPicker")
                 showMoreMenu = false
@@ -646,7 +664,7 @@ extension PlayerView {
     }
 
     @ViewBuilder private var moreMenuAudioTrackRow: some View {
-        if vm.availableAudioTracks.count > 1 {
+        if shouldShowAudioTrackInMoreMenu {
             Button {
                 showMoreMenu = false
                 showAudioTrackPicker = true
