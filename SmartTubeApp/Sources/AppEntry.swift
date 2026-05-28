@@ -24,6 +24,7 @@ struct AppEntry: App {
     @State private var deepLinkLaunchArgConsumed = false
     @State private var pendingVideoArgConsumed = false
     @State private var channelDeepLinkConsumed = false
+    @State private var queueInjectConsumed = false
     /// Shared download service for video cards. See SmartTubeIOS/RootView.swift.
     @State private var cardDownloadService: VideoDownloadService
     @Environment(\.scenePhase) private var scenePhase
@@ -218,6 +219,7 @@ struct AppEntry: App {
                             consumePendingVideoFromLaunchArgs()
                             consumeDeepLinkFromLaunchArgs()
                             consumeChannelDeepLinkFromLaunchArgs()
+                            consumeQueueInjectFromLaunchArgs()
                             consumeBotGuardProbeFromLaunchArgs()
                             authService.handleForeground()
                             browseViewModel.refreshIfStale()
@@ -396,6 +398,34 @@ struct AppEntry: App {
             await UIApplication.shared.open(deepLink)
         }
         #endif
+    }
+
+    /// Handles `--uitesting-inject-queue-video-ids=<id1,id2,...>` launch argument.
+    ///
+    /// Populates `CurrentQueueStore` with the given video IDs in order so UI tests
+    /// can exercise queue auto-advance and prefetch behaviour without navigating
+    /// through the full Library UI. The first video is also opened via deeplink
+    /// so the player starts automatically. Fires only once per launch.
+    @MainActor
+    private func consumeQueueInjectFromLaunchArgs() {
+        guard !queueInjectConsumed else { return }
+        let args = ProcessInfo.processInfo.arguments
+        guard let arg = args.first(where: { $0.hasPrefix("--uitesting-inject-queue-video-ids=") }) else { return }
+        let raw = String(arg.dropFirst("--uitesting-inject-queue-video-ids=".count))
+        let ids = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        guard !ids.isEmpty else { return }
+        queueInjectConsumed = true
+        Task {
+            let videos = ids.map { Video(id: $0, title: "", channelTitle: "") }
+            await CurrentQueueStore.shared.replaceAll(with: videos)
+            // Use videoAt(index: 0) so the Video carries the queue playlistId and
+            // playlistIndex — required for the prefetch trigger in load(video:).
+            if let firstQueued = await CurrentQueueStore.shared.videoAt(index: 0) {
+                await MainActor.run {
+                    browseViewModel.deepLinkedVideo = firstQueued
+                }
+            }
+        }
     }
 
     /// Handles `--uitesting-pending-video=<id>` launch argument.
