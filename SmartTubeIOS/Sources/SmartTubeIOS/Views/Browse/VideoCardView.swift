@@ -79,6 +79,15 @@ public struct VideoCardView: View {
                 authToken: authService.accessToken,
                 priority: .visible
             )
+            // Pre-warm BotGuardWebViewRunner when cards scroll into view so the
+            // WKWebView youtube.com context is ready before the user taps. Only
+            // runs once — isReady short-circuits all subsequent calls (~0ms).
+            // This removes the 1.7s WKWebView cold-start from rqh=1 video loads.
+            if !BotGuardWebViewRunner.shared.isReady {
+                Task.detached(priority: .background) {
+                    await BotGuardWebViewRunner.shared.prepare()
+                }
+            }
         }
         .contextMenu {
             #if !os(tvOS)

@@ -17,6 +17,12 @@ extension PlaybackViewModel {
     func prefetchQueueVideo(at index: Int) {
         let sponsorCats = settings.activeSponsorCategories
         let token = currentAuthToken
+        // Pre-warm BotGuardWebViewRunner for rqh=1 queue videos — fire once, no-ops when ready.
+        if !BotGuardWebViewRunner.shared.isReady {
+            Task.detached(priority: .background) {
+                await BotGuardWebViewRunner.shared.prepare()
+            }
+        }
         Task(priority: .userInitiated) { [weak self] in
             guard let next = await CurrentQueueStore.shared.videoAt(index: index) else { return }
             playerLog.notice("[prefetch] next-queue video index=\(index) id=\(next.id)")
