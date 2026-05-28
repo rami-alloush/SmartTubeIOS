@@ -111,16 +111,17 @@ struct LocalSubscriptionFeedServiceTests {
         #expect(sharedCount == 1)
     }
 
-    // MARK: - Sort order
+    // MARK: - Arrival order (no date sort)
 
-    @Test("fetchFeed returns videos sorted newest-first")
-    func fetchFeedSortedNewestFirst() async {
+    @Test("fetchFeed returns videos in arrival order, not sorted by date")
+    func fetchFeedPreservesArrivalOrder() async {
         let store = makeStore()
         let cache = makeCache()
         let api = MockInnerTubeAPI()
 
         await store.follow(makeChannel(id: "UCsort"))
 
+        // Cache stores them with older first — arrival order, not newest-first.
         let older = Video(id: "vid-old", title: "Old", channelTitle: "C",
                           publishedAt: Date(timeIntervalSince1970: 1_000_000))
         let newer = Video(id: "vid-new", title: "New", channelTitle: "C",
@@ -130,8 +131,10 @@ struct LocalSubscriptionFeedServiceTests {
         let service = LocalSubscriptionFeedService()
         let videos = await service.fetchFeed(store: store, cache: cache, api: api)
 
-        #expect(videos.first?.id == "vid-new")
-        #expect(videos.last?.id == "vid-old")
+        // Arrival order is preserved: older appears before newer because that's
+        // how they were stored in the cache (RSS/InnerTube fetch order).
+        #expect(videos.first?.id == "vid-old")
+        #expect(videos.last?.id == "vid-new")
     }
 
     // MARK: - Shorts RSS enrichment
