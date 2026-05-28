@@ -79,6 +79,10 @@ struct ShortsRowSection: View {
             .padding(.horizontal)
             .padding(.vertical, 4)
         }
+        // Prevent the horizontal ScrollView from expanding to fill the full
+        // height offered by a VStack parent (e.g. when pinned above a ScrollView).
+        // fixedSize(vertical: true) makes it hug its content height instead.
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier(accessibilityID)
         .accessibilityValue("\(videos.count)")
         #endif
