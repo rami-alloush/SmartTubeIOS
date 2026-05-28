@@ -530,14 +530,18 @@ extension PlaybackViewModel {
             // quality, but the HLS variant playlist may omit qualities the CDN has not
             // encoded for this video. Parsing the manifest prevents the user from
             // selecting a quality tier that AVPlayer's ABR would silently ignore.
+            // HLS variant fetch is NOT on the critical path: we use the master URL for
+            // initial playback, so AVPlayer does not need variant URLs to show the first
+            // frame. Fetch in a background Task and update the quality picker when done.
             if let hlsURL = info.hlsURL {
-                let variantURLs = await fetchHLSVariantURLs(url: hlsURL)
-                if !variantURLs.isEmpty {
-                    hlsVariantURLs = variantURLs
-                    let beforeCount = availableFormats.count
-                    availableFormats = availableFormats.filter { variantURLs.keys.contains($0.height) }
-                    playerLog.notice("HLS variants: \(variantURLs.keys.sorted().reversed()) — filtered quality picker \(beforeCount) → \(availableFormats.count) options")
-                    if let sel = selectedFormat, !variantURLs.keys.contains(sel.height) { selectedFormat = nil }
+                Task { [weak self] in
+                    let variantURLs = await self?.fetchHLSVariantURLs(url: hlsURL) ?? [:]
+                    guard let self, !Task.isCancelled, !variantURLs.isEmpty else { return }
+                    self.hlsVariantURLs = variantURLs
+                    let beforeCount = self.availableFormats.count
+                    self.availableFormats = self.availableFormats.filter { variantURLs.keys.contains($0.height) }
+                    playerLog.notice("HLS variants (bg): \(variantURLs.keys.sorted().reversed()) — filtered quality picker \(beforeCount) → \(self.availableFormats.count) options")
+                    if let sel = self.selectedFormat, !variantURLs.keys.contains(sel.height) { self.selectedFormat = nil }
                 }
             }
             // Build player item — preferredStreamURL is guaranteed non-nil here because
@@ -608,14 +612,11 @@ extension PlaybackViewModel {
             // non-1× speeds, reducing the tinny/phase artefacts audible on AirPods
             // compared to the default .timeDomain algorithm.
             item.audioTimePitchAlgorithm = .spectral
-            // Fix 4C: start playback as soon as 2s of content is buffered rather than
-            // waiting for the default 30s forward buffer. After 5s, reset to system
-            // default so seek/scrubbing has enough buffer for smooth operation.
-            item.preferredForwardBufferDuration = 2.0
-            Task { [weak item] in
-                try? await Task.sleep(for: .seconds(5))
-                item?.preferredForwardBufferDuration = 0
-            }
+            // Fast-start: require only 0.5 s of buffered content before the first frame
+            // fires (readyToPlay). At 360p / 1.5 Mbps this is ~94 KB — well under a
+            // single CDN segment. The forward buffer is reset to system default (0) in
+            // the quality ramp task after readyToPlay so scrubbing has enough lookahead.
+            item.preferredForwardBufferDuration = 0.5
             // Apply quality hints when a non-auto preference is set. These steer AVPlayer's
             // ABR algorithm toward the user's preferred resolution without bypassing audio
             // metadata (which variant URLs would lose). Hints are applied unconditionally
@@ -693,15 +694,18 @@ extension PlaybackViewModel {
                             Task { [weak self, weak item] in
                                 try? await Task.sleep(for: .milliseconds(800))
                                 guard let self, !Task.isCancelled else { return }
+                                // Reset to system default so scrubbing has a comfortable
+                                // forward buffer after the first frame is on screen.
+                                item?.preferredForwardBufferDuration = 0
                                 if let h = targetMaxH {
                                     let hf = CGFloat(h)
                                     item?.preferredMaximumResolution = CGSize(width: hf * 4, height: hf)
                                     item?.preferredPeakBitRate = self.peakBitRate(for: h)
-                                    playerLog.notice("[fast-start] ABR ramp → \(h)p")
+                                    playerLog.notice("[fast-start] ABR ramp → \(h)p + buffer unconstrained")
                                 } else {
                                     item?.preferredMaximumResolution = .zero
                                     item?.preferredPeakBitRate = 0
-                                    playerLog.notice("[fast-start] ABR ramp → Auto (unconstrained)")
+                                    playerLog.notice("[fast-start] ABR ramp → Auto (unconstrained) + buffer unconstrained")
                                 }
                             }
                         }
