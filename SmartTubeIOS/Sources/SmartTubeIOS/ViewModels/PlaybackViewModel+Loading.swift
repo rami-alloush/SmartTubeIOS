@@ -32,6 +32,10 @@ extension PlaybackViewModel {
         // Cancel any previous in-flight load so we never have two concurrent API
         // fetches for the same (or different) video running at the same time.
         loadTask?.cancel()
+        #if canImport(WebKit)
+        wkHLSEarlyTask?.cancel()
+        wkHLSEarlyTask = nil
+        #endif
 
         // Report watchtime for the video being replaced before tearing it down.
         // This is the only opportunity when switching via load() directly (e.g. autoplay),
@@ -187,6 +191,10 @@ extension PlaybackViewModel {
         loadTask = nil
         exhaustiveRetryTask?.cancel()
         exhaustiveRetryTask = nil
+        #if canImport(WebKit)
+        wkHLSEarlyTask?.cancel()
+        wkHLSEarlyTask = nil
+        #endif
         isLoading = false
         #if canImport(UIKit)
         UIApplication.shared.isIdleTimerDisabled = false
@@ -261,6 +269,16 @@ extension PlaybackViewModel {
             Task { @MainActor in
                 await BotGuardWebViewRunner.shared.prepare(for: capturedVideoIdForWV)
             }
+        }
+        // Fire-and-forget: start WKWebView HLS extraction concurrently with the primary path.
+        // For rqh=1 videos the ~2 s extraction overlaps the primary iOS attempt so the URL
+        // is ready (or nearly ready) by the time exhaustiveRetry reaches Phase -2, saving
+        // the serial 2–4 s wait. For non-rqh=1 videos the task completes silently unused.
+        // extractHLSURL cancels any prior pending extraction at startup, so starting it here
+        // is safe even if the primary path succeeds.
+        let capturedVideoIdForHLS = video.id
+        wkHLSEarlyTask = Task { @MainActor in
+            await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: capturedVideoIdForHLS)
         }
         #endif
 

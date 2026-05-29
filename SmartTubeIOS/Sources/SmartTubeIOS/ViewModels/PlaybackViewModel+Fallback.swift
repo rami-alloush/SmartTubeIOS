@@ -93,7 +93,9 @@ extension PlaybackViewModel {
                 // WKWebView takes 4–5 s; by launching it now (while the Phase -2 BotGuard paths
                 // run sequentially), it is typically done or nearly done by the time all Phase -2
                 // paths fail, eliminating the 4–5 s serial wait that previously occurred after.
-                let wkHLSTask = Task { @MainActor in
+                // Reuse the early task started by loadAsync() if it is still in flight — calling
+                // extractHLSURL() again would cancel and restart from zero.
+                let wkHLSTask: Task<URL?, Never> = self.wkHLSEarlyTask ?? Task { @MainActor in
                     await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
                 }
 
@@ -109,6 +111,7 @@ extension PlaybackViewModel {
                     let probeURL = webInfo.formats.first(where: {
                         $0.mimeType.hasPrefix("video/mp4") && $0.url != nil
                     })?.url
+                    var webProbeStatus: Int? = nil
                     if let probeURL {
                         var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 5)
                         req.httpMethod = "HEAD"
@@ -116,6 +119,7 @@ extension PlaybackViewModel {
                         let hasRqh = probeURL.absoluteString.contains("rqh=1")
                         if let (_, resp) = try? await URLSession.shared.data(for: req),
                            let http = resp as? HTTPURLResponse {
+                            webProbeStatus = http.statusCode
                             playerLog.notice("[BotGuardWV/WEB probe] CDN HEAD: HTTP \(http.statusCode) — pot=\(hasPot ? "YES" : "NO") rqh=\(hasRqh ? "1" : "0")")
                         }
                     }
@@ -140,7 +144,7 @@ extension PlaybackViewModel {
                         webHLSProxyLoader = potProxyLoader  // keep alive
                         let proxyItem = AVPlayerItem(asset: asset)
                         proxyItem.audioTimePitchAlgorithm = .spectral
-                        proxyItem.preferredForwardBufferDuration = 2.0
+                        proxyItem.preferredForwardBufferDuration = 0.5
                         player.replaceCurrentItem(with: proxyItem)
                         itemObserverTask?.cancel()
                         for await st in proxyItem.statusStream {
@@ -161,41 +165,45 @@ extension PlaybackViewModel {
                     }
 
                     // iOS adaptive retry with WAA minted token.
-                    // web_safari /player returns HLS-only (no MP4 adaptive) for most videos.
-                    // The iOS /player DOES return real MP4 adaptive streams (c=IOS, rqh=1).
-                    // With hasMintedPoToken=true the rqh=1 exemption fires — the WAA getMinter
-                    // token IS accepted by CDN for rqh=1 adaptive MP4 streams per the design.
-                    playerLog.notice("[BotGuardWV] trying iOS adaptive with WAA minted token (rqh=1 exempt via isBotGuardMinted)")
-                    do {
-                        let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
-                        if await tryAllStreams(video: video, info: iosInfo, label: "BotGuardWV", skipMuxed: true) {
-                            playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                            wkHLSTask.cancel()
-                            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                            return
+                    // Skipped when the WEB CDN probe returned 403: if the minted pot= token
+                    // cannot satisfy CDN auth for WEB client URLs it will not work for IOS
+                    // client rqh=1 URLs either — skipping the 3 s loadTracks timeout lets us
+                    // await the already-running wkHLSTask sooner.
+                    if webProbeStatus != 403 {
+                        playerLog.notice("[BotGuardWV] trying iOS adaptive with WAA minted token (rqh=1 exempt via isBotGuardMinted)")
+                        do {
+                            let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
+                            if await tryAllStreams(video: video, info: iosInfo, label: "BotGuardWV", skipMuxed: true) {
+                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                                wkHLSTask.cancel()
+                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                                return
+                            }
+                        } catch {
+                            playerLog.notice("[BotGuardWV] ⚠️ iOS adaptive fetch failed: \(error)")
                         }
-                    } catch {
-                        playerLog.notice("[BotGuardWV] ⚠️ iOS adaptive fetch failed: \(error)")
-                    }
 
-                    // Android VR is intentionally skipped here: CDN throttles Android VR
-                    // byte-range requests after the first probe, causing an 8 s timeout
-                    // that is wasted time for all rqh=1 videos. Android VR is still tried
-                    // in Phase 1 (exhaustive retry) for the rare case where WKWebView fails.
+                        // Android VR is intentionally skipped here: CDN throttles Android VR
+                        // byte-range requests after the first probe, causing an 8 s timeout
+                        // that is wasted time for all rqh=1 videos. Android VR is still tried
+                        // in Phase 1 (exhaustive retry) for the rare case where WKWebView fails.
 
-                    // Android adaptive attempt — also try c=ANDROID with minted token + cookies.
-                    // ANDROID URLs have rqh=1 like iOS, but CDN behavior may differ for Android UA.
-                    playerLog.notice("[BotGuardWV] trying Android adaptive with WAA minted token")
-                    do {
-                        let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
-                        if await tryAllStreams(video: video, info: androidInfo, label: "BotGuardWV", skipMuxed: true) {
-                            playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                            wkHLSTask.cancel()
-                            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                            return
+                        // Android adaptive attempt — also try c=ANDROID with minted token + cookies.
+                        // ANDROID URLs have rqh=1 like iOS, but CDN behavior may differ for Android UA.
+                        playerLog.notice("[BotGuardWV] trying Android adaptive with WAA minted token")
+                        do {
+                            let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
+                            if await tryAllStreams(video: video, info: androidInfo, label: "BotGuardWV", skipMuxed: true) {
+                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
+                                wkHLSTask.cancel()
+                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                                return
+                            }
+                        } catch {
+                            playerLog.notice("[BotGuardWV] ⚠️ Android adaptive fetch failed: \(error)")
                         }
-                    } catch {
-                        playerLog.notice("[BotGuardWV] ⚠️ Android adaptive fetch failed: \(error)")
+                    } else {
+                        playerLog.notice("[BotGuardWV] WEB probe 403 — skipping iOS/Android adaptive, awaiting WKWebView HLS")
                     }
 
                     playerLog.notice("[BotGuardWV] ⚠️ WEB client adaptive with pot= failed — awaiting parallel WKWebView HLS")
@@ -226,7 +234,14 @@ extension PlaybackViewModel {
             webViewURL = preloaded
         } else {
             playerLog.notice("⚠️ [webView] fetching HLS manifest URL via WKWebView YouTube player")
-            webViewURL = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
+            // Reuse the early task from loadAsync() — calling extractHLSURL() again would
+            // cancel and restart the already-running extraction from zero.
+            if let earlyTask = self.wkHLSEarlyTask {
+                playerLog.notice("⚠️ [webView] awaiting early WKWebView HLS task (started in loadAsync)")
+                webViewURL = await earlyTask.value
+            } else {
+                webViewURL = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
+            }
         }
         let nSolver = YouTubeWebViewHLSExtractor.shared.extractedNSolver
         // Option B: if the YouTube player running in the WKWebView produced a BotGuard
@@ -721,9 +736,9 @@ extension PlaybackViewModel {
             item = AVPlayerItem(asset: AVURLAsset(url: effectiveURL, options: uaOpts))
         }
         item.audioTimePitchAlgorithm = .spectral
-        // Reduce startup latency: begin playback after 2 s of buffered content,
-        // then reset to system default so scrubbing has a comfortable forward buffer.
-        item.preferredForwardBufferDuration = 2.0
+        // Reduce startup latency: begin playback after 0.5 s of buffered content
+        // (matches the primary HLS path). Reset to system default after readyToPlay.
+        item.preferredForwardBufferDuration = 0.5
         Task { [weak item] in
             try? await Task.sleep(for: .seconds(5))
             item?.preferredForwardBufferDuration = 0
@@ -1689,11 +1704,13 @@ extension PlaybackViewModel {
 
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .spectral
-        item.preferredForwardBufferDuration = 2.0
-        // Steer AVPlayer's ABR toward the best ≥720p variant without locking to a specific
-        // variant URL. This mirrors the pattern used by reloadHLSItem for mid-play quality
-        // switches. If the user has an explicit quality preference, honour it; otherwise
-        // cap at the best variant height found in the master manifest.
+        // Fast-start: require only 0.5 s of buffered content before readyToPlay fires
+        // (matches the primary HLS path in loadAsync). Forward buffer is reset to system
+        // default in the readyToPlay ramp task below.
+        item.preferredForwardBufferDuration = 0.5
+        // Fast-start ABR: cap initial variant at 360p so AVPlayer downloads the smallest
+        // first segment, then ramp to preferred quality after readyToPlay.
+        // Compute preferred height here so the ramp Task captures it.
         let preferredHeight: Int
         if settings.preferredQuality != .auto, let cap = settings.preferredQuality.maxHeight {
             preferredHeight = cap
@@ -1703,14 +1720,9 @@ extension PlaybackViewModel {
         } else {
             preferredHeight = 0
         }
-        if preferredHeight > 0 {
-            item.preferredMaximumResolution = CGSize(width: 7680, height: preferredHeight)
-            playerLog.notice("[webView/HLS] ABR hint: preferredMaximumResolution height=\(preferredHeight)")
-        }
-        Task { [weak item] in
-            try? await Task.sleep(for: .seconds(5))
-            item?.preferredForwardBufferDuration = 0
-        }
+        // Start at 360p (fast first-frame) regardless of preferred quality.
+        item.preferredMaximumResolution = CGSize(width: 640, height: 360)
+        playerLog.notice("[webView/HLS] fast-start ABR: initial cap 360p → ramp to \(preferredHeight > 0 ? "\(preferredHeight)p" : "Auto") after readyToPlay")
         player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()
         for await status in item.statusStream {
@@ -1746,6 +1758,20 @@ extension PlaybackViewModel {
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
                 qualityManager.isMuxedFallback = false
+                // Fast-start quality ramp: first frame is on screen at 360p. Upgrade ABR hints
+                // to preferred quality (same pattern as primary HLS path in loadAsync).
+                Task { [weak item] in
+                    try? await Task.sleep(for: .milliseconds(800))
+                    guard !Task.isCancelled else { return }
+                    item?.preferredForwardBufferDuration = 0
+                    if preferredHeight > 0 {
+                        item?.preferredMaximumResolution = CGSize(width: 7680, height: preferredHeight)
+                        playerLog.notice("[webView/HLS] ABR ramp → \(preferredHeight)p + buffer unconstrained")
+                    } else {
+                        item?.preferredMaximumResolution = .zero
+                        playerLog.notice("[webView/HLS] ABR ramp → Auto (unconstrained) + buffer unconstrained")
+                    }
+                }
                 return true
             case .failed:
                 let err = item.error?.localizedDescription ?? "nil"

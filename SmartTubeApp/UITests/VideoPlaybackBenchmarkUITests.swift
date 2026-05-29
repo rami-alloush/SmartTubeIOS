@@ -11,7 +11,10 @@ import XCTest
 //   ✓ [prefetch] ENQUEUE <nextID> priority=2        — prefetch for the following video
 //
 // Expected per-video paths (baseline):
-//   l7To2evwGKs  — cold start + 4 s pre-warm, rqh=1 via BotGuardWV (was 6.1s without pre-warm)
+//   v2ZtAi2rDzA  — cold start, rqh=1, pot= 403: BotGuardWV skips iOS/Android adaptive,
+//                  falls through to WKWebView HLS (spc= authenticated).
+//                  With fix: ~4–5 s (wkHLSTask parallel). Without: ~8 s (+3 s iOS timeout).
+//   l7To2evwGKs  — hot (cached), rqh=1 via BotGuardWV fast path
 //   dQw4w9WgXcQ  — hot (cached), webView/HLS or adaptive
 //   jNQXAC9IVRw  — hot (cached), webView/HLS
 //   fEvekF1zOKs  — hot (cached), rqh=1 BotGuard chain
@@ -42,13 +45,15 @@ import XCTest
 final class VideoPlaybackBenchmarkUITests: XCTestCase {
 
     /// All known stable video IDs, ordered so cache warms progressively:
-    ///   - First: real-world rqh=1 video from log.txt (2026-05-28) — measures cold
-    ///     start with BotGuardWV pre-warm (4 s pause lets WKWebView warm up).
+    ///   - First: real-world worst-case video (2026-05-29 log.txt) — rqh=1, pot= 403,
+    ///     all BotGuardWV adaptive paths fail, falls through to WKWebView HLS.
+    ///     Measures cold start after the "WEB probe 403 → skip iOS/Android" fix.
+    ///   - Second: rqh=1 real-world video from 2026-05-28 log — BotGuardWV fast path
     ///   - Next two mirror the existing NextVideoPrefetchUITests queue
-    ///   - Fourth was the former first rqh=1 video; now hot
     ///   - Last two are from HLSResolution and BotGuardLivePipeline test suites
     private static let allVideoIDs: [String] = [
-        "l7To2evwGKs",  // Real-world rqh=1 video (log.txt 2026-05-28) — cold + pre-warm
+        "v2ZtAi2rDzA",  // rqh=1, pot= 403 worst-case — measures WKWebView HLS cold path
+        "l7To2evwGKs",  // Real-world rqh=1 video (log.txt 2026-05-28) — BotGuardWV fast path
         "dQw4w9WgXcQ",  // Rick Astley — stable, typical adaptive/HLS path
         "jNQXAC9IVRw",  // "Me at the zoo" — YouTube reference
         "fEvekF1zOKs",  // Real-world video B — rqh=1, BotGuard chain (~14s uncached)

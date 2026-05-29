@@ -316,6 +316,12 @@ public final class PlaybackViewModel {
     /// or pre-warms AVAssetTrack arrays for the user's preferred quality tier.
     /// Cancelled on every new video load.
     var prefetchTask: Task<Void, Never>?
+    /// Early WKWebView HLS extraction task, started concurrently with the primary iOS
+    /// path in loadAsync() so the result is ready (or close to ready) by the time
+    /// exhaustiveRetry reaches Phase -2. Cancelled on every new load() and stop().
+    #if canImport(WebKit)
+    var wkHLSEarlyTask: Task<URL?, Never>?
+    #endif
 
     // MARK: - Now Playing cache
     // Never read nowPlayingInfo back from MPNowPlayingInfoCenter — doing a
