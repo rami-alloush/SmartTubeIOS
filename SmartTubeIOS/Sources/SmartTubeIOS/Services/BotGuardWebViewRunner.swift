@@ -264,12 +264,9 @@ public final class BotGuardWebViewRunner: NSObject {
 
     /// JavaScript that runs the full BotGuard WAA pipeline inside WKWebView.
     /// Runs `Create → parse → eval VM → vm.a() → asyncSnapshotFn() → GenerateIT → getMinter → WEB guide`.
-    private static func pipelineJS(videoId: String) -> String {
+    private static func pipelineJS(videoId _: String) -> String {
         let apiKey = waaAPIKey
         let reqKey = requestKey
-        let safeVideoId = videoId
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "'", with: "\\'")
         return """
         (async function runBotGuardInWebKit() {
             function send(data) {

@@ -55,225 +55,68 @@ extension PlaybackViewModel {
                 await VideoPreloadCache.shared.invalidateWKHLSURL(for: video.id)
             }
         }
-        // Phase -2: BotGuardWebViewRunner adaptive attempt.
-        // BotGuardWebViewRunner runs the full BotGuard pipeline in a real WebKit context
-        // (youtube.com/robots.txt origin), which may produce a getMinter-minted token
-        // (hasMinter=true) that the CDN accepts for rqh=1 adaptive streams.
-        // Started as fire-and-forget in loadAsync; we wait up to 6 s here before
-        // falling through to WKWebView HLS so cold-start latency stays bounded.
-        // If BotGuardWV is already ready (cached from a prior video), the mint is instant (<5 ms).
-        // parallelWKURL holds a pre-fetched WKWebView HLS URL when Phase -2 starts WKWebView
-        // extraction concurrently with its fast-fail BotGuard attempts, eliminating the
-        // 4–5 s serial wait that would otherwise occur in Phase -1b.
-        var parallelWKURL: URL? = nil
-        if !BotGuardWebViewRunner.shared.isReady {
-            playerLog.notice("[BotGuardWV] waiting up to 6 s for minted token before WKWebView HLS…")
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    // Re-issue prepare() in case loadAsync's fire-and-forget hasn't started yet.
-                    await BotGuardWebViewRunner.shared.prepare(for: video.id)
+        // Phase -2 + Phase -1b: race BotGuardWV adaptive path vs WKWebView HLS path.
+        //
+        // Both paths start simultaneously. They interleave cooperatively at every `await`
+        // (suspension point) since both run on @MainActor. Whichever path reaches
+        // `readyToPlay` first wins; the other task is cancelled immediately.
+        //
+        // Path A — BotGuardWV adaptive: waits for BotGuard mint (up to 6 s on cold start,
+        //   <5 ms if already warm), probes CDN, tries WEB adaptive / proxy HLS / iOS+Android
+        //   adaptive. Fast for videos where the CDN accepts the minted token (~1–2 s).
+        //
+        // Path B — WKWebView HLS: awaits `wkHLSEarlyTask` (started in loadAsync, already
+        //   in-flight). Bypasses the 6 s BotGuard wait on cold starts. Fast for rqh=1 videos
+        //   where the CDN probe returns 403 (~3–4 s from loadAsync start).
+        //
+        // Key safety property: both paths are @MainActor, so `player.replaceCurrentItem` and
+        // `itemObserverTask` mutations are always serialised. The losing path's
+        // `for await status in item.statusStream` exits via task cancellation.
+        var raceWon = false
+        var raceWonByPathB = false
+        await withTaskGroup(of: (Bool, Bool).self) { raceGroup in
+            // Path A and B are @MainActor methods — calling them via `await self.`
+            // from these nonisolated closures hops to the main actor for each path.
+            // They interleave cooperatively at every `await` suspension point.
+            // Second element of the tuple: true = Path B (WKWebView HLS), false = Path A (BotGuardWV).
+            raceGroup.addTask { (await self.racePathA(video: video), false) }
+            raceGroup.addTask { (await self.racePathB(video: video), true) }
+            for await (result, isPathB) in raceGroup {
+                if result {
+                    raceWon = true
+                    raceWonByPathB = isPathB
+                    raceGroup.cancelAll()
+                    return
                 }
-                group.addTask { try? await Task.sleep(nanoseconds: 6_000_000_000) }
-                _ = await group.next()
-                group.cancelAll()
             }
         }
-        if BotGuardWebViewRunner.shared.isReady {
-            // mintToken() now internally uses the WKWebView's WEB session visitorData
-            // (from Phase 7 guide call) as the canonical identifier — this ensures the
-            // minted token is tied to the same YouTube session that solved the challenge.
-            let identifier = await api.currentVisitorData() ?? ""
-            let webVD = BotGuardWebViewRunner.shared.webVisitorData
-            if let mintedToken = await BotGuardWebViewRunner.shared.mintToken(identifier: identifier) {
-                await api.storeExternalPoToken(mintedToken, for: video.id)
-                hasMintedPoToken = true
-                playerLog.notice("[BotGuardWV] ✅ minted token (len=\(mintedToken.count) webVD.len=\(webVD.count)) — trying WEB client adaptive before WKWebView HLS")
-
-                // Start WKWebView HLS extraction in parallel with Phase -2 fast-fail attempts.
-                // WKWebView takes 4–5 s; by launching it now (while the Phase -2 BotGuard paths
-                // run sequentially), it is typically done or nearly done by the time all Phase -2
-                // paths fail, eliminating the 4–5 s serial wait that previously occurred after.
-                // Reuse the early task started by loadAsync() if it is still in flight — calling
-                // extractHLSURL() again would cancel and restart from zero.
-                let wkHLSTask: Task<URL?, Never> = self.wkHLSEarlyTask ?? Task { @MainActor in
-                    await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
-                }
-
-                // --- WEB client with pot= (yt-dlp approach) ---
-                // WEB client (nameID=1) adaptive stream URLs accept WEB BotGuard pot= tokens.
-                // WEB client URLs do NOT carry rqh=1 CDN auth restrictions (that's IOS/Android).
-                // We include the WKWebView's WEB session visitorData in the client context so
-                // the CDN can validate the minted token against the correct session.
-                do {
-                    let webInfo = try await api.fetchPlayerInfoWebWithPoToken(
-                        videoId: video.id, visitorData: webVD.isEmpty ? nil : webVD
-                    )
-                    let probeURL = webInfo.formats.first(where: {
-                        $0.mimeType.hasPrefix("video/mp4") && $0.url != nil
-                    })?.url
-                    var webProbeStatus: Int? = nil
-                    if let probeURL {
-                        var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 5)
-                        req.httpMethod = "HEAD"
-                        let hasPot = probeURL.absoluteString.contains("pot=")
-                        let hasRqh = probeURL.absoluteString.contains("rqh=1")
-                        if let (_, resp) = try? await URLSession.shared.data(for: req),
-                           let http = resp as? HTTPURLResponse {
-                            webProbeStatus = http.statusCode
-                            playerLog.notice("[BotGuardWV/WEB probe] CDN HEAD: HTTP \(http.statusCode) — pot=\(hasPot ? "YES" : "NO") rqh=\(hasRqh ? "1" : "0")")
-                        }
-                    }
-                    if await tryAllStreams(video: video, info: webInfo, label: "BotGuardWV", skipMuxed: true) {
-                        playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                        wkHLSTask.cancel()
-                        if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                        return
-                    }
-
-                    // BotGuard WEB client proxy HLS: tryAllStreams tried native HLS but rqh=1
-                    // segments returned 403 because AVFoundation fetches them without pot=.
-                    // Use YTHLSProxyLoader with poToken set — the proxy intercepts each variant
-                    // quality playlist and appends ?pot=<token> to segment URLs so that
-                    // AVFoundation's native CDN fetch includes the BotGuard proof-of-origin token.
-                    if let hlsURL = webInfo.hlsURL, let proxyURL = hlsURL.proxyURL {
-                        playerLog.notice("[BotGuardWV] trying HLS via pot= proxy (variant playlist interception)")
-                        let safariUA = InnerTubeClients.WebSafari.userAgent
-                        let potProxyLoader = YTHLSProxyLoader(ua: safariUA, poToken: mintedToken)
-                        let asset = AVURLAsset(url: proxyURL)
-                        asset.resourceLoader.setDelegate(potProxyLoader, queue: DispatchQueue.global(qos: .userInitiated))
-                        webHLSProxyLoader = potProxyLoader  // keep alive
-                        let proxyItem = AVPlayerItem(asset: asset)
-                        proxyItem.audioTimePitchAlgorithm = .spectral
-                        proxyItem.preferredForwardBufferDuration = 0.5
-                        player.replaceCurrentItem(with: proxyItem)
-                        itemObserverTask?.cancel()
-                        for await st in proxyItem.statusStream {
-                            switch st {
-                            case .readyToPlay:
-                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                                wkHLSTask.cancel()
-                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                                return
-                            case .failed:
-                                playerLog.notice("[BotGuardWV] ⚠️ proxy HLS failed: \(proxyItem.error?.localizedDescription ?? "unknown")")
-                                break
-                            default:
-                                continue
-                            }
-                            break
-                        }
-                    }
-
-                    // iOS adaptive retry with WAA minted token.
-                    // Skipped when the WEB CDN probe returned 403: if the minted pot= token
-                    // cannot satisfy CDN auth for WEB client URLs it will not work for IOS
-                    // client rqh=1 URLs either — skipping the 3 s loadTracks timeout lets us
-                    // await the already-running wkHLSTask sooner.
-                    if webProbeStatus != 403 {
-                        playerLog.notice("[BotGuardWV] trying iOS adaptive with WAA minted token (rqh=1 exempt via isBotGuardMinted)")
-                        do {
-                            let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
-                            if await tryAllStreams(video: video, info: iosInfo, label: "BotGuardWV", skipMuxed: true) {
-                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                                wkHLSTask.cancel()
-                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                                return
-                            }
-                        } catch {
-                            playerLog.notice("[BotGuardWV] ⚠️ iOS adaptive fetch failed: \(error)")
-                        }
-
-                        // Android VR is intentionally skipped here: CDN throttles Android VR
-                        // byte-range requests after the first probe, causing an 8 s timeout
-                        // that is wasted time for all rqh=1 videos. Android VR is still tried
-                        // in Phase 1 (exhaustive retry) for the rare case where WKWebView fails.
-
-                        // Android adaptive attempt — also try c=ANDROID with minted token + cookies.
-                        // ANDROID URLs have rqh=1 like iOS, but CDN behavior may differ for Android UA.
-                        playerLog.notice("[BotGuardWV] trying Android adaptive with WAA minted token")
-                        do {
-                            let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
-                            if await tryAllStreams(video: video, info: androidInfo, label: "BotGuardWV", skipMuxed: true) {
-                                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                                wkHLSTask.cancel()
-                                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                                return
-                            }
-                        } catch {
-                            playerLog.notice("[BotGuardWV] ⚠️ Android adaptive fetch failed: \(error)")
-                        }
-                    } else {
-                        playerLog.notice("[BotGuardWV] WEB probe 403 — skipping iOS/Android adaptive, awaiting WKWebView HLS")
-                    }
-
-                    playerLog.notice("[BotGuardWV] ⚠️ WEB client adaptive with pot= failed — awaiting parallel WKWebView HLS")
-                } catch {
-                    playerLog.notice("[BotGuardWV] ⚠️ WEB client fetch failed: \(error) — awaiting parallel WKWebView HLS")
-                }
-                // Await the parallel WKWebView task (likely already done by now).
-                // Fall through to Phase -1b with the pre-fetched URL.
-                parallelWKURL = await wkHLSTask.value
-            }
-        } else {
-            playerLog.notice("[BotGuardWV] not ready after 6 s wait — skipping to WKWebView HLS")
-        }
-
-        // Phase -1b: WKWebView HLS extraction (device-native, no external tools required).
-        // YouTube's JavaScript player computes the spc= proof-of-context token that produces
-        // HLS segment URLs not subject to rqh=1 CDN restrictions. Raw InnerTube API calls
-        // (even with Bearer auth — confirmed by D-15 probe: HTTP 403) cannot generate spc=
-        // because YouTube verifies it originated from a browser JavaScript execution context.
-        // Running the YouTube watch page in a hidden WKWebView lets the JS player compute
-        // spc= and make its internal /player call; we intercept that response to get the URL.
-        // This runs once before the 3-attempt client loop to avoid repeated 8s CDN timeouts
-        // from rqh=1 adaptive streams that AVFoundation's byte-range probe pattern triggers.
-        let webViewURL: URL?
-        if let preloaded = parallelWKURL {
-            // Phase -2 pre-fetched this concurrently — no additional wait needed.
-            playerLog.notice("⚠️ [webView] using parallel WKWebView HLS URL (already ready — saved serial 4–5 s wait)")
-            webViewURL = preloaded
-        } else {
-            playerLog.notice("⚠️ [webView] fetching HLS manifest URL via WKWebView YouTube player")
-            // Reuse the early task from loadAsync() — calling extractHLSURL() again would
-            // cancel and restart the already-running extraction from zero.
-            if let earlyTask = self.wkHLSEarlyTask {
-                playerLog.notice("⚠️ [webView] awaiting early WKWebView HLS task (started in loadAsync)")
-                webViewURL = await earlyTask.value
+        if raceWon {
+            if raceWonByPathB {
+                playerLog.notice("✅ [webView] Path B won — WKWebView HLS playing via wkHLSEarlyTask — exhaustiveRetry done")
             } else {
-                webViewURL = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
+                playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — exhaustiveRetry done")
             }
+            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+            return
         }
-        let nSolver = YouTubeWebViewHLSExtractor.shared.extractedNSolver
-        // Option B: if the YouTube player running in the WKWebView produced a BotGuard
-        // pot= token (present in serviceIntegrityDimensions.poToken of its /player call),
-        // store it on the API so subsequent iOS-client fetchPlayerInfo calls can apply it
-        // to rqh=1 adaptive URLs — potentially unlocking native adaptive streaming.
+
+        // Both race paths failed — fall back to serial WKWebView extraction in case
+        // the early task returned nil (e.g. network timeout, JS player error).
+        playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
+        let serialURL = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
+        let nSolverSerial = YouTubeWebViewHLSExtractor.shared.extractedNSolver
         if let pot = YouTubeWebViewHLSExtractor.shared.extractedPoToken {
             await api.storeExternalPoToken(pot, for: video.id)
-            playerLog.notice("[webView] pot= token stored (\(pot.count) chars) — rqh=1 adaptive will be retried with CDN auth")
         }
-        if let webViewURL {
-            let nInfo = nSolver.map { "\($0.unsolved)→\($0.solved)" } ?? "nil"
-            playerLog.notice("⚠️ [webView] got hlsManifestUrl — nSolver=\(nInfo as NSString)")
-            if await tryWebViewHLS(webViewURL, nSolver: nSolver, for: video) {
-                playerLog.notice("✅ [webView] 720p+ HLS playing via WKWebView extraction — exhaustiveRetry done")
-                if hasMintedPoToken {
-                    // BotGuard WAA minted a valid pot= token (used for /player API auth and
-                    // web_safari metadata). CDN segment delivery requires spc= proof-of-context
-                    // which only the YouTube JS player (running in WKWebView) can compute.
-                    // The BotGuard token unlocks the /player API; WKWebView unlocks CDN.
-                    // Together they form the full BotGuard-enabled playback path.
-                    playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — WKWebView HLS not needed")
-                }
-                // Phase 2 (relatedVideos, trackingURLs, neighbour prefetch) must be launched
-                // here because loadAsync returns immediately after calling exhaustiveRetry and
-                // never reaches its own Phase 2 creation block.
+        if let serialURL {
+            if await tryWebViewHLS(serialURL, nSolver: nSolverSerial, for: video) {
+                playerLog.notice("✅ [webView] serial WKWebView HLS playing — exhaustiveRetry done")
                 if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
                 return
             }
-            playerLog.notice("⚠️ [webView] HLS load failed — falling through to client retry chain")
+            playerLog.notice("⚠️ [webView] serial HLS load failed — falling through to client retry chain")
         } else {
-            playerLog.notice("⚠️ [webView] WKWebView extraction returned nil — proceeding with client chain")
+            playerLog.notice("⚠️ [webView] serial WKWebView extraction returned nil — proceeding with client chain")
         }
         #endif
         for attempt in 1...3 {
@@ -453,6 +296,145 @@ extension PlaybackViewModel {
         guard !Task.isCancelled else { return }
         playerLog.error("❌ All 3 retry attempts exhausted for \(video.id)")
         error = APIError.unavailable("Unable to play this video")
+    }
+
+    // MARK: - Race helpers (called from withTaskGroup in exhaustiveRetry)
+
+    /// Path A of the exhaustiveRetry race: BotGuardWV adaptive / proxy HLS path.
+    /// Waits up to 6 s for BotGuard to mint a token, then tries WEB/iOS/Android adaptive.
+    /// Returns `true` if a stream reached `readyToPlay`.
+    func racePathA(video: Video) async -> Bool {
+        if !BotGuardWebViewRunner.shared.isReady {
+            playerLog.notice("[BotGuardWV] waiting up to 6 s for minted token (race Path A)…")
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await BotGuardWebViewRunner.shared.prepare(for: video.id) }
+                group.addTask { try? await Task.sleep(nanoseconds: 6_000_000_000) }
+                _ = await group.next()
+                group.cancelAll()
+            }
+        }
+        guard !Task.isCancelled else { return false }
+        guard BotGuardWebViewRunner.shared.isReady else {
+            playerLog.notice("[BotGuardWV] not ready after 6 s wait — Path A done")
+            return false
+        }
+        let identifier = await api.currentVisitorData() ?? ""
+        let webVD = BotGuardWebViewRunner.shared.webVisitorData
+        guard let mintedToken = await BotGuardWebViewRunner.shared.mintToken(identifier: identifier) else {
+            playerLog.notice("[BotGuardWV] ⚠️ mintToken returned nil — Path A done")
+            return false
+        }
+        await api.storeExternalPoToken(mintedToken, for: video.id)
+        hasMintedPoToken = true
+        playerLog.notice("[BotGuardWV] ✅ minted token (len=\(mintedToken.count) webVD.len=\(webVD.count)) — Path A racing WKWebView HLS")
+        guard !Task.isCancelled else { return false }
+        do {
+            let webInfo = try await api.fetchPlayerInfoWebWithPoToken(
+                videoId: video.id, visitorData: webVD.isEmpty ? nil : webVD
+            )
+            let probeURL = webInfo.formats.first(where: {
+                $0.mimeType.hasPrefix("video/mp4") && $0.url != nil
+            })?.url
+            var webProbeStatus: Int? = nil
+            if let probeURL {
+                var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 5)
+                req.httpMethod = "HEAD"
+                let hasPot = probeURL.absoluteString.contains("pot=")
+                let hasRqh = probeURL.absoluteString.contains("rqh=1")
+                if let (_, resp) = try? await URLSession.shared.data(for: req),
+                   let http = resp as? HTTPURLResponse {
+                    webProbeStatus = http.statusCode
+                    playerLog.notice("[BotGuardWV/WEB probe] CDN HEAD: HTTP \(http.statusCode) — pot=\(hasPot ? "YES" : "NO") rqh=\(hasRqh ? "1" : "0")")
+                }
+            }
+            guard !Task.isCancelled else { return false }
+            if webProbeStatus != 403,
+               await tryAllStreams(video: video, info: webInfo, label: "BotGuardWV", skipMuxed: true) {
+                playerLog.notice("[BotGuardWV] ✅ Path A won — WEB adaptive")
+                return true
+            } else if webProbeStatus == 403 {
+                playerLog.notice("[BotGuardWV] WEB probe 403 — skipping tryAllStreams + proxy HLS in Path A")
+            }
+            if webProbeStatus != 403, let hlsURL = webInfo.hlsURL, let proxyURL = hlsURL.proxyURL {
+                guard !Task.isCancelled else { return false }
+                playerLog.notice("[BotGuardWV] trying HLS via pot= proxy (Path A)")
+                let safariUA = InnerTubeClients.WebSafari.userAgent
+                let potProxyLoader = YTHLSProxyLoader(ua: safariUA, poToken: mintedToken)
+                let asset = AVURLAsset(url: proxyURL)
+                asset.resourceLoader.setDelegate(potProxyLoader, queue: DispatchQueue.global(qos: .userInitiated))
+                webHLSProxyLoader = potProxyLoader
+                let proxyItem = AVPlayerItem(asset: asset)
+                proxyItem.audioTimePitchAlgorithm = .spectral
+                proxyItem.preferredForwardBufferDuration = 0.5
+                player.replaceCurrentItem(with: proxyItem)
+                itemObserverTask?.cancel()
+                for await st in proxyItem.statusStream {
+                    guard !Task.isCancelled else { return false }
+                    switch st {
+                    case .readyToPlay:
+                        playerLog.notice("[BotGuardWV] ✅ Path A won — proxy HLS")
+                        return true
+                    case .failed:
+                        playerLog.notice("[BotGuardWV] ⚠️ proxy HLS failed: \(proxyItem.error?.localizedDescription ?? "unknown")")
+                        break
+                    default:
+                        continue
+                    }
+                    break
+                }
+            }
+            guard !Task.isCancelled, webProbeStatus != 403 else { return false }
+            playerLog.notice("[BotGuardWV] trying iOS adaptive with WAA minted token (Path A)")
+            do {
+                let iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
+                if await tryAllStreams(video: video, info: iosInfo, label: "BotGuardWV", skipMuxed: true) {
+                    playerLog.notice("[BotGuardWV] ✅ Path A won — iOS adaptive")
+                    return true
+                }
+            } catch {
+                playerLog.notice("[BotGuardWV] ⚠️ iOS adaptive fetch failed: \(error)")
+            }
+            guard !Task.isCancelled else { return false }
+            playerLog.notice("[BotGuardWV] trying Android adaptive with WAA minted token (Path A)")
+            do {
+                let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
+                if await tryAllStreams(video: video, info: androidInfo, label: "BotGuardWV", skipMuxed: true) {
+                    playerLog.notice("[BotGuardWV] ✅ Path A won — Android adaptive")
+                    return true
+                }
+            } catch {
+                playerLog.notice("[BotGuardWV] ⚠️ Android adaptive fetch failed: \(error)")
+            }
+        } catch {
+            playerLog.notice("[BotGuardWV] ⚠️ WEB client fetch failed: \(error)")
+        }
+        playerLog.notice("[BotGuardWV] Path A exhausted — all BotGuardWV attempts failed")
+        return false
+    }
+
+    /// Path B of the exhaustiveRetry race: early WKWebView HLS path.
+    /// Awaits the `wkHLSEarlyTask` started in `loadAsync` (already in-flight).
+    /// Returns `true` if a stream reached `readyToPlay`.
+    func racePathB(video: Video) async -> Bool {
+        guard let earlyTask = wkHLSEarlyTask else {
+            playerLog.notice("⚠️ [webView] no earlyTask — Path B done")
+            return false
+        }
+        playerLog.notice("⚠️ [webView] Path B awaiting early WKWebView HLS task…")
+        guard let url = await earlyTask.value, !Task.isCancelled else {
+            playerLog.notice("⚠️ [webView] earlyTask returned nil or cancelled — Path B done")
+            return false
+        }
+        let nSolver = YouTubeWebViewHLSExtractor.shared.extractedNSolver
+        if let pot = YouTubeWebViewHLSExtractor.shared.extractedPoToken {
+            await api.storeExternalPoToken(pot, for: video.id)
+            playerLog.notice("[webView] pot= token stored from WKWebView (\(pot.count) chars)")
+        }
+        let nInfo = nSolver.map { "\($0.unsolved)→\($0.solved)" } ?? "nil"
+        playerLog.notice("⚠️ [webView] Path B got hlsManifestUrl — nSolver=\(nInfo as NSString)")
+        let won = await tryWebViewHLS(url, nSolver: nSolver, for: video)
+        if won { playerLog.notice("✅ [webView] Path B won — WKWebView HLS") }
+        return won
     }
 
     /// Kept for the `PlaybackQualityManagerDelegate` protocol.

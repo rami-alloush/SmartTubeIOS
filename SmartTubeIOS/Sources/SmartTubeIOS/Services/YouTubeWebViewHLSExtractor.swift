@@ -30,6 +30,11 @@ final class YouTubeWebViewHLSExtractor: NSObject {
     private var webView: WKWebView?
     private var continuation: CheckedContinuation<URL?, Never>?
     private var timeoutTask: Task<Void, Never>?
+    /// Incremented each time `extractHLSURL` starts a new extraction. Timeout tasks
+    /// capture their generation at creation time and bail out if it has changed,
+    /// preventing a cancelled previous-extraction timeout from firing on the current
+    /// extraction's continuation (ABA problem with the `continuation != nil` guard).
+    private var extractionGeneration: Int = 0
     /// After `extractHLSURL` completes, holds the n-challenge mapping solved in-JS.
     /// `nil` when the URL had no `/n/` or the solver wasn't available.
     private(set) var extractedNSolver: (unsolved: String, solved: String)?
@@ -39,6 +44,21 @@ final class YouTubeWebViewHLSExtractor: NSObject {
     private(set) var extractedPoToken: String?
 
     // MARK: - Public API
+
+    /// Pre-warms the WKWebView HLS extraction for `videoId` and stores the result in
+    /// `VideoPreloadCache`. Called speculatively on card focus/appear so that if the
+    /// user taps, Phase -1a can play from the cached URL instead of waiting ~2–4 s for
+    /// a live extraction. Skips silently if the URL is already cached or if an
+    /// extraction is already in progress (avoids the singleton cancel-chain when many
+    /// cards appear simultaneously during a feed scroll).
+    static func preWarm(videoId: String) async {
+        guard await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) == nil else { return }
+        // Skip if the singleton extractor is already busy — starting would cancel
+        // the in-progress extraction with no benefit.
+        guard shared.continuation == nil else { return }
+        guard let url = await shared.extractHLSURL(videoId: videoId) else { return }
+        await VideoPreloadCache.shared.store(wkHLSManifestURL: url, for: videoId)
+    }
 
     /// Loads the YouTube watch page for `videoId` in a hidden WKWebView, waits for the
     /// YouTube JS player to make its internal `youtubei/v1/player` call, and returns
@@ -52,11 +72,13 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         finish(url: nil)
         extractedNSolver = nil
         extractedPoToken = nil
+        extractionGeneration &+= 1
 
         extractLog.notice("⚠️ [webView] starting HLS extraction for \(videoId as NSString)")
 
         return await withCheckedContinuation { (cont: CheckedContinuation<URL?, Never>) in
             self.continuation = cont
+            let myGeneration = self.extractionGeneration
 
             let contentController = WKUserContentController()
             contentController.add(self, name: "hlsExtractor")
@@ -130,10 +152,13 @@ final class YouTubeWebViewHLSExtractor: NSObject {
             request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
             wv.load(request)
 
-            // Timeout safety net.
+            // Timeout safety net. Captures `myGeneration` so that if `extractHLSURL`
+            // is called again (cancelling this extraction), the woken-up cancelled task
+            // sees a stale generation and bails — preventing it from firing on the
+            // new extraction's continuation (ABA problem).
             self.timeoutTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                guard let self, self.continuation != nil else { return }
+                guard let self, self.extractionGeneration == myGeneration else { return }
                 extractLog.notice("⚠️ [webView] timed out for \(videoId as NSString)")
                 self.finish(url: Optional<URL>.none)
             }

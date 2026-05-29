@@ -62,13 +62,16 @@ final class VideoPlaybackBenchmarkUITests: XCTestCase {
     ]
 
     private var app: XCUIApplication!
+    /// Shuffled on every setUp so each run has a different cold-start video.
+    private var orderedVideoIDs: [String] = []
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        orderedVideoIDs = Self.allVideoIDs.shuffled()
         app = XCUIApplication()
         app.launchArguments = [
             "--uitesting",
-            "--uitesting-inject-queue-video-ids=\(Self.allVideoIDs.joined(separator: ","))",
+            "--uitesting-inject-queue-video-ids=\(orderedVideoIDs.joined(separator: ","))",
             "--uitesting-show-controls",
             "--uitesting-disable-sponsorblock",
         ]
@@ -91,7 +94,7 @@ final class VideoPlaybackBenchmarkUITests: XCTestCase {
     /// the player has begun buffering.  The post-run log check confirms whether
     /// each advance was served from the prefetch cache or hit the network.
     func testSequentialPerVideoPlaybackTimes() throws {
-        let videoIDs = Self.allVideoIDs
+        let videoIDs = orderedVideoIDs
         let playerTitle = app.staticTexts["player.titleLabel"].firstMatch
 
         // ── Video 0: cold start ───────────────────────────────────────────────
