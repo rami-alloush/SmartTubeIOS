@@ -154,9 +154,6 @@ extension PlayerView {
         VStack(spacing: 0) {
             #if os(tvOS)
             moreMenuSpeedRow
-            moreMenuQualityRow
-            #else
-            moreMenuQualityRow
             #endif
             moreMenuLikeDislikeRow
             moreMenuShareRow
@@ -392,51 +389,12 @@ extension PlayerView {
         Divider()
     }
 
-    /// On iOS, Quality and Audio Track are already exposed as pills below the scrubber
-    /// when controls are visible, so we hide them from the overflow menu to avoid duplication.
-    private var shouldShowQualityInMoreMenu: Bool {
-        #if os(tvOS)
-        !vm.isAudioOnlyMode
-        #else
-        !vm.isAudioOnlyMode && !vm.controlsVisible
-        #endif
-    }
-
     private var shouldShowAudioTrackInMoreMenu: Bool {
         #if os(tvOS)
         vm.availableAudioTracks.count > 1
         #else
         vm.availableAudioTracks.count > 1 && !vm.controlsVisible
         #endif
-    }
-
-    @ViewBuilder private var moreMenuQualityRow: some View {
-        if shouldShowQualityInMoreMenu {
-            Button {
-                menuLog.notice("[moreMenu] Quality row tapped — closing moreMenu, opening qualityPicker")
-                showMoreMenu = false
-                showQualityPicker = true
-            } label: {
-                HStack {
-                    Label("Quality", systemImage: "film.stack")
-                    Spacer()
-                    Text(vm.selectedFormat?.qualityLabel ?? (vm.pendingQualityLabel.isEmpty ? "Auto" : vm.pendingQualityLabel))
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .disabled(vm.availableFormats.isEmpty)
-            .accessibilityIdentifier("player.moreMenu.qualityRow")
-            #if os(tvOS)
-            .background(moreMenuFocusedRow == .quality ? Color.gray.opacity(0.35) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .focused($moreMenuFocusedRow, equals: .quality)
-            #endif
-            Divider()
-        }
     }
 
     @ViewBuilder private var moreMenuLikeDislikeRow: some View {
