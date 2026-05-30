@@ -274,11 +274,12 @@ extension PlaybackViewModel {
         // For rqh=1 videos the ~2 s extraction overlaps the primary iOS attempt so the URL
         // is ready (or nearly ready) by the time exhaustiveRetry reaches Phase -2, saving
         // the serial 2–4 s wait. For non-rqh=1 videos the task completes silently unused.
-        // extractHLSURL cancels any prior pending extraction at startup, so starting it here
-        // is safe even if the primary path succeeds.
+        // Use serialExtract() (not extractHLSURL directly) so the task is registered in
+        // the pendingSerialTask chain — any subsequent serialExtract calls from race-failed
+        // handlers will chain onto this task instead of cancelling it via finish(url:nil).
         let capturedVideoIdForHLS = video.id
         wkHLSEarlyTask = Task { @MainActor in
-            await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: capturedVideoIdForHLS)
+            await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: capturedVideoIdForHLS)
         }
         #endif
 

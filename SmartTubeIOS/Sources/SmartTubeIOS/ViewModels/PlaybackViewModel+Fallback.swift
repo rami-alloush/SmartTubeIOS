@@ -70,52 +70,73 @@ extension PlaybackViewModel {
         //   in-flight). Bypasses the 6 s BotGuard wait on cold starts. Fast for rqh=1 videos
         //   where the CDN probe returns 403 (~3–4 s from loadAsync start).
         //
-        // Key safety property: both paths are @MainActor, so `player.replaceCurrentItem` and
-        // `itemObserverTask` mutations are always serialised. The losing path's
-        // `for await status in item.statusStream` exits via task cancellation.
+        // Path C — AndroidVR adaptive: fetches playerInfo via the ANDROID_VR (Oculus Quest)
+        //   client, which is CDN-exempt from rqh=1 / pot= token requirements. Runs concurrently
+        //   with Path A and B. Expected ~2–3 s cold; beats serial WKWebView extraction (~3–5 s).
+        //
+        // Key safety property: all paths are @MainActor, so `player.replaceCurrentItem` and
+        // `itemObserverTask` mutations are always serialised. Losing paths' status streams
+        // exit via task cancellation.
         var raceWon = false
-        var raceWonByPathB = false
-        await withTaskGroup(of: (Bool, Bool).self) { raceGroup in
-            // Path A and B are @MainActor methods — calling them via `await self.`
+        var raceWinningPath = 0  // 0=A (BotGuardWV), 1=B (WKWebView HLS), 2=C (AndroidVR)
+        await withTaskGroup(of: (Bool, Int).self) { raceGroup in
+            // Path A, B, C are @MainActor methods — calling them via `await self.`
             // from these nonisolated closures hops to the main actor for each path.
             // They interleave cooperatively at every `await` suspension point.
-            // Second element of the tuple: true = Path B (WKWebView HLS), false = Path A (BotGuardWV).
-            raceGroup.addTask { (await self.racePathA(video: video), false) }
-            raceGroup.addTask { (await self.racePathB(video: video), true) }
-            for await (result, isPathB) in raceGroup {
+            raceGroup.addTask { (await self.racePathA(video: video), 0) }
+            raceGroup.addTask { (await self.racePathB(video: video), 1) }
+            raceGroup.addTask { (await self.racePathC(video: video), 2) }
+            for await (result, path) in raceGroup {
                 if result {
                     raceWon = true
-                    raceWonByPathB = isPathB
+                    raceWinningPath = path
                     raceGroup.cancelAll()
                     return
                 }
             }
         }
         if raceWon {
-            if raceWonByPathB {
+            switch raceWinningPath {
+            case 1:
                 playerLog.notice("✅ [webView] Path B won — WKWebView HLS playing via wkHLSEarlyTask — exhaustiveRetry done")
-            } else {
+                // tryWebViewHLS does not call launchPhase2 internally — do it here so Phase 2
+                // metadata (nextVideo, endCards, sponsorSegments) is fetched and cached data is used.
+                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+            case 2:
+                playerLog.notice("[AndroidVR] ✅ Path C won — AndroidVR adaptive — exhaustiveRetry done")
+                // attemptComposition already called launchPhase2(vrInfo) with the correct AndroidVR
+                // playerInfo. Do NOT call it again — a second call would cancel the first phase2Task
+                // and restart it with the stale iOS playerInfo, reverting availableFormats to
+                // rqh=1-blocked streams and breaking quality switches.
+                //
+                // If AndroidVR composed at low quality (maxH < 480 and below user's preferred),
+                // schedule a background HLS quality upgrade via TVEmbedded or MWEB while the
+                // video is already playing at the lower quality. Does not affect readyToPlay timing.
+                let vrMaxH = availableFormats.map(\.height).max() ?? 0
+                let preferredH = settings.preferredQuality == .auto
+                    ? Self.displayMaxVideoHeight()
+                    : (settings.preferredQuality.maxHeight ?? 1080)
+                if vrMaxH > 0 && vrMaxH < min(preferredH, 480) {
+                    playerLog.notice("[AndroidVR] maxH=\(vrMaxH) < preferred \(min(preferredH, 480))p — scheduling background HLS quality upgrade")
+                    let upgradeVideo = video
+                    Task { [weak self] in await self?.backgroundQualityUpgrade(video: upgradeVideo) }
+                }
+            default:
                 playerLog.notice("[BotGuardWV] ✅ adaptive streaming via minted BotGuard token — exhaustiveRetry done")
+                // attemptComposition / attemptURL already called launchPhase2(webInfo). Same
+                // reasoning as Path C: don't override with stale playerInfo.
             }
-            if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
             return
         }
 
         // Both race paths failed — fall back to serial WKWebView extraction in case
         // the early task returned nil (e.g. network timeout, JS player error).
         playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
-        // If an extraction for this video is already in-flight (started by the early task or
-        // a concurrent serial attempt for the same video), await it directly instead of
-        // calling extractHLSURL which would cancel the in-progress extraction via finish(url:nil).
-        // This prevents the ABA cancel-chain where two simultaneous race failures for the same
-        // or different videos each cancel each other's serial extractions, both returning nil.
-        let serialURL: URL?
-        if YouTubeWebViewHLSExtractor.shared.currentExtractionVideoId == video.id {
-            playerLog.notice("[webView] serial: extraction for \(video.id) already in-flight — awaiting it")
-            serialURL = await YouTubeWebViewHLSExtractor.shared.awaitCurrentExtraction()
-        } else {
-            serialURL = await YouTubeWebViewHLSExtractor.shared.extractHLSURL(videoId: video.id)
-        }
+        // Use serialExtract() instead of extractHLSURL() directly: serialExtract awaits any
+        // in-flight extraction (for any video) before starting a new one, preventing the
+        // cross-video cancellation chain where two concurrent serial callers (for video A and
+        // video B) each call extractHLSURL and cancel each other via finish(url:nil).
+        let serialURL = await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: video.id)
         let nSolverSerial = YouTubeWebViewHLSExtractor.shared.extractedNSolver
         if let pot = YouTubeWebViewHLSExtractor.shared.extractedPoToken {
             await api.storeExternalPoToken(pot, for: video.id)
@@ -355,7 +376,7 @@ extension PlaybackViewModel {
                 // the stream directly — skipping the probe removes one network round-trip
                 // (~0.5–1s) from Path A, helping it win the race against Path B.
                 if hasRqh {
-                    var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 5)
+                    var req = URLRequest(url: probeURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 1)
                     req.httpMethod = "HEAD"
                     let hasPot = probeURL.absoluteString.contains("pot=")
                     if let (_, resp) = try? await URLSession.shared.data(for: req),
@@ -455,6 +476,89 @@ extension PlaybackViewModel {
         let won = await tryWebViewHLS(url, nSolver: nSolver, for: video)
         if won { playerLog.notice("✅ [webView] Path B won — WKWebView HLS") }
         return won
+    }
+
+    /// Path C of the exhaustiveRetry race: Android VR (Oculus Quest) adaptive path.
+    /// CDN-exempt from rqh=1 / pot= token requirements. Runs concurrently with Path A and B.
+    /// Returns `true` if adaptive composition reached `readyToPlay`.
+    func racePathC(video: Video) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        do {
+            let vrInfo = try await api.fetchPlayerInfoAndroidVR(videoId: video.id)
+            if await tryAllStreams(video: video, info: vrInfo, label: "AndroidVR/race", skipMuxed: true) {
+                playerLog.notice("[AndroidVR] ✅ Path C won — AndroidVR adaptive composition")
+                return true
+            }
+        } catch {
+            playerLog.notice("[AndroidVR] ⚠️ Path C fetch failed: \(error)")
+        }
+        playerLog.notice("[AndroidVR] Path C done — AndroidVR adaptive failed")
+        return false
+    }
+
+    /// Background quality upgrade after AndroidVR wins the race at low quality (maxH < 480).
+    ///
+    /// Called from the `raceWon / case 2` block when AndroidVR composes at e.g. 240p for
+    /// rqh=1 worst-case videos. Fires after a 700 ms stabilisation delay so the initial
+    /// `readyToPlay` playback is already running. Tries:
+    ///   1. TVEmbedded HLS (WEB_EMBEDDED_PLAYER — HLS for most embeddable videos)
+    ///   2. MWEB HLS (m.youtube.com — no pot= for HLS, wider coverage than TVEmbedded)
+    ///
+    /// On success, replaces the current AVPlayerItem at the current playback position so
+    /// the user sees no gap (position is saved to `savedPositionToRestore` just before
+    /// calling `attemptURL`, and consumed by `attemptURL`'s `.readyToPlay` handler).
+    /// On failure, stays on the AndroidVR quality silently — no error shown to the user.
+    func backgroundQualityUpgrade(video: Video) async {
+        // Stabilisation delay — let readyToPlay fire and playback begin before replacing the item.
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        guard !Task.isCancelled else { return }
+        // Bail if the user navigated to a different video while we were waiting.
+        guard currentVideo?.id == video.id else {
+            playerLog.notice("[VR→HLS/upgrade] video changed — cancelling quality upgrade")
+            return
+        }
+
+        // 1. Try TVEmbedded HLS (WEB_EMBEDDED_PLAYER, nameID=56).
+        do {
+            let tvEmbedInfo = try await api.fetchPlayerInfoTVEmbedded(videoId: video.id)
+            guard !Task.isCancelled, currentVideo?.id == video.id else { return }
+            if let hlsURL = tvEmbedInfo.hlsURL {
+                playerLog.notice("[VR→HLS/upgrade] TVEmbedded HLS available — upgrading from AndroidVR quality")
+                // Capture position right before replacement so the stale window is minimal.
+                let pos = currentTime
+                if pos > 0.5 { savedPositionToRestore = pos }
+                if await attemptURL(hlsURL, for: video, info: tvEmbedInfo, label: "VR→HLS/upgrade/TVEmbed") {
+                    playerLog.notice("[VR→HLS/upgrade] ✅ quality upgrade via TVEmbedded HLS complete")
+                    return
+                }
+                // attemptURL returned false — clear the now-stale saved position.
+                savedPositionToRestore = nil
+            }
+        } catch {
+            playerLog.notice("[VR→HLS/upgrade] TVEmbedded fetch failed: \(error)")
+        }
+
+        guard !Task.isCancelled, currentVideo?.id == video.id else { return }
+
+        // 2. Try MWEB HLS (m.youtube.com — no pot= required for HLS, wider coverage).
+        do {
+            let mwebInfo = try await api.fetchPlayerInfoMWEB(videoId: video.id)
+            guard !Task.isCancelled, currentVideo?.id == video.id else { return }
+            if let hlsURL = mwebInfo.hlsURL {
+                playerLog.notice("[VR→HLS/upgrade] MWEB HLS available — upgrading from AndroidVR quality")
+                let pos = currentTime
+                if pos > 0.5 { savedPositionToRestore = pos }
+                if await attemptURL(hlsURL, for: video, info: mwebInfo, label: "VR→HLS/upgrade/MWEB") {
+                    playerLog.notice("[VR→HLS/upgrade] ✅ quality upgrade via MWEB HLS complete")
+                    return
+                }
+                savedPositionToRestore = nil
+            }
+        } catch {
+            playerLog.notice("[VR→HLS/upgrade] MWEB fetch failed: \(error)")
+        }
+
+        playerLog.notice("[VR→HLS/upgrade] no HLS upgrade available — staying on AndroidVR \(availableFormats.map(\.height).max() ?? 0)p quality")
     }
 
     /// Kept for the `PlaybackQualityManagerDelegate` protocol.

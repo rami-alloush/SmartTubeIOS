@@ -49,6 +49,9 @@ final class YouTubeWebViewHLSExtractor: NSObject {
     /// Additional continuations registered via `awaitCurrentExtraction()`. When `finish()`
     /// fires, all extra continuations receive the same URL result as the primary continuation.
     private var extraContinuations: [CheckedContinuation<URL?, Never>] = []
+    /// The last task created by `serialExtract()`. Each new serialExtract call chains onto
+    /// this task, ensuring strict sequential execution of serial extractions.
+    private var pendingSerialTask: Task<URL?, Never>? = nil
 
     // MARK: - Public API
 
@@ -183,6 +186,31 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         return await withCheckedContinuation { (cont: CheckedContinuation<URL?, Never>) in
             self.extraContinuations.append(cont)
         }
+    }
+
+    /// Serial-safe entry point for the fallback path. Unlike `extractHLSURL`, this method
+    /// uses a task-chain to guarantee strict sequential execution: each call awaits the
+    /// previous `serialExtract` task before starting a new extraction. This prevents N
+    /// concurrent `race failed` handlers (across any mix of video IDs) from all waking
+    /// simultaneously and cancelling each other via `finish(url: nil)`.
+    ///
+    /// Pattern: each call captures the previous pending task, creates a new task that
+    /// awaits the previous one, then calls `extractHLSURL`. Since all callers are on
+    /// the `@MainActor`, the `pendingSerialTask` assignment is safe.
+    func serialExtract(videoId: String) async -> URL? {
+        let previousTask = pendingSerialTask
+        let newTask = Task { @MainActor [weak self] in
+            // Wait for the previous serial extraction to complete before starting ours.
+            // This prevents the cancel-chain: finish(url:nil) at the top of extractHLSURL
+            // cancels any pending continuation, so we must not call extractHLSURL until
+            // the previous extraction has already resolved and cleared its continuation.
+            _ = await previousTask?.value
+            guard let self else { return Optional<URL>.none }
+            extractLog.notice("[webView] serialExtract(\(videoId as NSString)): starting (previous task done)")
+            return await self.extractHLSURL(videoId: videoId)
+        }
+        pendingSerialTask = newTask
+        return await newTask.value
     }
 
     // MARK: - EJS Solver Scripts
