@@ -298,7 +298,10 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
         // Only #EXT-X-MEDIA playlist URIs are rewritten normally. Segment URLs inside rendition
         // playlists remain https:// and are served natively by AVPlayer (binary media data
         // cannot be routed through AVAssetResourceLoaderDelegate without -12881).
-        // #EXT-X-STREAM-INF variant URIs are left as https:// UNLESS poToken is set (see above).
+        // fix22: #EXT-X-STREAM-INF variant URIs are now ALWAYS rewritten to the proxy scheme
+        // so that AVFoundation fetches variant playlists via the proxy with desktop-Safari UA
+        // regardless of whether a poToken is available. When poToken is also set, Step 4
+        // additionally injects pot= into every segment URL within those variant playlists.
         if isMasterManifest {
             let lines = text.components(separatedBy: "\n")
             // Diagnostic: log first #EXT-X-MEDIA:TYPE=AUDIO line to verify URI quote format.
@@ -307,9 +310,8 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
             }
             var audioGroupCount = 0
             var variantCount = 0
-            let hasPoToken = poToken != nil
             let rewrittenLines: [String] = lines.map { line in
-                guard line.hasPrefix("#EXT-X-MEDIA:") || (!line.hasPrefix("#") && hasPoToken) else { return line }
+                guard line.hasPrefix("#EXT-X-MEDIA:") || !line.hasPrefix("#") else { return line }
                 // Rewrite #EXT-X-MEDIA playlist URIs to proxy scheme (audio renditions).
                 if line.hasPrefix("#EXT-X-MEDIA:") {
                     if line.contains("URI=\"https://") {
@@ -321,10 +323,13 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
                     }
                     return line
                 }
-                // When poToken is set: rewrite #EXT-X-STREAM-INF variant URLs to proxy scheme
-                // so the proxy intercepts each quality playlist and injects pot= into segment URLs.
+                // fix22: Always rewrite #EXT-X-STREAM-INF variant URLs to proxy scheme so that
+                // AVFoundation fetches variant playlists via the proxy with desktop-Safari UA.
+                // Without this, AVFoundation uses iOS UA and manifest.googlevideo.com rejects
+                // the request with 403 when no poToken is available. When poToken is set,
+                // Step 4 additionally injects pot= into segment URLs within the variant playlist.
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if hasPoToken && !trimmed.isEmpty && trimmed.hasPrefix("https://") {
+                if !trimmed.isEmpty && trimmed.hasPrefix("https://") {
                     variantCount += 1
                     return trimmed.replacingOccurrences(of: "https://", with: "\(proxyScheme)://")
                 }
@@ -389,29 +394,27 @@ final class YTHLSProxyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecke
         // Step 4: For variant quality playlists (non-master), inject pot= into segment URLs.
         // When poToken is set, AVFoundation routes variant playlist requests through this proxy
         // (because the master manifest rewriting in Step 2 converted variant URLs to proxy scheme).
-        // Here, we append ?pot=<token> to every segment URL in the variant playlist so that
-        // AVFoundation's native CDN fetch for each segment includes the BotGuard token.
-        // Segments remain https:// (NOT converted to proxy scheme) to avoid -12881.
-        // This enables rqh=1 HLS segments from the WEB client to be served with pot= auth.
+        // Here, we append ?pot=<token> to every segment URL in the variant playlist.
+        // NOTE: segments must remain https:// — AVAssetResourceLoaderDelegate cannot serve binary
+        // segment data (causes -12881 / -12753 / -12860 errors). AVPlayer fetches https:// segments
+        // natively; the pot= token in the URL query string authenticates the CDN request directly.
+        // When pot=nil, segments remain https:// unchanged — the CDN either accepts them with a warm
+        // session or falls back to another path. fix22a already proxies variant playlists regardless
+        // of pot=, so the UA-rejection issue is limited to individual segment fetches.
         if !isMasterManifest, let pot = poToken {
             let lines = text.components(separatedBy: "\n")
             var injectedCount = 0
             let patchedLines: [String] = lines.map { line in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return line }
-                // Segment URL: append pot= AND proxy via ytwebhls:// so URLSession
-                // sends youtube.com cookies (VISITOR_INFO1_LIVE) cross-domain to
-                // googlevideo.com — required by CDN to validate rqh=1 segment auth.
+                // Segment URL: append pot= and keep as https:// for native AVPlayer fetch.
+                // CDN validates rqh=1 segment auth via pot= query param (no proxy needed).
                 let sep = trimmed.contains("?") ? "&" : "?"
-                let withPot = trimmed + "\(sep)pot=\(pot)"
                 injectedCount += 1
-                if withPot.hasPrefix("https://") {
-                    return "\(proxyScheme)://" + withPot.dropFirst("https://".count)
-                }
-                return withPot
+                return trimmed + "\(sep)pot=\(pot)"
             }
             if injectedCount > 0 {
-                proxyLog.notice("[HLSProxy] pot= injected into \(injectedCount) segment URL(s) in variant playlist")
+                proxyLog.notice("[HLSProxy] pot= injected into \(injectedCount) segment URL(s) in variant playlist (https:// native)")
                 text = patchedLines.joined(separator: "\n")
             }
         }

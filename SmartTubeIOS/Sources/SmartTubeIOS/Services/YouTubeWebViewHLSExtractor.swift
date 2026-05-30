@@ -92,7 +92,7 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         // extractHLSURL which resets extractedPoToken = nil at line 117. Capturing into a
         // local `let` before any `await` holds the value regardless of subsequent resets.
         let capturedPoToken = shared.extractedPoToken
-        await VideoPreloadCache.shared.store(wkHLSManifestURL: url, for: videoId)
+        await VideoPreloadCache.shared.store(wkHLSManifestURL: url, for: videoId, isPreWarm: true)
         if let pot = capturedPoToken {
             await VideoPreloadCache.shared.store(wkHLSPoToken: pot, for: videoId)
         }

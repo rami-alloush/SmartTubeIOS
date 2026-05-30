@@ -108,6 +108,11 @@ public actor VideoPreloadCache {
     /// at the start of each new extractHLSURL call, so Phase -1a can always retrieve
     /// the preWarm-extracted token regardless of when wkHLSEarlyTask resets the field.
     private var wkHLSPoTokenCache: [String: String]                             = [:]
+    /// Tracks whether the wkHLS URL was stored by a background preWarm extraction (true)
+    /// or by a live race playback path (false). Phase -1a skips the probe for preWarm + pot=nil
+    /// entries because preWarm URLs contain `pfa/1` in variant playlist paths, which causes
+    /// segment-level 403s when no pot= is available. Live-race URLs do not have this restriction.
+    private var wkHLSIsPreWarmCache: [String: Bool]                             = [:]
 
     // MARK: - Access order (LRU)
 
@@ -404,9 +409,19 @@ public actor VideoPreloadCache {
     /// Stores the WKWebView-extracted HLS master manifest URL for a video.
     /// TTL matches the `expire=` lifetime of signed manifest URLs (~6h) with a 2h safety margin.
     /// NOT subject to consume() eviction — survives across multiple load() calls.
-    public func store(wkHLSManifestURL url: URL, for videoId: String) {
-        cacheLog.notice("[store] wkHLS \(videoId) url=\(url.absoluteString.prefix(80))")
+    /// - Parameter isPreWarm: Pass `true` when called from background `preWarm()` extraction,
+    ///   `false` when called from a live race playback path (tryWebViewHLS / Path B win).
+    ///   Phase -1a consults this flag to skip the HEAD probe for preWarm + pot=nil entries.
+    public func store(wkHLSManifestURL url: URL, for videoId: String, isPreWarm: Bool = false) {
+        cacheLog.notice("[store] wkHLS \(videoId) origin=\(isPreWarm ? "preWarm" : "liveRace") url=\(url.absoluteString.prefix(80))")
         wkHLSCache[videoId] = CacheEntry(value: url, storedAt: .init(), ttl: 4 * 3_600)
+        wkHLSIsPreWarmCache[videoId] = isPreWarm
+    }
+
+    /// Returns `true` when the cached wkHLS URL was stored by a background preWarm extraction.
+    /// Returns `false` for live-race extracted URLs or when no URL is cached.
+    public func cachedWKHLSIsPreWarm(for videoId: String) -> Bool {
+        wkHLSIsPreWarmCache[videoId] ?? false
     }
 
     /// Returns the cached WKWebView HLS master manifest URL if still within TTL, else nil.
@@ -417,6 +432,15 @@ public actor VideoPreloadCache {
             return nil
         }
         return entry.value
+    }
+
+    /// Returns true if the cached WKWebView HLS URL was stored within the last `seconds` seconds.
+    /// Phase -1a uses this to skip the HEAD probe for recently-extracted URLs — the URL is
+    /// guaranteed fresh (CDN session active) and the probe round-trip (~0.22s) is wasted work.
+    /// Default threshold: 10s (covers the double-preWarm window before the heartbeat fires).
+    public func isWKHLSURLFresh(for videoId: String, within seconds: TimeInterval = 10) -> Bool {
+        guard let entry = wkHLSCache[videoId] else { return false }
+        return Date().timeIntervalSince(entry.storedAt) < seconds
     }
 
     /// Stores the BotGuard pot= token that accompanied the WKWebView HLS URL extraction.
@@ -466,6 +490,7 @@ public actor VideoPreloadCache {
         cacheLog.notice("[evict] 403 — invalidating wkHLSCache for \(videoId, privacy: .public)")
         wkHLSCache.removeValue(forKey: videoId)
         wkHLSPoTokenCache.removeValue(forKey: videoId)
+        wkHLSIsPreWarmCache.removeValue(forKey: videoId)
     }
 
     // MARK: - Private: prefetch implementation

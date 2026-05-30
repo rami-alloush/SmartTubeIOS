@@ -68,6 +68,17 @@ public actor InnerTubeAPI {
         return poToken != nil && poTokenVideoId == videoId
     }
 
+    /// Returns the cached PO token for `videoId`, or nil if none is available.
+    /// Phase -1a uses this to recover the BotGuard-minted token when
+    /// `VideoPreloadCache.wkHLSPoTokenCache` is empty (e.g. for videos that have no
+    /// `serviceIntegrityDimensions.poToken` in their player API response — the WKWebView
+    /// extractor stores nil in the cache, but BotGuard may have minted a token separately
+    /// during the 2 s prefetchPoToken window in loadAsync).
+    public func currentPoToken(for videoId: String) -> String? {
+        guard poTokenVideoId == videoId else { return nil }
+        return poToken
+    }
+
     /// Fetches a PO token from the configured provider in the background and caches it
     /// in `poToken`/`poTokenVideoId`. Call this fire-and-forget when starting a video load
     /// so the token is available for subsequent retry attempts without blocking the

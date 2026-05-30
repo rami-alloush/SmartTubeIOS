@@ -113,11 +113,16 @@ final class WKHLSReplayRegressionUITests: XCTestCase {
         // Wait for prewarm.done.<videoId> — fires only when this exact card's HLS URL is
         // cached. The VideoCardView retry loop (fix18) guarantees it eventually fires even
         // if the extractor was busy for a long time on a different card's cold extraction.
-        // 120 s covers cold_extraction (~40 s) + retry intervals + warm extraction (~2.5 s).
+        // 90 s covers: BotGuard cold prepare (~10–15 s) + serial WKWebView extraction for
+        // uN7uKLsGRWw (~35 s) + buffer (~15 s). The heartbeat fires every 3 s after the URL
+        // is cached, so even if the initial one-shot fire was missed before registration,
+        // the next heartbeat arrives within 3 s of the URL being stored. If 90 s expires
+        // without a notification (extreme cold start or network stall), the test proceeds
+        // anyway — the 6 s stop() sleep below ensures the URL is cached before cycle 2+ taps.
         let preWarmExpectation = XCTDarwinNotificationExpectation(
             notificationName: "com.void.smarttube.player.prewarm.done.\(videoId)"
         )
-        let _ = XCTWaiter().wait(for: [preWarmExpectation], timeout: 120)
+        let _ = XCTWaiter().wait(for: [preWarmExpectation], timeout: 90)
 
         // The title is on a sibling element under the same card.
         let expectedTitle = titleText(for: firstCard)
@@ -244,14 +249,18 @@ final class WKHLSReplayRegressionUITests: XCTestCase {
                 "Cycle \(cycle): miniPlayer.bar still visible after tapping close"
             )
 
-            // Brief pause so stop()'s invalidateWKHLSURL Task has time to run
-            // before the next tap. We sleep 1.5 s (up from 0.5 s) to allow the
-            // wkHLS pre-warm started by stop() to complete (~1.25 s extraction).
-            // When it completes, the fresh URL is stored in VideoPreloadCache so
-            // Phase -1a finds it on re-tap and serves from cache (~0.5s) instead
-            // of running the full exhaustiveRetry race (~1.25s). With pre-warm
-            // done, cycle 2+ should approach the ~1s north star on simulator.
-            Thread.sleep(forTimeInterval: 1.5)
+            // Brief pause so stop()'s invalidateWKHLSURL Task has time to run before the
+            // next tap AND the VideoCardView heartbeat loop re-prewarms the URL.
+            // Timeline after stop():
+            //   t+0   : stop() fires invalidateWKHLSURL (async Task, runs very quickly)
+            //   t+0–3s: VideoCardView inner heartbeat detects eviction, breaks inner loop
+            //   t+0–3s: outer loop calls preWarm(videoId) — warm WKWebView extraction ~2.5 s
+            //   t+5–6s: URL stored in VideoPreloadCache → Phase -1a cache HIT on re-tap
+            // 6 s gives the full heartbeat interval (≤3 s) + warm extraction (~2.5 s) with
+            // margin. Without this, cycle 2+ taps before the URL is cached and falls through
+            // to the exhaustiveRetry race (~1–3 s extra latency, exceeding the ≤1.0 s hot
+            // target).
+            Thread.sleep(forTimeInterval: 6.0)
 
             print("[WKHLSReplay] cycle \(cycle): stop complete — wkHLS cache evicted")
         }

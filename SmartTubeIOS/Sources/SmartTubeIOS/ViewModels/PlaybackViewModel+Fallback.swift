@@ -39,6 +39,13 @@ extension PlaybackViewModel {
         // master manifest URL for this video was stored by a prior session or neighbour
         // pre-extraction. Falls through to live WKWebView extraction if the URL has expired
         // or if tryWebViewHLS fails (e.g. 403 on an expired signed URL).
+        //
+        // Note: for preWarm origin + pot=nil videos (e.g. uN7uKLsGRWw), tryWebViewHLS will
+        // fail (~1.32 s) because pfa/1 variant playlist segments need pot= or a warm CDN
+        // session. However, this failure is USEFUL: it gives wkHLSEarlyTask (launched by
+        // loadAsync concurrently) ~1.78 s of head start so Path B wins immediately after
+        // Phase -1a fails. Do NOT skip Phase -1a for preWarm+pot=nil — doing so removes the
+        // concurrent overlap and forces Path B to wait the full ~2.17 s alone, costing ~0.6 s.
         if let cachedHLSURL = await VideoPreloadCache.shared.cachedWKHLSURL(for: video.id) {
             playerLog.notice("[wkHLS] cached HLS URL found — probing validity")
             let nSolver = YouTubeWebViewHLSExtractor.shared.extractedNSolver
@@ -48,8 +55,34 @@ extension PlaybackViewModel {
             // before this point, so extractedPoToken is always nil here. The cache entry is
             // written by preWarm() AFTER extraction completes and is only evicted together
             // with the HLS URL itself — so it reliably holds the preWarm-extracted token.
-            let capturedPoToken = await VideoPreloadCache.shared.cachedPoToken(for: video.id)
-            let probeValid = await isWKHLSURLValid(cachedHLSURL)
+            // fix24: Fall back to InnerTubeAPI's BotGuard-minted token when VideoPreloadCache
+            // has no pot=. For videos with no serviceIntegrityDimensions.poToken (e.g.
+            // uN7uKLsGRWw), preWarm stores nil in wkHLSPoTokenCache but BotGuard may have
+            // minted a valid CDN token during loadAsync's 2 s prefetchPoToken window. Using
+            // this token allows the proxy's Step 4 to inject pot= into segment URLs so the
+            // CDN accepts them without iOS UA rejection.
+            var capturedPoToken = await VideoPreloadCache.shared.cachedPoToken(for: video.id)
+            if capturedPoToken == nil {
+                capturedPoToken = await api.currentPoToken(for: video.id)
+                if let pot = capturedPoToken {
+                    playerLog.notice("[wkHLS/fix24] using InnerTubeAPI pot= (\(pot.count) chars) as Phase -1a fallback for \(video.id as NSString)")
+                }
+            }
+            // fix25: Skip the HEAD probe if the URL was stored within the last 10 s.
+            // The double-prewarm in VideoCardView ensures the cached URL is from a fresh
+            // WKWebView session (< 1s old when the heartbeat fires). A fresh URL's CDN
+            // session is guaranteed active — probing wastes ~0.22s that the user perceives.
+            // For older URLs (> 10s), keep the probe to detect expired manifest URLs early.
+            let urlIsFresh = await VideoPreloadCache.shared.isWKHLSURLFresh(for: video.id, within: 10)
+            if urlIsFresh {
+                playerLog.notice("[wkHLS/fix25] fresh URL (< 10s) — skipping probe")
+            }
+            let probeValid: Bool
+            if urlIsFresh {
+                probeValid = true
+            } else {
+                probeValid = await isWKHLSURLValid(cachedHLSURL)
+            }
             if probeValid {
                 if await tryWebViewHLS(cachedHLSURL, nSolver: nSolver, poToken: capturedPoToken, for: video) {
                     playerLog.notice("[wkHLS] cached URL played — exhaustiveRetry done")

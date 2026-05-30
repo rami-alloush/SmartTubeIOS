@@ -113,6 +113,17 @@ public struct VideoCardView: View {
                     if await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) == nil {
                         await YouTubeWebViewHLSExtractor.preWarm(videoId: videoId)
                     }
+                    // fix25: For videos without WKWebView pot=, the CDN segment auth is tied to
+                    // the WKWebView player session from preWarm. By the time the user taps the
+                    // card, that session may have been invalidated (~10–30s old). A second
+                    // extraction immediately before the heartbeat fires overwrites the cache with
+                    // a fresh URL whose CDN session is < 1s old — Phase -1a can then succeed
+                    // (fresh xpc= → CDN accepts segments without pot=), giving cycle 1 ~1.4s.
+                    // For videos WITH pot=, the WKWebView token is durable → skip double-prewarm.
+                    if await VideoPreloadCache.shared.cachedPoToken(for: videoId) == nil,
+                       await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) != nil {
+                        await YouTubeWebViewHLSExtractor.preWarm(videoId: videoId)
+                    }
                     // Inner heartbeat: fire prewarm.done.<videoId> every 3 s while cached.
                     // The test registers its expectation AFTER finding the card in the UI
                     // (potentially after the initial fire). 3 s cadence guarantees a catch.
