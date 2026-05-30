@@ -355,7 +355,18 @@ extension PlaybackViewModel {
         if wkHLSEarlyTask == nil {
             wkHLSEarlyTaskVideoId = capturedVideoIdForHLS
             wkHLSEarlyTask = Task { @MainActor in
-                await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: capturedVideoIdForHLS)
+                // fix26b: If VideoCardView's second serialExtract just stored a fresh URL
+                // (< 5 s ago), return it directly WITHOUT calling serialExtract. Calling
+                // serialExtract would invoke extractHLSURL → wv.load() which navigates
+                // the WKWebView and INVALIDATES the CDN session the extraction established.
+                // By skipping serialExtract the WKWebView stays on the video page, its CDN
+                // session remains active, and Phase -1a can load segments without pot=.
+                if await VideoPreloadCache.shared.isWKHLSURLFresh(for: capturedVideoIdForHLS, within: 5),
+                   let freshCachedURL = await VideoPreloadCache.shared.cachedWKHLSURL(for: capturedVideoIdForHLS) {
+                    playerLog.notice("[fix26b/earlyTask] returning pre-baked URL (< 5 s) — no wv.load(), CDN session preserved")
+                    return freshCachedURL
+                }
+                return await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: capturedVideoIdForHLS)
             }
         }
         #endif

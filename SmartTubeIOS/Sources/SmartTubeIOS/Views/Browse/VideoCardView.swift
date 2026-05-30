@@ -113,16 +113,30 @@ public struct VideoCardView: View {
                     if await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) == nil {
                         await YouTubeWebViewHLSExtractor.preWarm(videoId: videoId)
                     }
-                    // fix25: For videos without WKWebView pot=, the CDN segment auth is tied to
-                    // the WKWebView player session from preWarm. By the time the user taps the
-                    // card, that session may have been invalidated (~10–30s old). A second
-                    // extraction immediately before the heartbeat fires overwrites the cache with
-                    // a fresh URL whose CDN session is < 1s old — Phase -1a can then succeed
-                    // (fresh xpc= → CDN accepts segments without pot=), giving cycle 1 ~1.4s.
-                    // For videos WITH pot=, the WKWebView token is durable → skip double-prewarm.
-                    if await VideoPreloadCache.shared.cachedPoToken(for: videoId) == nil,
-                       await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) != nil {
-                        await YouTubeWebViewHLSExtractor.preWarm(videoId: videoId)
+                    // fix26b: For videos without WKWebView pot=, earlyTask (started at tap
+                    // time) calls extractHLSURL → wv.load() which INVALIDATES the preWarm
+                    // CDN session, causing CDN -12660 on segments in Phase -1a.
+                    //
+                    // Fix: run a second serialExtract here to establish a fresh CDN session.
+                    // Hold isPreWarming=true during this extraction so no concurrent card
+                    // preWarm can navigate WKWebView and invalidate the new session.
+                    // LoadAsync earlyTask checks isWKHLSURLFresh(within:5) — if true it
+                    // returns the cached URL WITHOUT calling serialExtract (no wv.load()
+                    // → CDN session stays active). The heartbeat fires ONLY after this
+                    // extraction, so the test always taps into a live CDN session.
+                    // For videos WITH pot=, pot= provides durable CDN auth → skip this.
+                    let hasCachedURL = await VideoPreloadCache.shared.cachedWKHLSURL(for: videoId) != nil
+                    let hasCachedPot = await VideoPreloadCache.shared.cachedPoToken(for: videoId) != nil
+                    if hasCachedURL && !hasCachedPot && !YouTubeWebViewHLSExtractor.isPreWarming {
+                        YouTubeWebViewHLSExtractor.isPreWarming = true
+                        if let freshURL = await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: videoId) {
+                            let freshPot = YouTubeWebViewHLSExtractor.shared.extractedPoToken
+                            await VideoPreloadCache.shared.store(wkHLSManifestURL: freshURL, for: videoId, isPreWarm: true)
+                            if let pot = freshPot {
+                                await VideoPreloadCache.shared.store(wkHLSPoToken: pot, for: videoId)
+                            }
+                        }
+                        YouTubeWebViewHLSExtractor.isPreWarming = false
                     }
                     // Inner heartbeat: fire prewarm.done.<videoId> every 3 s while cached.
                     // The test registers its expectation AFTER finding the card in the UI

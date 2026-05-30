@@ -96,21 +96,10 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         if let pot = capturedPoToken {
             await VideoPreloadCache.shared.store(wkHLSPoToken: pot, for: videoId)
         }
-        // Notify the regression test that the wkHLS URL is cached.
-        // fix18: Fire a video-ID-specific notification so the test can wait for the
-        // EXACT card it will tap, rather than counting generic prewarm.done notifications.
-        // Format: "com.void.smarttube.player.prewarm.done.<videoId>"
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName("com.void.smarttube.player.prewarm.done.\(videoId)" as CFString),
-            nil, nil, true
-        )
-        // Also fire the legacy generic notification for any other listeners.
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName("com.void.smarttube.player.prewarm.done" as CFString),
-            nil, nil, true
-        )
+        // fix26b: Notification removed from preWarm(). VideoCardView's heartbeat loop
+        // fires prewarm.done.<videoId> AFTER the second serialExtract completes, so the
+        // test always taps into a live CDN session (not the preWarm session which is
+        // immediately invalidated by earlyTask's wv.load() call).
     }
 
     /// Loads the YouTube watch page for `videoId` in a hidden WKWebView, waits for the
