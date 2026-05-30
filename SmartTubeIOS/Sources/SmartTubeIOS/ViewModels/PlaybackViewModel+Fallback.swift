@@ -62,12 +62,14 @@ extension PlaybackViewModel {
             // this token allows the proxy's Step 4 to inject pot= into segment URLs so the
             // CDN accepts them without iOS UA rejection.
             var capturedPoToken = await VideoPreloadCache.shared.cachedPoToken(for: video.id)
-            if capturedPoToken == nil {
-                capturedPoToken = await api.currentPoToken(for: video.id)
-                if let pot = capturedPoToken {
-                    playerLog.notice("[wkHLS/fix24] using InnerTubeAPI pot= (\(pot.count) chars) as Phase -1a fallback for \(video.id as NSString)")
-                }
-            }
+            // NOTE: Do NOT fall back to InnerTubeAPI.currentPoToken (BotGuard token, ~107 chars).
+            // The BotGuard pot= is for youtubei/v1/player API auth; it is NOT a valid CDN
+            // segment token. Injecting it into segment URLs TRIGGERS pot= validation on CDN
+            // servers that would otherwise not enforce rqh=1 (returning HTTP 206). The result
+            // is that CDN rejects segments with the wrong pot= type (-12753/-12860) even though
+            // it would have accepted them with pot=nil. Only WKWebView-player-minted tokens
+            // (from serviceIntegrityDimensions.poToken) are valid CDN segment tokens.
+            // fix24 fallback removed in fix26.
             // fix25: Skip the HEAD probe if the URL was stored within the last 10 s.
             // The double-prewarm in VideoCardView ensures the cached URL is from a fresh
             // WKWebView session (< 1s old when the heartbeat fires). A fresh URL's CDN
