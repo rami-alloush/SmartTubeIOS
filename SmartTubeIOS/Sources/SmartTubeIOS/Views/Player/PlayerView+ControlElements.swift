@@ -757,9 +757,7 @@ extension PlayerControlsOverlay {
     }
 
     private var audioTrackLabel: String {
-        vm.selectedAudioTrack.map {
-            $0.isOriginal ? "\($0.name) (Original)" : $0.name
-        } ?? "Auto"
+        vm.selectedAudioTrack.map { $0.languageCode } ?? "Auto"
     }
 
     private var sleepTimerLabel: String {
@@ -777,6 +775,7 @@ extension PlayerControlsOverlay {
     ) -> some View {
         Button(action: action) {
             Label(label, systemImage: systemImage)
+                .lineLimit(1)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
