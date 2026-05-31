@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let syncLog = Logger(subsystem: appSubsystem, category: "iCloudSync")
 
 // MARK: - iCloudSyncManager
 //
@@ -79,8 +82,12 @@ public actor iCloudSyncManager {
     /// No-op when `syncEnabled` is `false`.
     public func push<T: Codable & Sendable>(_ store: SyncableStore, _ value: T) {
         guard syncEnabled else { return }
-        guard let data = try? JSONEncoder().encode(value) else { return }
-        kvStore.set(data, forKey: store.rawValue)
+        do {
+            let data = try JSONEncoder().encode(value)
+            kvStore.set(data, forKey: store.rawValue)
+        } catch {
+            syncLog.error("[\(store.rawValue, privacy: .public)] push failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Pull

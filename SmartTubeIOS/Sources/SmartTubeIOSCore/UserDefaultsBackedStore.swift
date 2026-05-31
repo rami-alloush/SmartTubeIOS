@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let storeLog = Logger(subsystem: appSubsystem, category: "UserDefaultsBackedStore")
 
 // MARK: - UserDefaultsBackedStore
 //
@@ -52,8 +55,12 @@ extension UserDefaultsBackedStore {
     /// then calls `afterPersist()` for optional side effects (e.g. iCloud push).
     /// Call after any mutation that should be durable.
     func persist() {
-        guard let data = try? JSONEncoder().encode(encodedValue()) else { return }
-        defaults.set(data, forKey: Self.defaultsKey)
-        afterPersist()
+        do {
+            let data = try JSONEncoder().encode(encodedValue())
+            defaults.set(data, forKey: Self.defaultsKey)
+            afterPersist()
+        } catch {
+            storeLog.error("[\(Self.defaultsKey, privacy: .public)] persist failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
