@@ -131,6 +131,7 @@ extension PlaybackViewModel {
         currentTime = 0
         duration = 0
         error = nil
+        playerInfo = nil
         controlsVisible = false
         controlsTimer?.cancel()
         seekDebounceTask?.cancel()
