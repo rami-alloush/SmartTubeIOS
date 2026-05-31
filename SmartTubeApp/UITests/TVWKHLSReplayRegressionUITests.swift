@@ -86,13 +86,15 @@ final class TVWKHLSReplayRegressionUITests: XCTestCase {
         let cardID = firstCard.identifier                              // "video.card.<videoId>"
         let videoId = String(cardID.dropFirst("video.card.".count))   // "<videoId>"
 
-        // Wait for prewarm.done.<videoId> before first tap (same as iOS variant).
+        // Short prewarm wait on tvOS — Darwin notification may not always fire;
+        // we don't rely on the specific card being pre-warmed since cycles
+        // navigate to whatever card is first in the feed.
         let preWarmExpectation = XCTDarwinNotificationExpectation(
             notificationName: "com.void.smarttube.player.prewarm.done.\(videoId)"
         )
-        let _ = XCTWaiter().wait(for: [preWarmExpectation], timeout: 90)
-
-        let expectedTitle = titleText(for: firstCard)
+        let _ = XCTWaiter().wait(for: [preWarmExpectation], timeout: 8)
+        // Brief additional settle time so feed layout is stable.
+        Thread.sleep(forTimeInterval: 2)
 
         var replayTimings: [(cycle: Int, elapsed: Double)] = []
 
@@ -212,14 +214,6 @@ final class TVWKHLSReplayRegressionUITests: XCTestCase {
             }
         }
         return cards.firstMatch
-    }
-
-    /// Returns the text of the `video.card.title` element inside the given card.
-    private func titleText(for card: XCUIElement) -> String? {
-        let titleEl = card.staticTexts["video.card.title"].firstMatch
-        if titleEl.exists { return titleEl.label }
-        let allTitles = app.staticTexts.matching(identifier: "video.card.title")
-        return allTitles.count > 0 ? allTitles.firstMatch.label : nil
     }
 }
 #endif
