@@ -564,6 +564,46 @@ extension InnerTubeAPI {
             return nil
         }()
 
+        // Members-only: drop tiles for membership-gated content before they enter the feed.
+        // YouTube surfaces these in home/subs/history but they are unplayable without a channel
+        // membership. Three detection signals are checked in priority order:
+        //  1. thumbnailOverlayMembershipBadgeRenderer present in tileHeader.thumbnailOverlays
+        //  2. metadataBadgeRenderer with MEMBERS_ONLY icon or "member" label in tileMetadata.badges
+        //  3. "Members only" text in any secondary tileMetadata line item (locale-aware fallback)
+        // Signal 3 is a text fallback for locales that translate the badge label.
+        let isMembersOnly: Bool = {
+            // Signal 1: membership badge overlay on the thumbnail
+            if overlays?.contains(where: { $0["thumbnailOverlayMembershipBadgeRenderer"] != nil }) == true {
+                return true
+            }
+            // Signal 2: metadataBadgeRenderer with MEMBERS_ONLY icon type or "member" label
+            if let badges = tileMetadata?["badges"] as? [[String: Any]] {
+                if badges.contains(where: { badge in
+                    guard let meta = badge["metadataBadgeRenderer"] as? [String: Any] else { return false }
+                    let iconType = (meta["icon"] as? [String: Any])?["iconType"] as? String ?? ""
+                    let label = meta["label"] as? String ?? ""
+                    return iconType.hasPrefix("MEMBERS") || label.lowercased().contains("member")
+                }) { return true }
+            }
+            // Signal 3: secondary metadata line text (badge text shown next to channel name/date)
+            if let lines = tileMetadata?["lines"] as? [[String: Any]], lines.count > 1 {
+                for line in lines.dropFirst() {
+                    guard let items = (line["lineRenderer"] as? [String: Any])?["items"] as? [[String: Any]] else { continue }
+                    for item in items {
+                        guard let text = (item["lineItemRenderer"] as? [String: Any])?["text"] as? [String: Any],
+                              let str = extractText(text)
+                        else { continue }
+                        if str.lowercased().contains("members only") { return true }
+                    }
+                }
+            }
+            return false
+        }()
+        if isMembersOnly {
+            tubeLog.notice("parseTileRenderer: dropping members-only tile id=\(videoId, privacy: .public)")
+            return nil
+        }
+
         return Video(
             id: videoId,
             title: title,
