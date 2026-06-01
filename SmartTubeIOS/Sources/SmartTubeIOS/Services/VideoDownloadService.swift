@@ -231,8 +231,17 @@ public final class VideoDownloadService {
             if #available(iOS 16.1, *) { await endLiveActivity(phase: .failed) }
             #endif
         } catch {
-            downloadLog.error("[download] ❌ failed: \(error.localizedDescription)")
-            state = .failed(error.localizedDescription)
+            let nsErr = error as NSError
+            downloadLog.error("[download] ❌ failed: domain=\(nsErr.domain) code=\(nsErr.code) desc=\(nsErr.localizedDescription)")
+            let userMessage: String
+            if nsErr.domain == "PHPhotosErrorDomain" {
+                userMessage = "Could not save to Photos. Please check Settings → Privacy & Security → Photos and allow SmartTube to add photos."
+            } else if let urlErr = error as? URLError, urlErr.code == .fileDoesNotExist {
+                userMessage = "Download failed — the video file was removed before saving. Please try again."
+            } else {
+                userMessage = error.localizedDescription
+            }
+            state = .failed(userMessage)
             #if os(iOS)
             if #available(iOS 16.1, *) { await endLiveActivity(phase: .failed) }
             #endif
@@ -435,11 +444,22 @@ public final class VideoDownloadService {
         let current = PHPhotoLibrary.authorizationStatus(for: .addOnly)
         switch current {
         case .authorized, .limited:
+            downloadLog.notice("[download] Photos access already authorized")
             return true
         case .notDetermined:
+            downloadLog.notice("[download] Requesting Photos add-only permission")
             let granted = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-            return granted == .authorized || granted == .limited
-        default:
+            let result = granted == .authorized || granted == .limited
+            downloadLog.notice("[download] Photos permission result: \(result ? "granted" : "denied")")
+            return result
+        case .denied:
+            downloadLog.error("[download] ❌ Photos access denied — user must enable in Settings → Privacy & Security → Photos")
+            return false
+        case .restricted:
+            downloadLog.error("[download] ❌ Photos access restricted by device policy")
+            return false
+        @unknown default:
+            downloadLog.error("[download] ❌ Unknown Photos authorization status")
             return false
         }
         #else
@@ -491,16 +511,31 @@ public final class VideoDownloadService {
     // the closures were actor-isolated (libdispatch queue assertion).
     private nonisolated func saveToPhotoLibrary(fileURL: URL) async throws {
         #if os(iOS)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            let desc = "Video file was removed before saving to Photos: \(fileURL.lastPathComponent)"
+            downloadLog.error("[download] ❌ \(desc)")
+            throw URLError(.fileDoesNotExist, userInfo: [NSLocalizedDescriptionKey: desc])
+        }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges({
                 PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: fileURL)
             }, completionHandler: { success, error in
                 if let error {
+                    let nsErr = error as NSError
+                    downloadLog.error("[download] ❌ PHPhotoLibrary save error: domain=\(nsErr.domain) code=\(nsErr.code) desc=\(nsErr.localizedDescription)")
                     continuation.resume(throwing: error)
                 } else if success {
                     continuation.resume()
                 } else {
-                    continuation.resume(throwing: URLError(.unknown))
+                    // success=false, error=nil means permission was denied or restricted at save time
+                    let desc = "Could not save to Photos. Please check Settings → Privacy & Security → Photos and allow SmartTube to add photos."
+                    downloadLog.error("[download] ❌ PHPhotoLibrary performChanges returned success=false with no error — likely permission denied")
+                    let permissionError = NSError(
+                        domain: "PHPhotosErrorDomain",
+                        code: PHPhotosError.accessRestricted.rawValue,
+                        userInfo: [NSLocalizedDescriptionKey: desc]
+                    )
+                    continuation.resume(throwing: permissionError)
                 }
             })
         }

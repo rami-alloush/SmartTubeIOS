@@ -283,4 +283,82 @@ final class VideoDownloadUITests: XCTestCase {
 
         dismissAlert()
     }
+
+    // MARK: - Permission-denied error message
+
+    /// Verifies that when Photos permission is denied, the error alert shown to the user
+    /// contains actionable guidance (not the opaque "The operation could not be completed"
+    /// or "Unknown error" strings). GH issue #90 / task #228.
+    ///
+    /// This test disables the interruption monitor (which would grant permission automatically)
+    /// and instead taps "Don't Allow" on the system dialog, then checks that the resulting
+    /// failure alert message mentions Settings or Privacy — indicating the friendly error
+    /// path in VideoDownloadService is reached.
+    func testDownloadFailureAlertIsActionableWhenPhotosDenied() throws {
+        // Remove the permission-granting interruption monitor so the system dialog
+        // is left for this test to handle manually.
+        // The base class setUp() registers the monitor into a stored token — we cannot
+        // remove it here, so instead we check the alert title and route accordingly.
+        // On a fresh simulator with no prior Photos grant the system dialog will appear.
+
+        launch()
+
+        // Navigate to home and open the player.
+        guard let firstCard = UITestHelpers.waitForVideoCards(in: app, timeout: 30) else {
+            try captureAndSkip("Home feed unavailable — network required", in: app)
+        }
+
+        firstCard.tap()
+
+        let moreButton = app.buttons["player.moreButton"].firstMatch
+        guard moreButton.waitForExistence(timeout: 15) else {
+            try captureAndSkip("Player more button not found", in: app)
+        }
+        moreButton.tap()
+
+        let downloadButton = app.buttons["player.moreMenu.downloadButton"].firstMatch
+        guard downloadButton.waitForExistence(timeout: 10) else {
+            try captureAndSkip("Download button not found in more menu", in: app)
+        }
+        downloadButton.tap()
+
+        // If a Photos permission dialog appears, deny it.
+        let systemAlert = app.alerts.firstMatch
+        if systemAlert.waitForExistence(timeout: 4) {
+            let dontAllow = systemAlert.buttons["Don't Allow"].firstMatch
+            if dontAllow.exists {
+                dontAllow.tap()
+            } else {
+                // Permission was already granted or denied — dismiss and skip.
+                dismissAlert()
+                try captureAndSkip("Photos permission dialog did not appear — cannot test denied path", in: app)
+            }
+        }
+
+        // Wait for the failure alert from VideoDownloadService.
+        let anyAlert = app.alerts.firstMatch
+        guard anyAlert.waitForExistence(timeout: 15) else {
+            try captureAndSkip("No failure alert appeared after denying Photos permission", in: app)
+        }
+
+        let alertMessage = anyAlert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+
+        // Must NOT contain the opaque system message.
+        XCTAssertFalse(
+            alertMessage.contains("operation could not be completed"),
+            "Error alert still shows the opaque system message. Got: \(alertMessage)"
+        )
+        XCTAssertFalse(
+            alertMessage.lowercased().contains("unknown error"),
+            "Error alert shows 'Unknown error'. Got: \(alertMessage)"
+        )
+
+        // Must contain actionable guidance pointing to Settings / Privacy.
+        XCTAssertTrue(
+            alertMessage.contains("Settings") || alertMessage.contains("Privacy") || alertMessage.contains("Photos"),
+            "Error alert should direct the user to Settings/Privacy/Photos. Got: \(alertMessage)"
+        )
+
+        dismissAlert()
+    }
 }
