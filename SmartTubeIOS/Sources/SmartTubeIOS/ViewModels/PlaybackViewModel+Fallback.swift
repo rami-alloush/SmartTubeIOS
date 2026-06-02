@@ -197,6 +197,12 @@ extension PlaybackViewModel {
 
         // Both race paths failed — fall back to serial WKWebView extraction in case
         // the early task returned nil (e.g. network timeout, JS player error).
+        // fix235: guard cancellation before expensive serial extraction — the exhaustiveRetry
+        // task may have been cancelled by a subsequent load() or stop() call.
+        guard !Task.isCancelled else {
+            playerLog.notice("⚠️ [webView] race failed but task is cancelled — skipping serial extraction for \(video.id)")
+            return
+        }
         playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
         // Use serialExtract() instead of extractHLSURL() directly: serialExtract awaits any
         // in-flight extraction (for any video) before starting a new one, preventing the
@@ -997,6 +1003,13 @@ extension PlaybackViewModel {
                 playerLog.notice("[\(label)] HLS ABR hints cleared (Auto quality, unconstrained)")
             }
         }
+        // fix235: Guard cancellation and video identity immediately before touching the player.
+        // Covers adaptive/muxed paths: a stale exhaustiveRetry (cancelled by load() or stop())
+        // must not swap the AVPlayerItem under a correctly-playing video.
+        guard !Task.isCancelled, currentVideo?.id == video.id else {
+            playerLog.notice("⚠️ [\(label)] fix235: task cancelled or video changed (current=\(currentVideo?.id ?? "nil") expected=\(video.id)) — aborting replaceCurrentItem")
+            return false
+        }
         player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()
 
@@ -1284,6 +1297,11 @@ extension PlaybackViewModel {
             Task { [weak compositeItem] in
                 try? await Task.sleep(for: .seconds(5))
                 compositeItem?.preferredForwardBufferDuration = 0
+            }
+            // fix235: Guard cancellation and video identity before touching the player.
+            guard !Task.isCancelled, currentVideo?.id == video.id else {
+                playerLog.notice("⚠️ [\(label)/adaptive] fix235: task cancelled or video changed (current=\(currentVideo?.id ?? "nil") expected=\(video.id)) — aborting replaceCurrentItem")
+                return false
             }
             player.replaceCurrentItem(with: compositeItem)
             itemObserverTask?.cancel()
@@ -2037,6 +2055,13 @@ extension PlaybackViewModel {
         // Start at 360p (fast first-frame) regardless of preferred quality.
         item.preferredMaximumResolution = CGSize(width: 640, height: 360)
         playerLog.notice("[webView/HLS] fast-start ABR: initial cap 360p → ramp to \(preferredHeight > 0 ? "\(preferredHeight)p" : "Auto") after readyToPlay")
+        // fix235: Final cancellation / video-identity check before touching the player.
+        // A stale exhaustiveRetry task (cancelled by a subsequent load() or stop()) must not
+        // call replaceCurrentItem — doing so would silently swap the visible video.
+        guard !Task.isCancelled, currentVideo?.id == video.id else {
+            playerLog.notice("⚠️ [webView/HLS] fix235: task cancelled or video changed (current=\(currentVideo?.id ?? "nil") expected=\(video.id)) — aborting replaceCurrentItem")
+            return false
+        }
         lastAttemptedStreamURL = masterURL
         player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()

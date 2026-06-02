@@ -61,6 +61,7 @@ extension PlaybackViewModel {
                 if let next = await CurrentQueueStore.shared.videoAt(index: idx + 1) {
                     playerLog.notice("playNext (queue): index=\(idx + 1) id=\(next.id)")
                     prefetchQueueVideo(at: idx + 2)
+                    CrashlyticsLogger.setIntendedVideo(id: next.id, title: next.title)
                     load(video: next)
                 } else {
                     playerLog.notice("playNext (queue): exhausted at index=\(idx), clearing")
@@ -76,6 +77,7 @@ extension PlaybackViewModel {
     private func playNextFromSuggestions() {
         guard let next = relatedVideos.first else { return }
         playerLog.notice("playNext: id=\(next.id)")
+        CrashlyticsLogger.setIntendedVideo(id: next.id, title: next.title)
         load(video: next)
     }
 
@@ -87,6 +89,7 @@ extension PlaybackViewModel {
         let prev = history.removeLast()
         hasPrevious = !history.isEmpty
         playerLog.notice("playPrevious: id=\(prev.id)")
+        CrashlyticsLogger.setIntendedVideo(id: prev.id, title: prev.title)
         load(video: prev)
     }
 
@@ -121,6 +124,7 @@ extension PlaybackViewModel {
                     let remaining = await CurrentQueueStore.shared.remainingVideos(after: idx)
                     if let pick = remaining.randomElement() {
                         playerLog.notice("Autoplay (queue, shuffle): random id=\(pick.id)")
+                        CrashlyticsLogger.setIntendedVideo(id: pick.id, title: pick.title)
                         load(video: pick)
                     } else {
                         playerLog.notice("Autoplay (queue, shuffle): exhausted, clearing")
@@ -131,6 +135,7 @@ extension PlaybackViewModel {
                     if let next = await CurrentQueueStore.shared.videoAt(index: idx + 1) {
                         playerLog.notice("Autoplay (queue): index=\(idx + 1) id=\(next.id)")
                         prefetchQueueVideo(at: idx + 2)
+                        CrashlyticsLogger.setIntendedVideo(id: next.id, title: next.title)
                         load(video: next)
                     } else {
                         playerLog.notice("Autoplay (queue): exhausted, clearing")
@@ -144,6 +149,7 @@ extension PlaybackViewModel {
         if settings.shuffleEnabled, !relatedVideos.isEmpty {
             let pick = relatedVideos[Int.random(in: 0..<relatedVideos.count)]
             playerLog.notice("Shuffle: loading id=\(pick.id)")
+            CrashlyticsLogger.setIntendedVideo(id: pick.id, title: pick.title)
             load(video: pick)
             return
         }
@@ -152,6 +158,7 @@ extension PlaybackViewModel {
             return
         }
         playerLog.notice("Autoplay: loading next video id=\(next.id)")
+        CrashlyticsLogger.setIntendedVideo(id: next.id, title: next.title)
         load(video: next)
     }
 }

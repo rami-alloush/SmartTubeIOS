@@ -1043,6 +1043,11 @@ extension PlaybackViewModel {
         #endif
         loadTask?.cancel()
         loadTask = nil
+        // fix235: Cancel any in-flight exhaustiveRetry so it cannot call replaceCurrentItem
+        // with a stale video after stop() returns. stop() does not spawn a new load so
+        // exhaustiveRetryTask is left dangling otherwise.
+        exhaustiveRetryTask?.cancel()
+        exhaustiveRetryTask = nil
         // Reset isLoading immediately so a same-video re-open via play() does not hit
         // the early-return guard in load() before the cancelled task cleans up.
         isLoading = false

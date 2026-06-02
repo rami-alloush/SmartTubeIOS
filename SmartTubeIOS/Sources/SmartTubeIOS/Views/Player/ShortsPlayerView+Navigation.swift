@@ -103,7 +103,9 @@ extension ShortsPlayerView {
     }
 
     func loadVideo(at index: Int) {
-        vm.load(video: videos[index])
+        let video = videos[index]
+        CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
+        vm.load(video: video)
         vm.setPlaybackSpeed(store.settings.playbackSpeed)
         vm.updateSettings(store.settings)
     }
