@@ -15,6 +15,7 @@ extension PlaybackViewModel {
     public func load(video: Video) {
         playerLog.notice("[load] load() called — id=\(video.id) currentVideo=\(self.currentVideo?.id ?? "nil") isLoading=\(self.isLoading) player.item=\(self.player.currentItem != nil)")
         videoLoadStartedAt = Date()
+        lastSuccessfulStreamType = "unknown"
         if currentVideo?.id == video.id, !isLoading {
             playerLog.notice("[load] re-opening same video \(video.id) — stop() may have deactivated AVAudioSession")
         } else if let prev = currentVideo, prev.id != video.id, !isLoading {
@@ -770,6 +771,20 @@ extension PlaybackViewModel {
                         let elapsedMs = Int(Date().timeIntervalSince(self.videoLoadStartedAt) * 1000)
                         playerLog.notice("✅ AVPlayerItem readyToPlay — video=\(self.currentVideo?.id ?? "nil") rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue) isAudioOnlyMode=\(self.isAudioOnlyMode)")
                         playerLog.notice("[benchmark] readyToPlay in \(elapsedMs) ms since load()")
+                        // Only set the stream type here if a fallback path hasn't already set it
+                        // (fallback paths set it in attemptURL/tryWebViewHLS readyToPlay handlers).
+                        if self.lastSuccessfulStreamType == "unknown" {
+                            self.lastSuccessfulStreamType = isHLS ? "primaryHLS" : "primaryDirect"
+                        }
+                        if elapsedMs > 4_000 {
+                            CrashlyticsLogger.recordSlowVideoLoad(
+                                videoId: self.currentVideo?.id ?? "unknown",
+                                elapsedMs: elapsedMs,
+                                streamType: self.lastSuccessfulStreamType,
+                                hasError: item.error != nil,
+                                errorDescription: item.error?.localizedDescription
+                            )
+                        }
                         // Refresh duration from the AVPlayerItem now that it is
                         // ready — the API metadata may have been absent (nil) or
                         // inaccurate, which would leave duration=0 and break scrubbing

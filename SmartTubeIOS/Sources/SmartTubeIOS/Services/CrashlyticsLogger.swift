@@ -98,6 +98,33 @@ struct CrashlyticsLogger: Sendable {
         crashlytics.record(error: error)
     }
 
+    /// Records a non-fatal Crashlytics event when time-to-first-frame exceeds 4 seconds.
+    /// Surfaces in the Firebase console under domain `SmartTube.SlowLoad` (code 4001),
+    /// tagged with the stream type and elapsed ms so we can correlate slow-load rate
+    /// with fallback path and network conditions.
+    static func recordSlowVideoLoad(
+        videoId: String,
+        elapsedMs: Int,
+        streamType: String,
+        hasError: Bool,
+        errorDescription: String? = nil
+    ) {
+        let crashlytics = Crashlytics.crashlytics()
+        crashlytics.setCustomValue(videoId,    forKey: "slow_load_video_id")
+        crashlytics.setCustomValue(elapsedMs,  forKey: "slow_load_ttff_ms")
+        crashlytics.setCustomValue(streamType, forKey: "slow_load_stream_type")
+        crashlytics.setCustomValue(hasError,   forKey: "slow_load_has_error")
+        if let desc = errorDescription {
+            crashlytics.setCustomValue(desc,   forKey: "slow_load_error_desc")
+        }
+        crashlytics.log("[SlowLoad] videoId=\(videoId) ttff=\(elapsedMs)ms stream=\(streamType) hasError=\(hasError)")
+        crashlytics.record(error: NSError(
+            domain: "SmartTube.SlowLoad",
+            code: 4001,
+            userInfo: [NSLocalizedDescriptionKey: "Slow video load: \(elapsedMs)ms (\(streamType))"]
+        ))
+    }
+
     /// Automatically records a diagnostic report when playback fails and the error is
     /// shown to the user. Uses domain `SmartTube.AutoDiagnostic` (code 1) so it appears
     /// as a distinct Firebase issue from user-triggered reports, making it easy to query

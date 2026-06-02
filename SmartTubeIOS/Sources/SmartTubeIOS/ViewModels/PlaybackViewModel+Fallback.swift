@@ -1014,6 +1014,7 @@ extension PlaybackViewModel {
                 loadAudioTracks(from: item)
                 needsQuickStartup = false
                 isLoading = false
+                lastSuccessfulStreamType = label
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
                 launchPhase2(video: video, info: info)
@@ -2040,6 +2041,7 @@ extension PlaybackViewModel {
                 loadAudioTracks(from: item)
                 needsQuickStartup = false
                 isLoading = false
+                lastSuccessfulStreamType = "webView/HLS"
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
                 qualityManager.isMuxedFallback = false

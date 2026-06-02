@@ -232,6 +232,9 @@ public final class PlaybackViewModel {
     @ObservationIgnored nonisolated(unsafe) var airPlayObserver: NSKeyValueObservation?
     /// Counts exhaustive retry cycles (0 = no retry yet). Set by exhaustiveRetry(video:originalError:).
     var retryAttempts: Int = 0
+    /// The stream type that produced the current AVPlayerItem, set by each successful load path.
+    /// Used by the slow-load Crashlytics event to identify which fallback path was used.
+    var lastSuccessfulStreamType: String = "unknown"
     /// Task running the exhaustive retry loop; cancelled on new load or retryLoad.
     var exhaustiveRetryTask: Task<Void, Never>?
     /// Set after a Cannot-Decode failure on the Auto HLS master — forwarded to qualityManager.
