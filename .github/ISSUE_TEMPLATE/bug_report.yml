@@ -78,6 +78,12 @@ body:
       label: Screenshots
       description: |
         **Please include a screenshot if at all possible — it dramatically speeds up diagnosis.**
+
+        For video playback bugs (wrong video loading, buffering, quality issues), enable **Stats for Nerds** before screenshotting:
+        - In the player, long-press (iOS/iPadOS) or press and hold Select (tvOS) to open the stats overlay.
+        - The overlay shows the **Video ID**, bitrate, codec, resolution, and any error code — this is the ground truth for what the player actually loaded, regardless of what the UI title shows.
+        - Include one screenshot per play attempt if the issue reproduces across multiple taps.
+
         Drag and drop images directly into this box, or paste from clipboard.
       placeholder: "Drag & drop screenshots here..."
     validations:

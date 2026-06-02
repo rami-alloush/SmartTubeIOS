@@ -235,6 +235,12 @@ public final class PlaybackViewModel {
     /// The stream type that produced the current AVPlayerItem, set by each successful load path.
     /// Used by the slow-load Crashlytics event to identify which fallback path was used.
     var lastSuccessfulStreamType: String = "unknown"
+    /// Elapsed ms from `load()` to the first `readyToPlay` (low-quality fast-start frame). 0 = not yet measured.
+    var timeToPlayMs: Int = 0
+    /// Elapsed ms from `load()` to the quality-ramp task firing (~readyToPlay + 800 ms). 0 = not yet measured.
+    var timeToHighQualityMs: Int = 0
+    /// Cache hit/miss summary set at load time (e.g. "pi:HIT wkHLS:MISS").
+    var cacheStatusSummary: String = ""
     /// Task running the exhaustive retry loop; cancelled on new load or retryLoad.
     var exhaustiveRetryTask: Task<Void, Never>?
     /// Set after a Cannot-Decode failure on the Auto HLS master — forwarded to qualityManager.

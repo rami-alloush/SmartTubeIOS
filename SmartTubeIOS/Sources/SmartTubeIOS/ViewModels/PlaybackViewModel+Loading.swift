@@ -17,6 +17,9 @@ extension PlaybackViewModel {
         playerLog.notice("[benchmark] load started — videoId=\(video.id) title=\(video.title)")
         videoLoadStartedAt = Date()
         lastSuccessfulStreamType = "unknown"
+        timeToPlayMs = 0
+        timeToHighQualityMs = 0
+        cacheStatusSummary = ""
         if currentVideo?.id == video.id, !isLoading {
             playerLog.notice("[load] re-opening same video \(video.id) — stop() may have deactivated AVAudioSession")
         } else if let prev = currentVideo, prev.id != video.id, !isLoading {
@@ -506,6 +509,8 @@ extension PlaybackViewModel {
             } else {
                 playerLog.notice("PREFETCH_MISS: \(video.id) — \(cacheVerdict)")
             }
+            let wkHLSCacheHit = await VideoPreloadCache.shared.cachedWKHLSURL(for: video.id) != nil
+            self.cacheStatusSummary = "pi:\(cached.playerInfo != nil ? "HIT" : "MISS") wkHLS:\(wkHLSCacheHit ? "HIT" : "MISS")"
 
             // Apply cached DeArrow overrides (community title / thumbnail timestamp).
             // Done immediately after consume() so VideoCardView can show the override
@@ -771,6 +776,7 @@ extension PlaybackViewModel {
                     switch status {
                     case .readyToPlay:
                         let elapsedMs = Int(Date().timeIntervalSince(self.videoLoadStartedAt) * 1000)
+                        self.timeToPlayMs = elapsedMs
                         playerLog.notice("✅ AVPlayerItem readyToPlay — video=\(self.currentVideo?.id ?? "nil") rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue) isAudioOnlyMode=\(self.isAudioOnlyMode)")
                         playerLog.notice("[benchmark] readyToPlay in \(elapsedMs) ms since load() — videoId=\(self.currentVideo?.id ?? "nil") title=\(self.currentVideo?.title ?? "nil")")
                         // Only set the stream type here if a fallback path hasn't already set it
@@ -832,6 +838,7 @@ extension PlaybackViewModel {
                             Task { [weak self, weak item] in
                                 try? await Task.sleep(for: .milliseconds(800))
                                 guard let self, !Task.isCancelled else { return }
+                                self.timeToHighQualityMs = Int(Date().timeIntervalSince(self.videoLoadStartedAt) * 1000)
                                 // Reset to system default so scrubbing has a comfortable
                                 // forward buffer after the first frame is on screen.
                                 item?.preferredForwardBufferDuration = 0

@@ -96,7 +96,12 @@ extension PlaybackViewModel {
             droppedFrames: droppedFrames,
             stalls: stalls,
             pendingQualityLabel: qualityManager.pendingQualityLabel,
-            reportID: CrashlyticsLogger.sessionReportID
+            reportID: CrashlyticsLogger.sessionReportID,
+            timeToPlayMs: timeToPlayMs,
+            timeToHighQualityMs: timeToHighQualityMs,
+            cacheStatus: cacheStatusSummary,
+            streamURL: lastAttemptedStreamURL.map { ($0.host ?? "") + $0.path } ?? "—",
+            streamType: lastSuccessfulStreamType
         )
     }
 
@@ -143,6 +148,16 @@ public struct StatsForNerdsSnapshot: Sendable {
     /// reports. Quote this when sending a diagnostic report so the developer can
     /// locate the exact session in Firebase.
     public var reportID: String
+    /// Elapsed ms from `load()` to the first `readyToPlay` (low-quality fast-start frame). 0 = not yet measured.
+    public var timeToPlayMs: Int
+    /// Elapsed ms from `load()` to the quality-ramp task firing (~readyToPlay + 800 ms). 0 = not yet measured.
+    public var timeToHighQualityMs: Int
+    /// Cache hit/miss summary at load time (e.g. "pi:HIT wkHLS:MISS").
+    public var cacheStatus: String
+    /// Host + path of the stream URL handed to AVPlayer (no query string). Empty when not yet loaded.
+    public var streamURL: String
+    /// Which loading path produced the current stream (e.g. "primaryHLS", "webView/HLS").
+    public var streamType: String
 
     public static let empty = StatsForNerdsSnapshot(
         videoId: "",
@@ -154,6 +169,11 @@ public struct StatsForNerdsSnapshot: Sendable {
         droppedFrames: 0,
         stalls: 0,
         pendingQualityLabel: "",
-        reportID: CrashlyticsLogger.sessionReportID
+        reportID: CrashlyticsLogger.sessionReportID,
+        timeToPlayMs: 0,
+        timeToHighQualityMs: 0,
+        cacheStatus: "",
+        streamURL: "",
+        streamType: ""
     )
 }
