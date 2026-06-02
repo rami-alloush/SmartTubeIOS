@@ -289,6 +289,8 @@ extension PlaybackViewModel {
         center.skipForwardCommand.removeTarget(nil)
         center.skipBackwardCommand.removeTarget(nil)
         center.changePlaybackPositionCommand.removeTarget(nil)
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.removeTarget(nil)
         #endif
     }
 
@@ -1069,6 +1071,13 @@ extension PlaybackViewModel {
             let capturedId = stoppedVideoId
             wkHLSEarlyTask = Task { @MainActor in
                 guard let url = await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: capturedId) else { return nil }
+                // Defense-in-depth: if load() for a different video cancelled this task
+                // between serialExtract's return and the store, bail rather than write
+                // a potentially stale URL into the cache under the wrong key.
+                guard !Task.isCancelled else {
+                    playerLog.notice("[fix10] pre-warm task was cancelled — not caching URL for \(capturedId)")
+                    return nil
+                }
                 // Store the fresh URL so Phase -1a serves from cache on re-tap.
                 await VideoPreloadCache.shared.store(wkHLSManifestURL: url, for: capturedId)
                 playerLog.notice("[fix10] wkHLS pre-warm complete — cached for \(capturedId)")
@@ -1094,6 +1103,8 @@ extension PlaybackViewModel {
         center.skipForwardCommand.removeTarget(nil)
         center.skipBackwardCommand.removeTarget(nil)
         center.changePlaybackPositionCommand.removeTarget(nil)
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.removeTarget(nil)
         #endif
         if let obs = audioSessionObserver {
             NotificationCenter.default.removeObserver(obs)

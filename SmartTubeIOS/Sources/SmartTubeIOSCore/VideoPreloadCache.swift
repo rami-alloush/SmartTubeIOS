@@ -193,12 +193,12 @@ public actor VideoPreloadCache {
         authToken: String?,
         priority: PrefetchPriority = .visible
     ) {
-        // Prefetch temporarily disabled for manual testing — re-enable by restoring the
-        // original condition below.
-        return
+        // Global kill-switch: flip DebugFlags.cachingDisabled = true to suppress all prefetch
+        // during cold-start benchmarking without modifying call sites.
+        if DebugFlags.cachingDisabled { return }
         // UI-testing seam: `--uitesting-disable-prefetch` suppresses all background
         // prefetch so TTP benchmarks measure a cold player load with no cache warming.
-        // if ProcessInfo.processInfo.arguments.contains("--uitesting-disable-prefetch") { return }
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-disable-prefetch") { return }
         // Playlist IDs are not video IDs — skip them to avoid wasted /player calls.
         let isPlaylistId = videoId == "WL" || videoId == "LL" || videoId.hasPrefix("PL")
         if isPlaylistId { return }
@@ -336,6 +336,12 @@ public actor VideoPreloadCache {
     /// returned even when stale, with the type added to `staleFields` — so callers can
     /// use the value immediately and revalidate in the background.
     public func consume(videoId: String) -> CachedVideoData {
+        if DebugFlags.cachingDisabled {
+            cacheLog.notice("[consume] caching disabled — returning empty for \(videoId, privacy: .public)")
+            return CachedVideoData(playerInfo: nil, trackingURLs: nil, nextInfo: nil,
+                                   endCards: nil, sponsorSegments: nil, deArrowBranding: nil,
+                                   staleFields: [])
+        }
         touch(videoId)
         // Disk warm-up (Phase J): populate in-memory cache from disk on cold path.
         // Disk-loaded entries use storedAt: .distantPast so SWR treats them as stale
@@ -432,6 +438,7 @@ public actor VideoPreloadCache {
 
     /// Returns the cached WKWebView HLS master manifest URL if still within TTL, else nil.
     public func cachedWKHLSURL(for videoId: String) -> URL? {
+        if DebugFlags.cachingDisabled { return nil }
         guard let entry = wkHLSCache[videoId] else { return nil }
         if entry.isExpired {
             wkHLSCache.removeValue(forKey: videoId)
@@ -460,7 +467,8 @@ public actor VideoPreloadCache {
 
     /// Returns the cached pot= token for a video, or nil if none was stored.
     public func cachedPoToken(for videoId: String) -> String? {
-        wkHLSPoTokenCache[videoId]
+        if DebugFlags.cachingDisabled { return nil }
+        return wkHLSPoTokenCache[videoId]
     }
 
     // MARK: - Public: auth invalidation

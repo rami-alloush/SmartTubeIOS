@@ -58,6 +58,11 @@ final class YouTubeWebViewHLSExtractor: NSObject {
     /// extract has taken over and the serial task must await `pendingSerialTask`
     /// (the priority task) rather than call `extractHLSURL` and cancel it.
     private var serialTaskEpoch: Int = 0
+    /// The videoId passed to the most recent `priorityExtract` call.
+    /// Used by `serialExtract`'s stale-epoch branch to decide whether the priority
+    /// task's URL is safe to return: if the priority task was for a *different* video,
+    /// returning its URL would poison the caller's cache entry with the wrong stream.
+    private var pendingSerialTaskVideoId: String? = nil
 
     // MARK: - Public API
 
@@ -250,6 +255,7 @@ final class YouTubeWebViewHLSExtractor: NSObject {
     /// and each called `extractHLSURL`, cancelling `priorityExtract`'s active continuation).
     func priorityExtract(videoId: String) async -> URL? {
         serialTaskEpoch &+= 1
+        pendingSerialTaskVideoId = videoId
         let newTask = Task { @MainActor [weak self] in
             guard let self else { return Optional<URL>.none }
             extractLog.notice("[webView] priorityExtract(\(videoId as NSString)): starting immediately (user tap, bypasses chain)")
@@ -284,10 +290,18 @@ final class YouTubeWebViewHLSExtractor: NSObject {
             _ = await previousTask?.value
             guard let self else { return Optional<URL>.none }
             // Epoch check: if priorityExtract advanced the epoch while we were waiting,
-            // we are stale. Await the priority task instead of cancelling it.
+            // we are stale. Only yield to the priority task's URL if the priority task is
+            // for the *same* videoId — yielding a different video's URL would poison the
+            // caller's cache entry (fix10/preWarm) with the wrong stream.
             guard self.serialTaskEpoch == capturedEpoch else {
-                extractLog.notice("[webView] serialExtract(\(videoId as NSString)): stale epoch — yielding to priority task")
-                return await self.pendingSerialTask?.value
+                if self.pendingSerialTaskVideoId == videoId {
+                    extractLog.notice("[webView] serialExtract(\(videoId as NSString)): stale epoch, same video — yielding to priority task")
+                    return await self.pendingSerialTask?.value
+                } else {
+                    let priorityId = self.pendingSerialTaskVideoId ?? "nil"
+                    extractLog.notice("[webView] serialExtract(\(videoId as NSString)): stale epoch, priority is for different video (\(priorityId as NSString)) — returning nil to prevent cache poisoning")
+                    return nil
+                }
             }
             extractLog.notice("[webView] serialExtract(\(videoId as NSString)): starting (previous task done)")
             return await self.extractHLSURL(videoId: videoId)

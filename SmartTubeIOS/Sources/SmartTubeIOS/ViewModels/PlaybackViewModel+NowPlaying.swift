@@ -92,6 +92,14 @@ extension PlaybackViewModel {
             Task { @MainActor [weak self] in self?.seek(to: position) }
             return .success
         }
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in self?.playNext() }
+            return .success
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in self?.playPrevious() }
+            return .success
+        }
     }
 
     func updateNowPlayingInfo() {
@@ -113,10 +121,42 @@ extension PlaybackViewModel {
             info[MPMediaItemPropertyPlaybackDuration] = NSNumber(value: duration)
         }
         nowPlayingInfoCache = info
+
+        // Artwork via closure — set synchronously, no await → no accessQueue crash.
+        // MediaPlayer calls the closure on its own thread when it needs to render; we
+        // return cachedArtwork (nil until the background fetch completes, then the image).
+        if let thumbURL = video.thumbnailURL {
+            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { [weak self] _ in
+                self?.cachedArtwork
+            }
+            nowPlayingInfoCache[MPMediaItemPropertyArtwork] = artwork
+
+            // Kick off fetch only when the video changes to avoid redundant network hits.
+            if cachedArtworkVideoID != video.id {
+                cachedArtworkVideoID = video.id
+                cachedArtwork = nil
+                Task { [weak self, url = thumbURL, videoID = video.id] in
+                    guard let (data, _) = try? await URLSession.shared.data(from: url),
+                          let image = UIImage(data: data) else { return }
+                    await MainActor.run { [weak self] in
+                        guard let self, self.cachedArtworkVideoID == videoID else { return }
+                        self.cachedArtwork = image
+                        // Update the artwork key in the cache with the real image so the
+                        // next lock-screen render picks it up without the closure indirection.
+                        self.nowPlayingInfoCache[MPMediaItemPropertyArtwork] =
+                            MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                        self.setNowPlayingInfo(self.nowPlayingInfoCache)
+                    }
+                }
+            }
+        }
+
+        // Update next/previous button enabled state.
+        let center = MPRemoteCommandCenter.shared()
+        center.nextTrackCommand.isEnabled = hasNext
+        center.previousTrackCommand.isEnabled = hasPrevious
+
         setNowPlayingInfo(nowPlayingInfoCache)
-        // Artwork is intentionally omitted: fetching it requires an async Task,
-        // and calling MPNowPlayingInfoCenter after any `await` — regardless of
-        // threading wrapper — crashes on MediaPlayer's internal accessQueue.
     }
 
     func updateNowPlayingPlayback() {
@@ -126,6 +166,8 @@ extension PlaybackViewModel {
     }
 
     func clearNowPlayingInfo() {
+        cachedArtwork = nil
+        cachedArtworkVideoID = nil
         nowPlayingInfoCache = [:]
         setNowPlayingInfo(nil)
     }

@@ -77,7 +77,8 @@ public final class BotGuardClient: PoTokenProvider, @unchecked Sendable {
     public func token(for videoId: String) async throws -> String {
         // Return cached token if still valid — websafeFallbackToken from GenerateIT is
         // not video-specific so it can be reused across sequential video loads.
-        if let cached = cachedPoToken, let expiry = cachedPoTokenExpiry, Date() < expiry {
+        if !DebugFlags.cachingDisabled,
+           let cached = cachedPoToken, let expiry = cachedPoTokenExpiry, Date() < expiry {
             let ttlRemaining = Int(expiry.timeIntervalSinceNow)
             bgLog.notice("[BotGuard] ✅ cached PO token (ttl=\(ttlRemaining, privacy: .public)s) for \(videoId, privacy: .public)")
             return cached

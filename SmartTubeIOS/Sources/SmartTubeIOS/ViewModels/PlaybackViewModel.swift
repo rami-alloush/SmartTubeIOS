@@ -367,6 +367,14 @@ public final class PlaybackViewModel {
     // read-modify-write while MediaPlayer is processing on its accessQueue
     // causes EXC_BREAKPOINT. Mirror the dict locally instead.
     @ObservationIgnored var nowPlayingInfoCache: [String: Any] = [:]
+    // Cached thumbnail for MPMediaItemArtwork. Written from a background URLSession task;
+    // read from MediaPlayer's internal artwork-closure thread. nonisolated(unsafe) is
+    // intentional: UIImage is immutable after creation and the worst-case race is that
+    // MediaPlayer gets nil on the first render (it will retry on the next state update).
+    #if canImport(UIKit)
+    nonisolated(unsafe) var cachedArtwork: UIImage? = nil
+    @ObservationIgnored var cachedArtworkVideoID: String? = nil
+    #endif
 
     // MARK: - Dependencies
 
@@ -446,6 +454,8 @@ public final class PlaybackViewModel {
         center.skipForwardCommand.removeTarget(nil)
         center.skipBackwardCommand.removeTarget(nil)
         center.changePlaybackPositionCommand.removeTarget(nil)
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.removeTarget(nil)
         #endif
     }
 
