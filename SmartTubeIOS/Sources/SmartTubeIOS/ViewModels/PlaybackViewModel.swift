@@ -425,6 +425,12 @@ public final class PlaybackViewModel {
         sbm.player = player
         aqm.delegate = self
         atm.delegate = self
+
+        // Auto-enable Stats for Nerds during UI test runs so tests don't need to
+        // navigate the more menu manually. Activated by `--uitesting-stats-for-nerds`.
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-stats-for-nerds") {
+            statsForNerdsVisible = true
+        }
     }
 
     deinit {

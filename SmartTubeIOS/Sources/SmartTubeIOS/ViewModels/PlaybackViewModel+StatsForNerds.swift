@@ -100,7 +100,10 @@ extension PlaybackViewModel {
             timeToPlayMs: timeToPlayMs,
             timeToHighQualityMs: timeToHighQualityMs,
             cacheStatus: cacheStatusSummary,
-            streamURL: lastAttemptedStreamURL.map { ($0.host ?? "") + $0.path } ?? "—",
+            streamURL: lastAttemptedStreamURL.map {
+                let full = ($0.host ?? "") + $0.path
+                return full.count > 80 ? String(full.prefix(80)) + "…" : full
+            } ?? "—",
             streamType: lastSuccessfulStreamType
         )
     }

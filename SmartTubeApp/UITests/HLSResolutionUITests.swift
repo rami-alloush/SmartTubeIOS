@@ -95,16 +95,14 @@ final class HLSResolutionUITests: XCTestCase {
         }
         UITestHelpers.assertNoPlayerErrorBanner(in: app, videoTitle: "HLS resolution")
 
-        // ── Step 3: Enable Stats for Nerds ───────────────────────────────────
-        try enableStatsForNerds()
-        // Let the stats observer (fires every 0.5 s) populate the resolution row.
-        Thread.sleep(forTimeInterval: 2.5)
+        // Stats for Nerds is auto-enabled by --uitesting-stats-for-nerds; the observer
+        // fires every 0.5 s and will have populated the resolution row by now.
 
-        // ── Step 4: Read resolution from Stats overlay ────────────────────────
+        // ── Step 3: Read resolution from Stats overlay ────────────────────────
         let resLabel = currentResolutionLabel() ?? "nil"
         captureState("resolution: \(resLabel)", in: app)
 
-        // ── Step 5: Assert resolution > 360p ─────────────────────────────────
+        // ── Step 4: Assert resolution ≥720p ─────────────────────────────────
         let height = resolutionHeight(from: resLabel)
         XCTAssertGreaterThanOrEqual(
             height, Self.minimumHeight,
@@ -116,32 +114,6 @@ final class HLSResolutionUITests: XCTestCase {
     }
 
     // MARK: - Helpers
-
-    private func enableStatsForNerds() throws {
-        showControls()
-        let moreBtn = app.buttons["player.moreButton"].firstMatch
-        guard moreBtn.waitForExistence(timeout: 8) && moreBtn.isHittable else {
-            try captureAndSkip("player.moreButton not found or not hittable", in: app)
-        }
-        moreBtn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-
-        let statsRow = app.buttons["player.moreMenu.statsForNerds"].firstMatch
-        guard statsRow.waitForExistence(timeout: 5) else {
-            try captureAndSkip("player.moreMenu.statsForNerds not found", in: app)
-        }
-        statsRow.tap()
-        // More menu auto-closes; Stats overlay appears next frame.
-    }
-
-    /// Taps the player surface until the controls overlay (more button) is hittable.
-    private func showControls() {
-        let moreBtn = app.buttons["player.moreButton"].firstMatch
-        for _ in 0..<6 {
-            if moreBtn.waitForExistence(timeout: 1) && moreBtn.isHittable { return }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            Thread.sleep(forTimeInterval: 1.0)
-        }
-    }
 
     /// Returns the label of the first static text containing "×" (U+00D7).
     /// The Stats for Nerds overlay formats resolution as "W×H @ fps".

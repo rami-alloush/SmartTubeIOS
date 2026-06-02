@@ -521,6 +521,7 @@ extension PlaybackViewModel {
                     switch st {
                     case .readyToPlay:
                         playerLog.notice("[benchmark] readyToPlay — BotGuardWV/proxy-HLS — videoId=\(video.id)")
+                        timeToPlayMs = Int(Date().timeIntervalSince(videoLoadStartedAt) * 1000)
                         playerLog.notice("[BotGuardWV] ✅ Path A won — proxy HLS")
                         return true
                     case .failed:
@@ -1029,6 +1030,7 @@ extension PlaybackViewModel {
                 loadAudioTracks(from: item)
                 needsQuickStartup = false
                 isLoading = false
+                timeToPlayMs = Int(Date().timeIntervalSince(videoLoadStartedAt) * 1000)
                 lastSuccessfulStreamType = label
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
@@ -1316,6 +1318,7 @@ extension PlaybackViewModel {
                     loadAudioTracks(from: compositeItem)
                     needsQuickStartup = false
                     isLoading = false
+                    timeToPlayMs = Int(Date().timeIntervalSince(videoLoadStartedAt) * 1000)
                     player.rate = Float(settings.playbackSpeed)
                     isPlaying = true
                     launchPhase2(video: video, info: info)
@@ -2034,6 +2037,7 @@ extension PlaybackViewModel {
         // Start at 360p (fast first-frame) regardless of preferred quality.
         item.preferredMaximumResolution = CGSize(width: 640, height: 360)
         playerLog.notice("[webView/HLS] fast-start ABR: initial cap 360p → ramp to \(preferredHeight > 0 ? "\(preferredHeight)p" : "Auto") after readyToPlay")
+        lastAttemptedStreamURL = masterURL
         player.replaceCurrentItem(with: item)
         itemObserverTask?.cancel()
         for await status in item.statusStream {
@@ -2067,15 +2071,17 @@ extension PlaybackViewModel {
                 loadAudioTracks(from: item)
                 needsQuickStartup = false
                 isLoading = false
+                timeToPlayMs = Int(Date().timeIntervalSince(videoLoadStartedAt) * 1000)
                 lastSuccessfulStreamType = "webView/HLS"
                 player.rate = Float(settings.playbackSpeed)
                 isPlaying = true
                 qualityManager.isMuxedFallback = false
                 // Fast-start quality ramp: first frame is on screen at 360p. Upgrade ABR hints
                 // to preferred quality (same pattern as primary HLS path in loadAsync).
-                Task { [weak item] in
+                Task { [weak self, weak item] in
                     try? await Task.sleep(for: .milliseconds(800))
-                    guard !Task.isCancelled else { return }
+                    guard let self, !Task.isCancelled else { return }
+                    self.timeToHighQualityMs = Int(Date().timeIntervalSince(self.videoLoadStartedAt) * 1000)
                     item?.preferredForwardBufferDuration = 0
                     if preferredHeight > 0 {
                         item?.preferredMaximumResolution = CGSize(width: 7680, height: preferredHeight)

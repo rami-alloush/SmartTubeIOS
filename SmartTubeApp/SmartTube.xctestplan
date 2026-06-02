@@ -10,6 +10,12 @@
   ],
   "defaultOptions" : {
     "attachmentLifetime" : "keepAlways",
+    "commandLineArguments" : [
+      {
+        "argument" : "--uitesting-stats-for-nerds",
+        "enabled" : true
+      }
+    ],
     "preferredScreenCaptureFormat" : "screenshot",
     "screenshotPolicy" : "always",
     "uiTestingScreenshotsLifetime" : "keepAlways",

@@ -31,7 +31,7 @@ struct StatsForNerdsOverlay: View {
             row("TTP (hi-q)",       snapshot.timeToHighQualityMs > 0 ? "\(snapshot.timeToHighQualityMs) ms" : "—")
             row("Stream Type",      snapshot.streamType.isEmpty ? "—" : snapshot.streamType)
             row("Cache",            snapshot.cacheStatus.isEmpty ? "—" : snapshot.cacheStatus)
-            row("Stream URL",       snapshot.streamURL.isEmpty ? "—" : snapshot.streamURL)
+            smallRow("Stream URL",   snapshot.streamURL.isEmpty ? "—" : snapshot.streamURL)
             Divider().background(.white.opacity(0.2)).padding(.vertical, 2)
             row("Report ID",        snapshot.reportID)
             Text("Two-finger tap to dismiss  ·  Quote Report ID when sending diagnostics")
@@ -58,6 +58,17 @@ struct StatsForNerdsOverlay: View {
                 .foregroundStyle(.white)
         }
         .font(.system(.caption, design: .monospaced))
+    }
+
+    private func smallRow(_ key: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(key)
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(minWidth: 130, alignment: .leading)
+            Text(value.isEmpty ? "—" : value)
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .font(.system(.caption2, design: .monospaced))
     }
 
     /// Like `row` but applies an accessibility identifier to the value text,
