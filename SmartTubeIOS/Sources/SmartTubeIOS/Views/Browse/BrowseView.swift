@@ -196,6 +196,13 @@ struct VideoGridSection: View {
     var loadMore: (() -> Void)? = nil
 
     @Environment(SettingsStore.self) private var store
+    #if !os(tvOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Rotated on every UIDevice orientation change so `.id(orientationToken)` forces
+    /// SwiftUI to fully recreate the LazyVGrid, preventing hit-test/layout mismatches
+    /// after rotation on iPad (GitHub issue #82 — wrong video tapped in landscape).
+    @State private var orientationToken = UUID()
+    #endif
 
     var body: some View {
         let compact = store.settings.compactThumbnails
@@ -262,7 +269,8 @@ struct VideoGridSection: View {
             .focusSection()
             #endif
             #else
-            LazyVGrid(columns: videoGridColumns, spacing: videoGridRowSpacing) {
+            let columns = horizontalSizeClass == .compact ? compactVideoGridColumns : regularVideoGridColumns
+            LazyVGrid(columns: columns, spacing: videoGridRowSpacing) {
                 ForEach(videos) { video in
                     VideoCardView(video: video, compact: false)
                         .accessibilityIdentifier("video.card.\(video.id)")
@@ -273,8 +281,14 @@ struct VideoGridSection: View {
                         }
                 }
             }
+            .id(orientationToken)
             .padding(.horizontal)
             .padding(.vertical, 8)
+            #if canImport(UIKit)
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                orientationToken = UUID()
+            }
+            #endif
             #endif
         }
     }

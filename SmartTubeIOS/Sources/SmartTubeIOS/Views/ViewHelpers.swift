@@ -37,6 +37,16 @@ let videoGridColumns = [
 let videoGridRowSpacing: CGFloat = 40
 #else
 let videoGridColumns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 12)]
+/// Explicit column layouts for iOS — used in VideoGridSection to avoid the rotation
+/// hit-test mismatch caused by adaptive columns recalculating after device rotation.
+/// Compact (iPhone portrait): 2 equal-width columns.
+let compactVideoGridColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+/// Regular (iPad or iPhone landscape): 3 equal-width columns.
+let regularVideoGridColumns = [
+    GridItem(.flexible(), spacing: 12),
+    GridItem(.flexible(), spacing: 12),
+    GridItem(.flexible(), spacing: 12)
+]
 let videoGridRowSpacing: CGFloat = 12
 #endif
 
