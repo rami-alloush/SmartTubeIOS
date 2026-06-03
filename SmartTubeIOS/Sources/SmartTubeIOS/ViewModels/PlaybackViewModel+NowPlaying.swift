@@ -122,13 +122,13 @@ extension PlaybackViewModel {
         }
         nowPlayingInfoCache = info
 
-        // Artwork via closure — set synchronously, no await → no accessQueue crash.
-        // MediaPlayer calls the closure on its own thread when it needs to render; we
-        // return cachedArtwork (nil until the background fetch completes, then the image).
+        // Artwork — capture the current image by value so the MPMediaItemArtwork closure
+        // never captures self. MediaPlayer calls the closure on its private serial queue;
+        // capturing self (a @MainActor-isolated type) causes Swift 6 to assert actor
+        // isolation via dispatch_assert_queue and throw EXC_BREAKPOINT (fix238).
         if let thumbURL = video.thumbnailURL {
-            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { [weak self] _ in
-                self?.cachedArtwork ?? UIImage()
-            }
+            let snapshot: UIImage = cachedArtwork ?? UIImage()
+            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in snapshot }
             nowPlayingInfoCache[MPMediaItemPropertyArtwork] = artwork
 
             // Kick off fetch only when the video changes to avoid redundant network hits.
