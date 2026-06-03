@@ -1,6 +1,9 @@
 import SwiftUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
+#if os(macOS)
+import AuthenticationServices
+#endif
 
 // MARK: - SignInView
 //
@@ -12,6 +15,9 @@ public struct SignInView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var showError = false
+    #if os(macOS)
+    @State private var webAuthSession: ASWebAuthenticationSession?
+    #endif
 
     public init() {}
 
@@ -195,6 +201,26 @@ public struct SignInView: View {
         return components.url?.absoluteString ?? info.verificationURL.absoluteString
     }
 
+    #if os(macOS)
+    /// Opens the activation URL in an in-app ASWebAuthenticationSession sheet.
+    /// The app's poll loop already handles token acquisition; we don't need the
+    /// redirect callback — we just keep the session alive until the user closes it.
+    @MainActor
+    private func openActivationPageMac(info: AuthService.ActivationInfo) {
+        guard let url = URL(string: activationQRURL(info: info)) else { return }
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: "smarttube"  // never invoked; user closes the sheet manually
+        ) { _, _ in
+            // Token acquisition is handled by AuthService.pollForToken — nothing to do here.
+        }
+        session.prefersEphemeralWebBrowserSession = false
+        session.presentationContextProvider = MacPresentationAnchor.shared
+        session.start()
+        webAuthSession = session  // retain so the sheet stays alive
+    }
+    #endif
+
     private func activationView(info: AuthService.ActivationInfo) -> some View {
         ScrollView {
             VStack(spacing: 28) {
@@ -213,9 +239,15 @@ public struct SignInView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                // Primary CTA: opens the activation URL with user_code pre-filled
+                // Primary CTA: opens the activation URL with user_code pre-filled.
+                // On macOS use ASWebAuthenticationSession so the page opens in an
+                // in-app browser sheet rather than the external default browser.
                 Button {
+                    #if os(macOS)
+                    openActivationPageMac(info: info)
+                    #else
                     openURL(URL(string: activationQRURL(info: info)) ?? info.verificationURL)
+                    #endif
                 } label: {
                     Label("Open Activation Page", systemImage: "arrow.up.right")
                         .frame(maxWidth: .infinity)
