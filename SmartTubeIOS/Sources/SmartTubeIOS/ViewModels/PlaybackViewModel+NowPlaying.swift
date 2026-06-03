@@ -8,6 +8,17 @@ import SmartTubeIOSCore
 
 private let playerLog = CrashlyticsLogger(category: "Player")
 
+// File-scope factory — deliberately nonisolated so MPMediaItemArtwork can invoke the
+// returned closure from MediaPlayer's internal serial queue without triggering the
+// Swift 6 actor-isolation assertion (_swift_task_checkIsolatedSwift → EXC_BREAKPOINT).
+// An inline closure defined inside a @MainActor method inherits @MainActor isolation
+// even when it only captures a value-type snapshot; extracting it here breaks that.
+#if canImport(UIKit)
+private func makeNonisolatedArtworkProvider(image: UIImage) -> (CGSize) -> UIImage {
+    { _ in image }
+}
+#endif
+
 // MARK: - Now Playing (lock screen + Dynamic Island)
 
 #if canImport(UIKit)
@@ -53,6 +64,17 @@ extension PlaybackViewModel {
 
     func setupRemoteCommandCenter() {
         let center = MPRemoteCommandCenter.shared()
+        // Remove any existing targets first so this function is safe to call
+        // multiple times (e.g. early in loadAsync AND at readyToPlay) without
+        // accumulating duplicate handlers.
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.removeTarget(nil)
 
         center.playCommand.addTarget { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -128,7 +150,8 @@ extension PlaybackViewModel {
         // isolation via dispatch_assert_queue and throw EXC_BREAKPOINT (fix238).
         if let thumbURL = video.thumbnailURL {
             let snapshot: UIImage = cachedArtwork ?? UIImage()
-            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in snapshot }
+            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600),
+                                             requestHandler: makeNonisolatedArtworkProvider(image: snapshot))
             nowPlayingInfoCache[MPMediaItemPropertyArtwork] = artwork
 
             // Kick off fetch only when the video changes to avoid redundant network hits.
@@ -141,10 +164,13 @@ extension PlaybackViewModel {
                     await MainActor.run { [weak self] in
                         guard let self, self.cachedArtworkVideoID == videoID else { return }
                         self.cachedArtwork = image
-                        // Update the artwork key in the cache with the real image so the
-                        // next lock-screen render picks it up without the closure indirection.
+                        // Update the artwork key in the cache with the real image. Use the
+                        // nonisolated factory so MediaPlayer can call the closure from its
+                        // internal background queue without hitting the Swift 6 actor-isolation
+                        // assertion (same fix as the initial artwork registration above).
                         self.nowPlayingInfoCache[MPMediaItemPropertyArtwork] =
-                            MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                            MPMediaItemArtwork(boundsSize: image.size,
+                                               requestHandler: makeNonisolatedArtworkProvider(image: image))
                         self.setNowPlayingInfo(self.nowPlayingInfoCache)
                     }
                 }

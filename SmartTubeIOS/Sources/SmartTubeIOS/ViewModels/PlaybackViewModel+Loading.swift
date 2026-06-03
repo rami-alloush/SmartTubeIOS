@@ -331,6 +331,22 @@ extension PlaybackViewModel {
         // completed on slow networks (GitHub issue #53).
         playerLog.notice("[loadAsync] start id=\(video.id) title=\(video.title) player.rate=\(self.player.rate) timeControlStatus=\(self.player.timeControlStatus.rawValue)")
 
+        #if canImport(UIKit)
+        // Seed the lock-screen Now Playing widget BEFORE the ~10 s network phase so
+        // the user sees the title/channel on the lock screen immediately.
+        // stop() calls setActive(false) which tears down the MediaRemote XPC connection;
+        // re-activating here (rather than waiting until readyToPlay) closes the gap
+        // during which PlayerRemoteXPC reports err=-12860/-12785 and the widget is absent.
+        setupRemoteCommandCenter()
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            playerLog.notice("[loadAsync] AVAudioSession activated early (lock-screen pre-seed)")
+        } catch {
+            playerLog.error("[loadAsync] early setActive failed: \(error.localizedDescription)")
+        }
+        updateNowPlayingInfo()
+        #endif
+
         // Fetch the BotGuard PO token before the primary stream attempt.
         // Awaited (with a 2 s safety timeout) so api.hasPoToken(for:) returns true during
         // the rqh=1 adaptive stream check in tryAllStreams — preventing an unnecessary
@@ -1234,6 +1250,15 @@ extension PlaybackViewModel {
         } else {
             playerLog.notice("[chapters] none for \(video.id) (nextInfo chapters=\(nextInfo?.chapters.count ?? -1))")
         }
+
+        // hasNext is now fully resolved (related videos + queue fallback). Update the
+        // lock-screen now-playing info so nextTrackCommand.isEnabled reflects the real
+        // state. Without this call the next/prev buttons only appear if hasNext was
+        // already true during phase-1 (playlist videos); for home-feed autoplay the
+        // buttons are permanently missing.
+        #if canImport(UIKit)
+        updateNowPlayingInfo()
+        #endif
 
         } // end of non-inject related-videos branch
 
