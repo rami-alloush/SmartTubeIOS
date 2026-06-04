@@ -151,7 +151,26 @@ extension PlayerView {
     }
 
     @ViewBuilder private var moreMenuItems: some View {
+        let currentVideo = vm.playerInfo?.video ?? video
         VStack(spacing: 0) {
+            // Centered title header
+            VStack(spacing: 2) {
+                Text(currentVideo.title)
+                    .font(.subheadline).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                if !currentVideo.channelTitle.isEmpty {
+                    Text(currentVideo.channelTitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            Divider()
             #if os(tvOS)
             moreMenuSpeedRow
             #endif

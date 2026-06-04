@@ -204,6 +204,7 @@ extension PlaybackViewModel {
             return
         }
         playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
+        isLoading = true
         retryStatusMessage = "Still loading\u{2026}"
         // Use serialExtract() instead of extractHLSURL() directly: serialExtract awaits any
         // in-flight extraction (for any video) before starting a new one, preventing the
@@ -228,6 +229,7 @@ extension PlaybackViewModel {
         for attempt in 1...3 {
             guard !Task.isCancelled else { return }
             retryAttempts = attempt
+            isLoading = true
             retryStatusMessage = attempt == 1 ? "Trying alternative sources\u{2026}" : "Retrying (\(attempt)/3)\u{2026}"
             playerLog.notice("Exhaustive retry \(attempt)/3 for \(video.id)")
 
@@ -392,6 +394,7 @@ extension PlaybackViewModel {
             // --- Phase 2: muxed direct MP4 (360p last resort) ---
             // Only reached when ALL adaptive attempts above failed.
             if let androidInfo = androidInfoForMuxed, androidInfo.bestMuxedDownloadURL != nil {
+                isLoading = true
                 retryStatusMessage = "Using fallback stream\u{2026}"
                 playerLog.notice("[Android[\(attempt)]] All adaptive failed — trying muxed fallback")
                 if await tryAllStreams(video: video, info: androidInfo,

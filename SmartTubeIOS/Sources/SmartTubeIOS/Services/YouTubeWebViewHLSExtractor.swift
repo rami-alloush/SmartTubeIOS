@@ -834,6 +834,13 @@ final class YouTubeWebViewHLSExtractor: NSObject {
         // The proxy loader will attach these cookies to googlevideo.com segment requests
         // so the CDN can validate the /bui/ token against VISITOR_INFO1_LIVE.
         let capturedURL = url
+        // fixNSolver: Capture extractedNSolver at the moment finishWithURL is called.
+        // A concurrent serialExtract call (e.g. VideoCardView prewarming) can call
+        // extractHLSURL between now and when the cookie-sync Task runs, which resets
+        // extractedNSolver = nil. Restoring the snapshot just before resuming the
+        // continuation guarantees that racePathB / exhaustiveRetry reads the correct
+        // value when they wake up on the main actor right after the resume.
+        let capturedNSolver = extractedNSolver
         Task { @MainActor [weak self] in
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
@@ -847,6 +854,13 @@ final class YouTubeWebViewHLSExtractor: NSObject {
                 }
             }
             guard let self else { return }
+            // Restore the nSolver snapshot so callers reading extractedNSolver immediately
+            // after the continuation resumes always see the value that was valid for this URL.
+            // Only restore if a newer extraction hasn't already set a different solver.
+            if self.extractedNSolver == nil, let capturedNSolver {
+                self.extractedNSolver = capturedNSolver
+                extractLog.notice("[webView/fixNSolver] nSolver snapshot restored before resume: \(capturedNSolver.unsolved as NSString) → \(capturedNSolver.solved as NSString)")
+            }
             // fix17: Keep WKWebView alive — don't nil it out on success.
             // The persistent WKWebView is immediately ready for the next extraction.
             self.webView?.stopLoading()

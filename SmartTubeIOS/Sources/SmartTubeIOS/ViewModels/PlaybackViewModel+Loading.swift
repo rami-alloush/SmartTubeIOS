@@ -188,6 +188,11 @@ extension PlaybackViewModel {
             }
         }
 
+        // Show the loading spinner synchronously — set before the Task starts so the
+        // first frame of PlayerView already has isLoading=true. Without this, there is a
+        // one-frame gap (one run-loop cycle) where the PlayerView renders with isLoading=false,
+        // making the spinner invisible until the Task runs and sets it inside loadAsync().
+        isLoading = true
         loadTask = Task { await loadAsync(video: video) }
 
         // Kick off a background prefetch for the next video in the queue
@@ -212,6 +217,7 @@ extension PlaybackViewModel {
         exhaustiveRetryTask?.cancel()
         exhaustiveRetryTask = nil
         loadTask?.cancel()
+        isLoading = true
         loadTask = Task { [weak self] in
             guard let self else { return }
             await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
