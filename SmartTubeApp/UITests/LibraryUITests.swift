@@ -41,7 +41,9 @@ final class LibraryUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         // Close full-screen player if open.
         let backButton = app.buttons["player.backButton"].firstMatch
         if backButton.waitForExistence(timeout: 2) {

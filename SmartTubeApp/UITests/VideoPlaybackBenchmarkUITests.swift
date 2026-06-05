@@ -72,7 +72,9 @@ final class VideoPlaybackBenchmarkUITests: XCTestCase {
             "--uitesting-show-controls",
             "--uitesting-disable-sponsorblock",
         ]
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         app.launch()
     }
 

@@ -324,7 +324,9 @@ final class ShortsGhostStreamRegressionUITests: XCTestCase {
         let indexBefore = indexLabel.label
 
         // Background the app (simulates lock / home button).
+        #if os(iOS)
         XCUIDevice.shared.press(.home)
+        #endif
         Thread.sleep(forTimeInterval: 2)
 
         // Re-activate the app.

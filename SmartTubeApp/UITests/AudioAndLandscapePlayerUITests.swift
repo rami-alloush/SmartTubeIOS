@@ -36,7 +36,9 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
         super.setUp()
         continueAfterFailure = false
         // Restore portrait in case a previous test changed orientation.
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         // Dismiss any lingering alert (e.g. permission or error dialog).
         let alert = app.alerts.firstMatch
         if alert.waitForExistence(timeout: 1) {
@@ -62,7 +64,9 @@ final class AudioAndLandscapePlayerUITests: XCTestCase {
 
     override func tearDown() {
         // Always restore portrait so the next test starts in a known orientation.
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         super.tearDown()
     }
 

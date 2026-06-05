@@ -129,7 +129,9 @@ final class ShareExtensionE2EUITests: XCTestCase {
         }
 
         // Background then re-foreground SmartTube.
+        #if os(iOS)
         XCUIDevice.shared.press(.home)
+        #endif
         smartTube.activate()
 
         // Player must NOT reopen — pending key was already consumed.

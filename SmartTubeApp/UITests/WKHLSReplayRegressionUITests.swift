@@ -64,7 +64,9 @@ final class WKHLSReplayRegressionUITests: XCTestCase {
             "--uitesting",
             "--uitesting-disable-sponsorblock",
         ]
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         app.launch()
     }
 

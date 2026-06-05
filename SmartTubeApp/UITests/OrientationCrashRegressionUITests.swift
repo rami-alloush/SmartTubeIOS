@@ -27,7 +27,9 @@ final class OrientationCrashRegressionUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         app = nil
     }
 
@@ -49,18 +51,26 @@ final class OrientationCrashRegressionUITests: XCTestCase {
 
         // Allow the video to start buffering before rotating.
         // Rotate to landscape — triggers OrientationManager.requestGeometryUpdate(.landscape)
+        #if os(iOS)
         XCUIDevice.shared.orientation = .landscapeLeft
         // Brief dwell to allow UIKit geometry update to complete and any error callback to fire.
         Thread.sleep(forTimeInterval: 1.0)
 
         // Rotate back to portrait — triggers OrientationManager.requestGeometryUpdate(.portrait)
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         Thread.sleep(forTimeInterval: 1.0)
 
         // A second full cycle verifies the geometry update is repeatable.
+        #if os(iOS)
         XCUIDevice.shared.orientation = .landscapeRight
+        #endif
         Thread.sleep(forTimeInterval: 1.0)
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
+        #endif
 
         // If we reach here the app has not crashed. Confirm the player is still alive.
         XCTAssertTrue(player.exists,

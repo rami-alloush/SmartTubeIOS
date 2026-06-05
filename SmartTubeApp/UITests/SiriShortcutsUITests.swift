@@ -102,7 +102,9 @@ final class SiriShortcutsUITests: XCTestCase {
         }
 
         // Background then foreground the app.
+        #if os(iOS)
         XCUIDevice.shared.press(.home)
+        #endif
         app.activate()
 
         // The player must NOT reopen — deepLinkedVideo was nil'd after first open.

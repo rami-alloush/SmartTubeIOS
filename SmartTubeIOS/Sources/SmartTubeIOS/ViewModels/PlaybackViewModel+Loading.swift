@@ -193,6 +193,15 @@ extension PlaybackViewModel {
         // one-frame gap (one run-loop cycle) where the PlayerView renders with isLoading=false,
         // making the spinner invisible until the Task runs and sets it inside loadAsync().
         isLoading = true
+        // UI-testing: re-show controls after load() resets controlsVisible=false.
+        // Mirrors the onAppear --uitesting-show-controls handling so controls remain
+        // visible across queue advances without relying on a second onAppear trigger.
+        #if !os(iOS)
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-show-controls") {
+            showControls()
+            cancelControlsHide()
+        }
+        #endif
         loadTask = Task { await loadAsync(video: video) }
 
         // Kick off a background prefetch for the next video in the queue

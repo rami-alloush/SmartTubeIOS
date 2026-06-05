@@ -429,7 +429,9 @@ final class PlayerAndMiniPlayerUITests: XCTestCase {
     #if os(iOS)
     func testNextAndPrevButtonsAreHittableInPortrait() throws {
         try XCTSkipIf(Self.skipAllTests, Self.skipReason)
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         try openPlayerFromHome()
 
         // Controls auto-hide after a few seconds. Poll with repeated taps until

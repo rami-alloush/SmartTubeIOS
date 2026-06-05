@@ -64,7 +64,9 @@ final class HomeFeedAndSettingsUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         // Close full-screen player if a previous test left it open.
         let playerBack = app.buttons["player.backButton"].firstMatch
         if playerBack.waitForExistence(timeout: 2), playerBack.isHittable {

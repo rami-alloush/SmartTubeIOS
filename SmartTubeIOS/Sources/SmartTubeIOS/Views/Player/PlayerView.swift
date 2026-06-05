@@ -26,6 +26,9 @@ public struct PlayerView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(SettingsStore.self) var store
     @Environment(AuthService.self) var authService
+    #if os(macOS)
+    @Environment(BrowseViewModel.self) var browseVM
+    #endif
     @State var showSpeedPicker = false
     @State var showQualityPicker = false
     @State var showCaptionPicker = false

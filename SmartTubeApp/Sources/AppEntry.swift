@@ -124,6 +124,18 @@ struct AppEntry: App {
                     }
                 }
                 .onOpenURL { url in handleOpenURL(url) }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    if phase == .active {
+                        consumeQueueInjectFromLaunchArgs()
+                        consumeDeepLinkFromLaunchArgs()
+                        authService.handleForeground()
+                        browseViewModel.refreshIfStale()
+                    }
+                }
+                .onAppear {
+                    enableShortsIfNeeded()
+                    signOutIfNeeded()
+                }
         }
         .defaultSize(width: 1280, height: 800)
 
@@ -416,7 +428,11 @@ struct AppEntry: App {
         guard !ids.isEmpty else { return }
         queueInjectConsumed = true
         Task {
-            let videos = ids.map { Video(id: $0, title: "", channelTitle: "") }
+            // Use the video ID as a placeholder title so player.titleLabel is non-empty
+            // from the moment each video starts loading. This allows UI tests to detect
+            // video transitions via title changes (prevLabel != currentLabel) even before
+            // the real title arrives from the /player API response.
+            let videos = ids.map { Video(id: $0, title: $0, channelTitle: "") }
             await CurrentQueueStore.shared.replaceAll(with: videos)
             // Use videoAt(index: 0) so the Video carries the queue playlistId and
             // playlistIndex — required for the prefetch trigger in load(video:).

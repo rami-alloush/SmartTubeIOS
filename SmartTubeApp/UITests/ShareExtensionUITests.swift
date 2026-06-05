@@ -127,7 +127,9 @@ final class ShareExtensionUITests: XCTestCase {
         dismissPlayer()
 
         // Background the app, then re-foreground it.
+        #if os(iOS)
         XCUIDevice.shared.press(.home)
+        #endif
         app.activate()
 
         // Allow a brief window — if the player reappears the test fails.

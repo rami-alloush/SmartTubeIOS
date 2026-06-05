@@ -36,7 +36,9 @@ final class PlayerMoreMenuDuplicationUITests: XCTestCase {
         ]
         if showControls { args.append("--uitesting-show-controls") }
         app.launchArguments = args
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         app.launch()
         return app
     }

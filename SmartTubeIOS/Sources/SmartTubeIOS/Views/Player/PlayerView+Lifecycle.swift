@@ -27,6 +27,9 @@ extension PlayerView {
                 swipeLog.notice("[PlayerView] backButton — done, presentation=\(String(describing: playerState.presentation))")
                 #else
                 vm.stop(); withAnimation(.none) { dismiss() }
+                #if os(macOS)
+                browseVM.deepLinkedVideo = nil
+                #endif
                 #endif
             } label: {
                 Color.clear.frame(width: 60, height: 60)
@@ -40,6 +43,10 @@ extension PlayerView {
                 .font(.caption)
                 .opacity(0)   // visually invisible (including emoji), accessible
                 .accessibilityIdentifier("player.titleLabel")
+                .accessibilityLabel(vm.playerInfo?.video.title ?? video.title)
+                // macOS AX prunes opacity-0 elements by default — force the element
+                // into the accessibility tree so XCUITest can always read it.
+                .accessibilityHidden(false)
                 .allowsHitTesting(false)
         }
         #if !os(tvOS)
@@ -590,6 +597,12 @@ extension PlayerView {
             vm.setPlaybackSpeed(store.settings.playbackSpeed)
             vm.updateSettings(store.settings)
             vm.updateAuthToken(authService.accessToken)
+            // UI testing only: force-show controls so the test can find player.nextBtn.
+            if ProcessInfo.processInfo.arguments.contains("--uitesting-show-controls") {
+                swipeLog.notice("[PlayerView] --uitesting-show-controls (non-iOS) — showing controls")
+                vm.showControls()
+                vm.cancelControlsHide()
+            }
             // UI testing only: force-show controls and/or the more menu so tests can
             // verify focus routing without relying on gesture delivery, which is
             // unreliable on the tvOS simulator.

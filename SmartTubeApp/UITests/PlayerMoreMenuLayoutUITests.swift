@@ -20,7 +20,9 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
             "--uitesting-deeplink-video=dQw4w9WgXcQ",
             "--uitesting-open-more-menu"
         ]
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         a.launch()
         sharedApp = a
         // Wait for the more menu to appear — the --uitesting-open-more-menu flag
@@ -32,7 +34,9 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
     }
 
     override class func tearDown() {
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         sharedApp?.terminate()
         sharedApp = nil
         skipAllTests = false
@@ -54,7 +58,9 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
             add(attachment)
         }
         guard !Self.skipAllTests else { return }
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         // Wait for the portrait frame to settle before opening the menu.
         let a2 = app
         let portraitSettled = NSPredicate { _, _ in a2.frame.size.width < a2.frame.size.height }
@@ -67,7 +73,9 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
         // If a landscape test just ran, close the menu before returning to portrait.
         // This gives the next setUp a clean state to reopen the menu in portrait.
         let wasLandscape = app.frame.size.width > app.frame.size.height
+        #if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+        #endif
         if wasLandscape {
             // Wait for the frame to confirm portrait before closing the menu.
             let a = app
@@ -114,7 +122,9 @@ final class PlayerMenuAndPickerLayoutUITests: XCTestCase {
 
     /// Rotates to landscape and waits for the frame to confirm the change.
     private func rotateToLandscapeAndWait() {
+        #if os(iOS)
         XCUIDevice.shared.orientation = .landscapeLeft
+        #endif
         let a = app
         let pred = NSPredicate { _, _ in a.frame.size.width > a.frame.size.height }
         _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: pred, object: nil)], timeout: 5)
