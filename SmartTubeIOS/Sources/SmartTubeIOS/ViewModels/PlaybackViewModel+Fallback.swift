@@ -203,33 +203,39 @@ extension PlaybackViewModel {
 
         // Both race paths failed — fall back to serial WKWebView extraction in case
         // the early task returned nil (e.g. network timeout, JS player error).
+        // Skip serial extraction when Path B already hit a CDN permission error — a fresh
+        // extraction produces the same CDN-signed URL which will get the same 403.
         // fix235: guard cancellation before expensive serial extraction — the exhaustiveRetry
         // task may have been cancelled by a subsequent load() or stop() call.
         guard !Task.isCancelled else {
             playerLog.notice("⚠️ [webView] race failed but task is cancelled — skipping serial extraction for \(video.id)")
             return
         }
-        playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
-        isLoading = true
-        retryStatusMessage = "Still loading\u{2026}"
-        // Use serialExtract() instead of extractHLSURL() directly: serialExtract awaits any
-        // in-flight extraction (for any video) before starting a new one, preventing the
-        // cross-video cancellation chain where two concurrent serial callers (for video A and
-        // video B) each call extractHLSURL and cancel each other via finish(url:nil).
-        let serialURL = await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: video.id)
-        let nSolverSerial = YouTubeWebViewHLSExtractor.shared.extractedNSolver
-        if let pot = YouTubeWebViewHLSExtractor.shared.extractedPoToken {
-            await api.storeExternalPoToken(pot, for: video.id)
-        }
-        if let serialURL {
-            if await tryWebViewHLS(serialURL, nSolver: nSolverSerial, for: video) {
-                playerLog.notice("✅ [webView] serial WKWebView HLS playing — exhaustiveRetry done")
-                if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
-                return
-            }
-            playerLog.notice("⚠️ [webView] serial HLS load failed — falling through to client retry chain")
+        if wkHLSPermissionDenied {
+            playerLog.notice("⚠️ [webView] race Path B hit CDN permission error — skipping serial extraction, going straight to client chain")
         } else {
-            playerLog.notice("⚠️ [webView] serial WKWebView extraction returned nil — proceeding with client chain")
+            playerLog.notice("⚠️ [webView] race failed — attempting serial WKWebView extraction")
+            isLoading = true
+            retryStatusMessage = "Still loading\u{2026}"
+            // Use serialExtract() instead of extractHLSURL() directly: serialExtract awaits any
+            // in-flight extraction (for any video) before starting a new one, preventing the
+            // cross-video cancellation chain where two concurrent serial callers (for video A and
+            // video B) each call extractHLSURL and cancel each other via finish(url:nil).
+            let serialURL = await YouTubeWebViewHLSExtractor.shared.serialExtract(videoId: video.id)
+            let nSolverSerial = YouTubeWebViewHLSExtractor.shared.extractedNSolver
+            if let pot = YouTubeWebViewHLSExtractor.shared.extractedPoToken {
+                await api.storeExternalPoToken(pot, for: video.id)
+            }
+            if let serialURL {
+                if await tryWebViewHLS(serialURL, nSolver: nSolverSerial, for: video) {
+                    playerLog.notice("✅ [webView] serial WKWebView HLS playing — exhaustiveRetry done")
+                    if let playerInfo { launchPhase2(video: video, info: playerInfo, cached: cached) }
+                    return
+                }
+                playerLog.notice("⚠️ [webView] serial HLS load failed — falling through to client retry chain")
+            } else {
+                playerLog.notice("⚠️ [webView] serial WKWebView extraction returned nil — proceeding with client chain")
+            }
         }
         #endif
         for attempt in 1...3 {
@@ -242,169 +248,184 @@ extension PlaybackViewModel {
             // Evict the stale cache entry so each attempt gets fresh signed URLs.
             await VideoPreloadCache.shared.invalidatePlayerInfo(for: video.id)
 
-            // --- Phase 0: Authenticated TV client (logged-in users only) ---
-            // With `html5Preference: HTML5_PREF_WANTS` the TV client returns streamingData
-            // including an HLS manifest URL. Authenticated HLS manifests do not have rqh=1
-            // on their segment/variant URLs, so quality switching works via AVPlayer ABR.
-            // Skip when no auth token is present (unauthenticated flow continues to Phase 1).
-            if hasAuthToken {
-                do {
-                    let tvAuthInfo = try await api.fetchPlayerInfoAuthenticated(videoId: video.id)
-                    if await tryAllStreams(video: video, info: tvAuthInfo,
-                                          label: "TVAuth[\(attempt)]", skipMuxed: true) {
-                        return
-                    }
-                } catch {
-                    playerLog.error("TV auth client fetch failed (attempt \(attempt)): \(error)")
-                }
-                guard !Task.isCancelled else { return }
+            // --- Parallel fetch: fire all 7 API calls concurrently ---
+            //
+            // Each fetchPlayerInfo* is an independent network round-trip (~0.5–1 s).
+            // Running them serially added 3.5–7 s of unnecessary latency on every load
+            // for videos where the first few clients fail (rqh=1, embedding-disabled, etc.).
+            // Running them in parallel collapses that to ~1 s (slowest single fetch).
+            //
+            // Play strategy:
+            //  • HLS results are tried immediately as they arrive — first HLS success wins.
+            //  • Non-HLS (adaptive-only) results are queued and tried in priority order
+            //    after all fetches complete, so the fastest HLS client always gets priority
+            //    regardless of which fetch finished first.
+            //
+            // Priority (lower = higher priority, mirrors proven probe data 2026-06-05):
+            //   0 TVAuth  1 MWEB  2 TVEmbedded  3 WebSafari  4 iOS  5 Android  6 AndroidVR
+
+            // Capture @MainActor state before entering the task group.
+            let capturedEarlyTask = tvEmbeddedEarlyTask
+            tvEmbeddedEarlyTask = nil
+            let capturedHasAuth = hasAuthToken
+
+            // Task group result carrier — @unchecked Sendable because PlayerInfo is accessed
+            // only from @MainActor (the `for await` body runs on the calling actor).
+            struct _FR: @unchecked Sendable {
+                let priority: Int; let label: String; let info: PlayerInfo; let skipMuxed: Bool
             }
+            enum _FO: @unchecked Sendable { case result(_FR); case ipBlocked(Error) }
 
-            // --- Phase 1: TV Embedded client ---
-            // TVHTML5_SIMPLY_EMBEDDED_PLAYER (client ID 85) returns an HLS manifest
-            // for most embeddable videos. HLS streams bypass the rqh=1/pot CDN enforcement
-            // that causes HTTP 403 on adaptive streams. If HLS loads, quality switching
-            // works via AVPlayer ABR (preferredMaximumResolution) — no composition needed.
-            // Videos with embedding disabled will fail this phase and continue to Phase 2.
-            do {
-                // fix2/fix30: Consume the TVEmbedded pre-fetch started concurrently with the
-                // race paths (fix2: AndroidVR rqh=1 timeout on tvOS; fix30: race group on iOS).
-                // Result is typically ready (task completed before we arrive here), so this
-                // await returns immediately.
-                let tvEmbedInfo: PlayerInfo
-                if let earlyTask = tvEmbeddedEarlyTask {
-                    tvEmbeddedEarlyTask = nil
-                    playerLog.notice("[TVEmbedded[\(attempt)]] fix2/fix30: consuming pre-fetched TVEmbedded result")
-                    if let preInfo = await earlyTask.value {
-                        tvEmbedInfo = preInfo
-                    } else {
-                        playerLog.notice("[TVEmbedded[\(attempt)]] pre-fetch failed — falling back to fresh fetch")
-                        tvEmbedInfo = try await api.fetchPlayerInfoTVEmbedded(videoId: video.id)
-                    }
-                } else {
-                    tvEmbedInfo = try await api.fetchPlayerInfoTVEmbedded(videoId: video.id)
-                }
-                if await tryAllStreams(video: video, info: tvEmbedInfo,
-                                      label: "TVEmbedded[\(attempt)]", skipMuxed: true) {
-                    return
-                }
-            } catch {
-                playerLog.error("TV embedded client fetch failed (attempt \(attempt)): \(error)")
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // --- WebSafari client (WEB nameID=1 + macOS Safari UA) ---
-            // yt-dlp's `web_safari` client returns `hlsManifestUrl` for non-embeddable
-            // videos where TVEmbedded fails. manifest.googlevideo.com HLS URLs don't need
-            // pot= tokens. This is the primary HLS path for embedding-disabled content.
-            do {
-                let wsiInfo = try await api.fetchPlayerInfoWebSafari(videoId: video.id)
-                if await tryAllStreams(video: video, info: wsiInfo,
-                                      label: "WebSafari[\(attempt)]", skipMuxed: true) {
-                    return
-                }
-            } catch {
-                playerLog.error("WebSafari client fetch failed (attempt \(attempt)): \(error)")
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // --- MWEB client (HLS, no embed restriction) ---
-            // The mobile web client (m.youtube.com, iPad Safari UA, nameID=2) is not
-            // subject to the embedding restriction that gates WEB_EMBEDDED_PLAYER.
-            // Per yt-dlp, MWEB does not require a PO Token for HLS (required=False) and
-            // may return `hlsManifestUrl` for videos TVEmbedded cannot serve.
-            do {
-                let mwebInfo = try await api.fetchPlayerInfoMWEB(videoId: video.id)
-                if await tryAllStreams(video: video, info: mwebInfo,
-                                      label: "MWEB[\(attempt)]", skipMuxed: true) {
-                    return
-                }
-            } catch {
-                playerLog.error("MWEB client fetch failed (attempt \(attempt)): \(error)")
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // --- iOS client (fresh network fetch) ---
-            // Unauthenticated iOS (googleapis.com, c=IOS) returns adaptive-only streams.
-            // Confirmed: iOS adaptive streams ALWAYS have rqh=1 (empirically verified May 2026
-            // via device log — "skipping rqh=1 (client=IOS)"). The authenticated path (Bearer
-            // + iOS client nameID=5) returns HTTP 400 — the TV-device-code token is scoped for
-            // TVHTML5, not iOS client. Falls back to unauthenticated, which also has rqh=1.
-            // Tries HLS + adaptive only (muxed fallback happens below).
+            var pendingNonHLS: [_FR] = []     // adaptive-only results, tried after all fetches
             var androidInfoForMuxed: PlayerInfo? = nil
-            do {
-                let iosInfo: PlayerInfo
-                if hasAuthToken, let auth = try? await api.fetchPlayerInfoiOSAuthenticated(videoId: video.id) {
-                    iosInfo = auth
-                } else {
-                    iosInfo = try await api.fetchPlayerInfo(videoId: video.id)
+            var fetchIPBlockError: Error? = nil
+            var parallelPlaySucceeded = false
+
+            await withTaskGroup(of: Optional<_FO>.self) { fetchGroup in
+
+                // 0 — TVAuth (authenticated TV client, HLS)
+                if capturedHasAuth {
+                    fetchGroup.addTask {
+                        guard let info = try? await self.api.fetchPlayerInfoAuthenticated(videoId: video.id) else { return nil }
+                        return .result(_FR(priority: 0, label: "TVAuth[\(attempt)]", info: info, skipMuxed: true))
+                    }
                 }
-                await VideoPreloadCache.shared.store(playerInfo: iosInfo, for: video.id)
-                if await tryAllStreams(video: video, info: iosInfo, label: "iOS[\(attempt)]",
-                                      skipMuxed: true) {
+
+                // 1 — MWEB (no embedding restriction, no pot= required for HLS)
+                fetchGroup.addTask {
+                    guard let info = try? await self.api.fetchPlayerInfoMWEB(videoId: video.id) else { return nil }
+                    return .result(_FR(priority: 1, label: "MWEB[\(attempt)]", info: info, skipMuxed: true))
+                }
+
+                // 2 — TVEmbedded (consume fix2/fix30 pre-fetch if available)
+                let earlyTask2 = capturedEarlyTask
+                fetchGroup.addTask {
+                    if let et = earlyTask2, let info = await et.value {
+                        return .result(_FR(priority: 2, label: "TVEmbedded[\(attempt)]", info: info, skipMuxed: true))
+                    }
+                    guard let info = try? await self.api.fetchPlayerInfoTVEmbedded(videoId: video.id) else { return nil }
+                    return .result(_FR(priority: 2, label: "TVEmbedded[\(attempt)]", info: info, skipMuxed: true))
+                }
+
+                // 3 — WebSafari (WEB + macOS Safari UA, HLS for embedding-disabled)
+                fetchGroup.addTask {
+                    guard let info = try? await self.api.fetchPlayerInfoWebSafari(videoId: video.id) else { return nil }
+                    return .result(_FR(priority: 3, label: "WebSafari[\(attempt)]", info: info, skipMuxed: true))
+                }
+
+                // 4 — iOS (authenticated preferred; IP-block detection)
+                let hasAuth4 = capturedHasAuth
+                fetchGroup.addTask {
+                    do {
+                        let info: PlayerInfo
+                        if hasAuth4, let auth = try? await self.api.fetchPlayerInfoiOSAuthenticated(videoId: video.id) {
+                            info = auth
+                        } else {
+                            info = try await self.api.fetchPlayerInfo(videoId: video.id)
+                        }
+                        return .result(_FR(priority: 4, label: "iOS[\(attempt)]", info: info, skipMuxed: true))
+                    } catch {
+                        if case APIError.ipBlocked = error { return .ipBlocked(error) }
+                        return nil
+                    }
+                }
+
+                // 5 — Android (IP-block detection; saved for muxed fallback)
+                fetchGroup.addTask {
+                    do {
+                        let info = try await self.api.fetchPlayerInfoAndroid(videoId: video.id)
+                        return .result(_FR(priority: 5, label: "Android[\(attempt)]", info: info, skipMuxed: true))
+                    } catch {
+                        if case APIError.ipBlocked = error { return .ipBlocked(error) }
+                        return nil
+                    }
+                }
+
+                // 6 — AndroidVR (CDN-exempt rqh=1, 2s composition timeout)
+                fetchGroup.addTask {
+                    guard let info = try? await self.api.fetchPlayerInfoAndroidVR(videoId: video.id) else { return nil }
+                    return .result(_FR(priority: 6, label: "AndroidVR[\(attempt)]", info: info, skipMuxed: true))
+                }
+
+                // Process results as they arrive
+                for await maybeOutcome in fetchGroup {
+                    guard let outcome = maybeOutcome else { continue }
+                    switch outcome {
+                    case .ipBlocked(let err):
+                        fetchIPBlockError = err
+                        fetchGroup.cancelAll()
+                        return
+                    case .result(let r):
+                        // Side-effects that need the concrete label/info
+                        if r.label.hasPrefix("iOS[") {
+                            await VideoPreloadCache.shared.store(playerInfo: r.info, for: video.id)
+                        }
+                        if r.label.hasPrefix("Android[") && !r.label.contains("VR") {
+                            androidInfoForMuxed = r.info
+                        }
+                        // HLS present → try immediately; first success wins and cancels rest
+                        if r.info.hlsURL != nil {
+                            if await tryAllStreams(video: video, info: r.info,
+                                                  label: r.label, skipMuxed: r.skipMuxed) {
+                                parallelPlaySucceeded = true
+                                fetchGroup.cancelAll()
+                                return
+                            }
+                        } else {
+                            // No HLS (adaptive/muxed only) → defer until all fetches done
+                            pendingNonHLS.append(r)
+                        }
+                    }
+                }
+            } // end withTaskGroup
+
+            if parallelPlaySucceeded { return }
+
+            if let ipErr = fetchIPBlockError {
+                playerLog.error("❌ IP blocked during parallel fetch (attempt \(attempt)) — \(ipErr)")
+                self.error = ipErr
+                return
+            }
+            guard !Task.isCancelled else { return }
+
+            // Try non-HLS results (adaptive-only) in priority order.
+            //
+            // AndroidVR (priority=6) is skipped when a muxed fallback is available:
+            // its 2s loadTracks timeout would delay muxed play with no gain when all
+            // other methods already failed. Instead, muxed plays immediately and
+            // backgroundQualityUpgrade retries AndroidVR (+ TVEmbedded/MWEB) in the
+            // background — upgrading to higher quality while the video is already playing.
+            pendingNonHLS.sort { $0.priority < $1.priority }
+            let hasMuxedFallback = androidInfoForMuxed?.bestMuxedDownloadURL != nil
+            playerLog.notice("[parallel fetch] attempt \(attempt): \(pendingNonHLS.count) non-HLS candidate(s) — trying in priority order (hasMuxed=\(hasMuxedFallback))")
+            for candidate in pendingNonHLS {
+                guard !Task.isCancelled else { return }
+                // Skip AndroidVR when muxed is available — see comment above.
+                if hasMuxedFallback && candidate.label.hasPrefix("AndroidVR[") {
+                    playerLog.notice("[parallel fetch] skipping \(candidate.label) (muxed available — background upgrade will retry)")
+                    continue
+                }
+                if await tryAllStreams(video: video, info: candidate.info,
+                                      label: candidate.label, skipMuxed: candidate.skipMuxed) {
                     return
                 }
-            } catch {
-                if case APIError.ipBlocked = error {
-                    playerLog.error("❌ iOS client: IP blocked — \(error)")
-                    self.error = error
-                    return
-                }
-                playerLog.error("iOS client fetch failed (attempt \(attempt)): \(error)")
             }
 
             guard !Task.isCancelled else { return }
 
-            // --- Android client (HLS + adaptive only; muxed reserved for phase 3) ---
-            do {
-                let androidInfo = try await api.fetchPlayerInfoAndroid(videoId: video.id)
-                androidInfoForMuxed = androidInfo  // save for muxed fallback below
-                if await tryAllStreams(video: video, info: androidInfo,
-                                      label: "Android[\(attempt)]", skipMuxed: true) {
-                    return
-                }
-            } catch {
-                if case APIError.ipBlocked = error {
-                    playerLog.error("❌ Android client: IP blocked — \(error)")
-                    self.error = error
-                    return
-                }
-                playerLog.error("Android client fetch failed (attempt \(attempt)): \(error)")
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // --- Android VR client (adaptive) ---
-            do {
-                let vrInfo = try await api.fetchPlayerInfoAndroidVR(videoId: video.id)
-                if await tryAllStreams(video: video, info: vrInfo,
-                                      label: "AndroidVR[\(attempt)]", skipMuxed: true) {
-                    return
-                }
-            } catch {
-                playerLog.error("Android VR client fetch failed (attempt \(attempt)): \(error)")
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // --- WEB_CREATOR client (adaptive) ---
-            // Uses Bearer + X-Goog-AuthUser:0 when SAPISID unavailable.
-            // CONFIRMED DEAD END (run 4 logs): www.youtube.com/youtubei/v1 + Bearer →
-            // HTTP 400 INVALID_ARGUMENT for Wu8xNx4njoM. Removed from retry chain.
-
-            guard !Task.isCancelled else { return }
-
-            // --- Phase 2: muxed direct MP4 (360p last resort) ---
-            // Only reached when ALL adaptive attempts above failed.
+            // --- Muxed direct MP4 (360p last resort) ---
+            // Only reached when ALL HLS + adaptive attempts above failed.
+            // On success: schedule backgroundQualityUpgrade to try TVEmbedded/MWEB HLS
+            // and AndroidVR adaptive in the background while the video is already playing.
             if let androidInfo = androidInfoForMuxed, androidInfo.bestMuxedDownloadURL != nil {
                 isLoading = true
                 retryStatusMessage = "Using fallback stream\u{2026}"
                 playerLog.notice("[Android[\(attempt)]] All adaptive failed — trying muxed fallback")
                 if await tryAllStreams(video: video, info: androidInfo,
                                       label: "Android[\(attempt)]/muxed") {
+                    // Muxed playing — attempt quality upgrade in background while user watches.
+                    let upgradeVideo = video
+                    Task { [weak self] in await self?.backgroundQualityUpgrade(video: upgradeVideo) }
                     return
                 }
                 // Android muxed failed (possibly AVF -11828 "Cannot Open" on SABR/long-video URLs,
@@ -699,7 +720,38 @@ extension PlaybackViewModel {
             playerLog.notice("[VR→HLS/upgrade] MWEB fetch failed: \(error)")
         }
 
-        playerLog.notice("[VR→HLS/upgrade] no HLS upgrade available — staying on AndroidVR \(availableFormats.map(\.height).max() ?? 0)p quality")
+        // 3. Try AndroidVR adaptive (CDN-exempt rqh=1, no HLS needed).
+        // Useful when muxed (360p) is playing and AndroidVR can deliver 1080p+ via adaptive
+        // composition. The 2s loadTracks timeout applies — if CDN stalls we bail quickly.
+        // Position is saved so the upgraded stream resumes from current playback point.
+        //
+        // On failure: keep availableFormats = AndroidVR's format list (so the quality picker
+        // shows e.g. 1080p/720p options). Also restore isMuxedFallback = true because
+        // tryAllStreams() unconditionally sets it to false via the label check. Without this
+        // restoration, tapping a quality routes through reloadDASHItem (silent rqh=1 failure)
+        // instead of triggering retryWith403Recovery → exhaustiveRetry.
+        guard !Task.isCancelled, currentVideo?.id == video.id else { return }
+        do {
+            let vrInfo = try await api.fetchPlayerInfoAndroidVR(videoId: video.id)
+            guard !Task.isCancelled, currentVideo?.id == video.id else { return }
+            let vrPos = currentTime
+            if vrPos > 0.5 { savedPositionToRestore = vrPos }
+            if await tryAllStreams(video: video, info: vrInfo,
+                                  label: "muxed→upgrade/AndroidVR", skipMuxed: true) {
+                playerLog.notice("[upgrade] ✅ quality upgrade via AndroidVR adaptive complete")
+                return
+            }
+            savedPositionToRestore = nil
+            // Upgrade failed: availableFormats now has AndroidVR's list (set by attemptComposition)
+            // which is correct — user can see quality options and tap to trigger a retry.
+            // Restore isMuxedFallback so quality taps route to retryWith403Recovery.
+            qualityManager.isMuxedFallback = true
+            playerLog.notice("[upgrade] AndroidVR adaptive failed — isMuxedFallback restored, \(availableFormats.count) formats visible in picker")
+        } catch {
+            playerLog.notice("[upgrade] AndroidVR fetch failed: \(error)")
+        }
+
+        playerLog.notice("[upgrade] no quality upgrade available — staying on muxed stream")
     }
 
     /// Kept for the `PlaybackQualityManagerDelegate` protocol.
@@ -1252,22 +1304,19 @@ extension PlaybackViewModel {
 
                 // Timeout task — prevents indefinite CDN hang for rqh=1 Bearer experiments.
                 // After finish() is called by either task, subsequent yield/finish are no-ops.
-                // AndroidVR adaptive is a primary quality path; give it the full 8s on iOS.
-                // On tvOS the CDN occasionally enforces rqh=1 at the segment level (firstByte
-                // probe returns 206 but actual segments hang). Reduce to 2s on tvOS so the
-                // fallback path (preloaded item or exhaustiveRetry) fires 6s sooner.
-                // fix1/tvOS: fast videos complete loadTracks in ~0.4s — 2s is safe margin.
+                // On tvOS/iOS: AndroidVR gets 2s — the firstByte probe (Range: bytes=0-0) is a
+                // false positive for rqh=1 CDN enforcement: the CDN serves the first byte (206)
+                // but stalls actual AVURLAsset segment requests. fast non-rqh videos complete
+                // loadTracks in ~0.4s, so 2s is a safe margin on both platforms.
+                // fix1/tvOS: 2s validated correct. fix_task240: apply same 2s cap to iOS — log
+                // shows 8s × 2 (race + serial) = 16s wasted on `cnsKl2JouOc` class of video.
                 let isVRAttempt = clientParam == "ANDROID_VR"
                 #if os(tvOS)
                 let timeoutNs: UInt64 = isVRAttempt ? 2_000_000_000 : 3_000_000_000
                 #else
-                // fix30 (task #230): Reduce adaptive composition timeout from 3 s → 1.5 s
-                // for iOS first-video loads (needsQuickStartup && !isVRAttempt). The adaptive
-                // loadTracks race rarely resolves between 1.5 s and 3 s for non-VR clients;
-                // when rqh=1 blocks the URL the CDN returns 403 almost immediately. Failing
-                // faster lets exhaustiveRetry reach the serial phases (TVEmbedded, which has
-                // a pre-fetched result from fix30) 1.5 s earlier.
-                let timeoutNs: UInt64 = (needsQuickStartup && !isVRAttempt) ? 1_500_000_000 : 8_000_000_000
+                // fix30 (task #230): 1.5s for non-VR iOS first-video loads.
+                // fix_task240: 2s for AndroidVR (was 8s) — false-positive probe scenario.
+                let timeoutNs: UInt64 = isVRAttempt ? 2_000_000_000 : (needsQuickStartup ? 1_500_000_000 : 8_000_000_000)
                 #endif
                 Task.detached {
                     try? await Task.sleep(nanoseconds: timeoutNs)
@@ -1283,7 +1332,7 @@ extension PlaybackViewModel {
                     #if os(tvOS)
                     let timeoutSec = isVRAttempt ? 2 : 3
                     #else
-                    let timeoutSec = (needsQuickStartup && !isVRAttempt) ? 1 : 8  // 1.5s → display as 1s (fix30)
+                    let timeoutSec = isVRAttempt ? 2 : (needsQuickStartup ? 1 : 8)  // VR=2s (fix_task240), non-VR quick=1.5s (fix30)
                     #endif
                     let reason = "timed out after \(timeoutSec)s or loadTracks failed"
                     playerLog.error("❌ [\(label)/adaptive] loadTracks \(reason) (rqh=\(videoRqh))")
@@ -2164,6 +2213,13 @@ extension PlaybackViewModel {
             case .failed:
                 let err = item.error?.localizedDescription ?? "nil"
                 playerLog.error("❌ [webView/HLS] AVPlayerItem failed: \(err)")
+                // If the CDN denied access (permission error), a fresh WKWebView extraction
+                // will produce the same URL signed by the same CDN session → same 403.
+                // Flag this so exhaustiveRetry skips the serial extraction entirely.
+                if err.lowercased().contains("permission") || err.lowercased().contains("not have access") {
+                    wkHLSPermissionDenied = true
+                    playerLog.notice("[webView/HLS] CDN permission error — serial extraction will be skipped")
+                }
                 return false
             case .unknown: continue
             @unknown default: continue

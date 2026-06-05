@@ -375,6 +375,12 @@ public final class PlaybackViewModel {
     /// eliminating the sequential ~0.5 s Phase 1 network fetch.
     var tvEmbeddedEarlyTask: Task<PlayerInfo?, Never>?
 
+    /// Set to `true` when WKWebView HLS fails with a CDN permission error (HTTP 403 /
+    /// "You do not have permission"). Cleared by load(). When set, serial WKWebView
+    /// extraction is skipped in exhaustiveRetry — a fresh extraction yields the same
+    /// URL signed by the same CDN session, so the same 403 is guaranteed.
+    var wkHLSPermissionDenied: Bool = false
+
     // fix12: videoId of the item stop() left alive in player.currentItem (parked).
     // When load() is called for the same id and the item is still .readyToPlay, the
     // entire exhaustiveRetry race (~1.27s) is skipped — audio session re-activated and

@@ -46,6 +46,7 @@ extension PlaybackViewModel {
             wkHLSEarlyTask?.cancel()
             wkHLSEarlyTask = nil
             wkHLSEarlyTaskVideoId = nil
+            wkHLSPermissionDenied = false
         }
         #endif
 

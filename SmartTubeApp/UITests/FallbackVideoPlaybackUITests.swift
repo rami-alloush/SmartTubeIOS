@@ -27,7 +27,7 @@ import XCTest
 
 final class FallbackVideoPlaybackUITests: XCTestCase {
 
-    private static let fallbackVideoID = "Dy9ki9Q5nXs"
+    private static let fallbackVideoID = "cnsKl2JouOc"
 
     private static var sharedApp: XCUIApplication!
     private static var skipAllTests = false
