@@ -69,6 +69,34 @@ extension PlaybackViewModel {
                     #if canImport(UIKit)
                     self.updateNowPlayingPlayback()
                     #endif
+                    // Stall recovery: mirror the AVPlayerItemPlaybackStalled path (#193).
+                    // Wait 2 s for the system to self-heal (audio route change, interruption
+                    // resume, etc.), then nudge the pipeline if still stalled. Guard on
+                    // !isPlaying (already set above) rather than isPlaying, and also on
+                    // !isSwappingItem to avoid interfering with intentional item swaps.
+                    // Capped at 3 attempts per item, same as the notification-based path.
+                    let recoveryCount = self.stallCount
+                    if recoveryCount <= 3 {
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            guard let self, !self.isPlaying, self.player.rate == 0,
+                                  !self.isQualityChangePending, !self.isSwappingItem else { return }
+                            let seekT = self.currentTime
+                            playerLog.notice("[rateObserver] recovery#\(recoveryCount): seeking to \(seekT)s to flush pipeline")
+                            self.player.seek(
+                                to: CMTime(seconds: seekT, preferredTimescale: 600),
+                                toleranceBefore: .zero,
+                                toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600)
+                            ) { [weak self] _ in
+                                Task { @MainActor [weak self] in
+                                    guard let self, !self.isPlaying, self.player.rate == 0 else { return }
+                                    self.player.rate = Float(self.settings.playbackSpeed)
+                                    self.isPlaying = true
+                                    playerLog.notice("[rateObserver] recovery#\(recoveryCount): rate restored, isPlaying=true")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
