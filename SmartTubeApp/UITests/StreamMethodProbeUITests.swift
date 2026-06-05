@@ -122,7 +122,6 @@ final class StreamMethodProbeUITests: XCTestCase {
         let playPause    = app.buttons["player.playPauseButton"].firstMatch
 
         // Wait for either the title label or the error banner to appear.
-        // We poll both simultaneously so the test reacts to whichever fires first.
         let appeared = titleLabel.waitForExistence(timeout: Self.probeTimeout)
 
         if !appeared {
@@ -155,7 +154,11 @@ final class StreamMethodProbeUITests: XCTestCase {
         }
 
         // Capture resolution from the hidden player.probeStreamResult element.
+        // probeStreamResult is set slightly after playPauseButton becomes enabled
+        // (set by probeStreamMethod after tryAllStreams returns), so wait up to 8s
+        // for it to appear rather than checking immediately.
         let probeResultEl = app.staticTexts["player.probeStreamResult"].firstMatch
+        let _ = probeResultEl.waitForExistence(timeout: 8)
         let resolution = probeResultEl.exists ? probeResultEl.label : "?"
         print("[probe-result] \(method)/\(videoId): \(resolution)")
         XCTContext.runActivity(named: "stream: \(resolution)") { _ in }

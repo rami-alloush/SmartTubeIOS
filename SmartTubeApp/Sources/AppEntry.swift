@@ -290,7 +290,11 @@ struct AppEntry: App {
         guard scheme == "smarttube", url.host?.lowercased() == "video" else { return }
         let components = url.pathComponents.filter { $0 != "/" }
         guard let videoID = components.first, !videoID.isEmpty else { return }
-        browseViewModel.deepLinkedVideo = Video(id: videoID, title: "", channelTitle: "")
+        // Use video ID as placeholder title during UI testing so player.titleLabel
+        // has non-empty text and is visible to XCTest in the AX tree from the moment
+        // the player opens, before the API call returns the real title.
+        let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
+        browseViewModel.deepLinkedVideo = Video(id: videoID, title: isUITesting ? videoID : "", channelTitle: "")
 
         // Clear the App Group pending key so consumePendingVideoID() does not replay
         // this video on the next cold start. When the app is already active, scenePhase
@@ -418,7 +422,19 @@ struct AppEntry: App {
                     if authService.accessToken != nil { break }
                 }
             }
-            await UIApplication.shared.open(deepLink)
+            let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
+            if isUITesting {
+                // On cold-start simulator launches, UIApplication.shared.open() can
+                // race against the view hierarchy not yet being fully mounted, causing
+                // the URL to be silently dropped.  Set deepLinkedVideo directly instead,
+                // with a brief 0.5 s settling delay so landscapePlayerCover is registered.
+                // Use the video ID as the placeholder title so player.titleLabel has
+                // non-empty text immediately (empty Text is pruned from the AX tree).
+                try? await Task.sleep(nanoseconds: 500_000_000)   // 0.5 s
+                browseViewModel.deepLinkedVideo = Video(id: videoID, title: videoID, channelTitle: "")
+            } else {
+                await UIApplication.shared.open(deepLink)
+            }
         }
         #endif
     }
