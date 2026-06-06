@@ -73,6 +73,11 @@ final class TOSPlayerUITests: XCTestCase {
         let readyNote      = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.ready")
         let tickStartNote  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.tickstarted")
         let playingNote    = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.playing")
+        // State-transition diagnostics (via tick handler): observe which states are hit
+        let stateBuffNote  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.state.3")
+        let stateCuedNote  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.state.5")
+        let statePauseNote = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.state.2")
+        let stateEndedNote = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.state.0")
 
         // ── 3. Tap the card — the TOS player should open ──────────────────────
         if !card.isHittable {
@@ -147,10 +152,23 @@ final class TOSPlayerUITests: XCTestCase {
             isPlaying = true
             print("[TOS] ✓ Darwin notification received — player is playing")
         } else {
-            // Darwin notification timed out — check AX state label directly.
+            // Darwin notification timed out — check AX state (label or value).
+            // On macOS 26, SwiftUI Text exposes text content via AXValue (not AXTitle).
             let labelValue = stateLabel.exists ? stateLabel.label : "(not found)"
-            isPlaying = labelValue == "playing" || labelValue == "buffering"
-            print("[TOS] playing notification timed out — stateLabel='\(labelValue)'")
+            let valueStr   = stateLabel.exists ? (stateLabel.value as? String ?? "") : ""
+            let stateStr   = labelValue.isEmpty ? valueStr : labelValue
+            isPlaying = stateStr == "playing" || stateStr == "buffering"
+            // Report which states were observed (helps diagnose autoplay blocking)
+            let seenBuffering = XCTWaiter().wait(for: [stateBuffNote],  timeout: 0) == .completed
+            let seenCued      = XCTWaiter().wait(for: [stateCuedNote],  timeout: 0) == .completed
+            let seenPaused    = XCTWaiter().wait(for: [statePauseNote], timeout: 0) == .completed
+            let seenEnded     = XCTWaiter().wait(for: [stateEndedNote], timeout: 0) == .completed
+            let statesSeen    = [seenBuffering ? "buffering(3)" : nil,
+                                 seenCued      ? "cued(5)"      : nil,
+                                 seenPaused    ? "paused(2)"    : nil,
+                                 seenEnded     ? "ended(0)"     : nil]
+                .compactMap { $0 }.joined(separator: ",")
+            print("[TOS] playing notification timed out — stateLabel='\(stateStr)' states=[\(statesSeen.isEmpty ? "none — stuck at -1/unstarted" : statesSeen)]")
         }
 
         XCTAssertTrue(

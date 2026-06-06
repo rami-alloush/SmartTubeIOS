@@ -70,100 +70,7 @@ final class TOSPlayerViewModel: NSObject {
     var isReady: Bool = false
     /// Non-nil when the player encounters an error that requires falling back.
     var playerError: TOSPlayerError? = nil
-
-    // MARK: - SponsorBlock
-
-    var sponsorSegments: [SponsorSegment] = []
-    /// The segment currently showing a skip toast, if any.
-    var currentToastSegment: SponsorSegment? = nil
-
-    // MARK: - Dependencies
-
-    /// Updated from `TOSPlayerView` via `updateSettings(_:)` on `.onAppear` and
-    /// `.onChange(of: store.settings)`, mirroring the `PlaybackViewModel` pattern.
-    private(set) var settings: AppSettings = AppSettings()
-    private let sponsorService = SponsorBlockService()
-
-    // MARK: - Internal
-
-    let webView: WKWebView
-    private let videoId: String
-    /// Guards against re-triggering a skip within the same segment.
-    private var activeSkipEnd: Double? = nil
-    /// Strong reference to the WKWebView's navigation delegate (WKWebView retains it weakly).
-    private var navigationDelegate: TOSNavigationDelegate?
-    /// Fires the "tickstarted" Darwin notification on the first tick received.
-    private var hasReceivedFirstTick = false
-
-    // MARK: - Init
-
-    init(videoId: String, startTime: Double = 0) {
-        self.videoId = videoId
-
-        let config = WKWebViewConfiguration()
-        // Allow autoplay without a user gesture.
-        config.mediaTypesRequiringUserActionForPlayback = []
-        // macOS WKWebView enables PiP natively for HTML5 video — no extra config needed.
-
-        let contentController = WKUserContentController()
-        // Message handler name must match `window.webkit.messageHandlers.ytCallback`
-        // in the IFrame HTML. We register a proxy here then set the real handler after
-        // super.init because self is not available before init completes.
-        let proxyHandler = ScriptMessageProxy()
-        // Use .pageWorld explicitly so the handler is available to page-context JS
-        // (the default add(_:name:) registers in all worlds but on macOS 26 we are explicit).
-        contentController.add(proxyHandler, contentWorld: .page, name: "ytCallback")
-        config.userContentController = contentController
-
-        self.webView = WKWebView(frame: .zero, configuration: config)
-        self.webView.setValue(false, forKey: "drawsBackground")  // transparent bg
-
-        super.init()
-
-        proxyHandler.target = self
-
-        // Navigation delegate: separate NSObject so actor isolation doesn't
-        // interfere with Objective-C delegate dispatch on macOS 26 / Swift 6.
-        let navDel = TOSNavigationDelegate()
-        self.webView.navigationDelegate = navDel
-        // Retain the delegate strongly — WKWebView only holds it weakly.
-        self.navigationDelegate = navDel
-
-        loadHTML(videoId: videoId, startTime: startTime)
-    }
-
-    deinit {
-        // Remove the message handler to break the retain cycle WKWebView ↔ handler.
-        // Must match the contentWorld used when adding (pageWorld).
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "ytCallback", contentWorld: .page)
-    }
-
-    // MARK: - Settings update
-
-    /// Called from `TOSPlayerView.onAppear` and `onChange(of: store.settings)`.
-    /// Mirrors `PlaybackViewModel.updateSettings(_:)`.
-    func updateSettings(_ newSettings: AppSettings) {
-        settings = newSettings
-    }
-
-    // MARK: - JS Commands
-
-    func play() {
-        eval("play()")
-    }
-
-    func pause() {
-        eval("pause()")
-    }
-
-    func seekTo(_ seconds: Double) {
-        eval("seekTo(\(seconds))")
-    }
-
-    func setPlaybackRate(_ rate: Double) {
-        eval("setRate(\(rate))")
-    }
-
+        // IFrame HTML template removed — using direct `loadEmbed` + `stateDetectionJS`.
     // MARK: - JS Message Handling
 
     /// Called from `ScriptMessageProxy` (main thread guaranteed by WKWebView).
@@ -246,6 +153,12 @@ final class TOSPlayerViewModel: NSObject {
             }
             if newState != playerState {
                 tosLog.notice("[ytCallback] tick state changed: \(self.playerState.rawValue) → \(s) at t=\(t, format: .fixed(precision: 1))s")
+                // Fire a state-transition notification so the test can observe it.
+                CFNotificationCenterPostNotification(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    CFNotificationName("com.void.smarttube.tosplayer.state.\(s)" as CFString),
+                    nil, nil, true
+                )
             }
             playerState = newState
             checkSponsorSkip(at: t)
@@ -420,29 +333,101 @@ final class TOSPlayerViewModel: NSObject {
             }, 250);
           }
 
-          function postMessage(type, data) {
-            var payload = JSON.stringify(Object.assign({ type: type }, data));
-            window.webkit.messageHandlers.ytCallback.postMessage(payload);
-          }
+                </script>
+                </body>
+                </html>
+                """
+        }
 
-          // Immediately ping Swift to verify the JS<->Swift message bridge is working.
-          // This fires before the iframe_api script loads, so it tells us if the bridge
-          // is broken even when YouTube's script fails to load.
-          (function() {
-            try { postMessage('ping', {}); } catch(e) {}
-          })();
+        // MARK: - Embed URL loader
 
-          // Commands called from Swift via evaluateJavaScript.
-          function play()       { if (ytPlayer) ytPlayer.playVideo(); }
-          function pause()      { if (ytPlayer) ytPlayer.pauseVideo(); }
-          function seekTo(t)    { if (ytPlayer) ytPlayer.seekTo(t, true); }
-          function setRate(r)   { if (ytPlayer) ytPlayer.setPlaybackRate(r); }
-          function setVolume(v) { if (ytPlayer) ytPlayer.setVolume(v); }
-        </script>
-        </body>
-        </html>
-        """
+    private func loadEmbed(videoId: String, startTime: Double) {
+        var comps = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+        comps.queryItems = [
+            URLQueryItem(name: "autoplay",        value: "1"),
+            URLQueryItem(name: "mute",            value: "1"),  // muted = unconditional autoplay
+            URLQueryItem(name: "controls",        value: "1"),
+            URLQueryItem(name: "playsinline",     value: "1"),
+            URLQueryItem(name: "rel",             value: "0"),
+            URLQueryItem(name: "modestbranding",  value: "1"),
+            URLQueryItem(name: "iv_load_policy",  value: "3"),
+            URLQueryItem(name: "start",           value: "\(Int(startTime))"),
+        ]
+        let url = comps.url!
+        tosLog.notice("[loadEmbed] loading \(url)")
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName("com.void.smarttube.tosplayer.loadstarted" as CFString),
+            nil, nil, true
+        )
+        webView.load(URLRequest(url: url))
     }
+
+    // MARK: - State-detection WKUserScript (injected into YouTube embed page)
+
+    /// JavaScript injected at document-end into the YouTube embed page.
+    /// Polls the `<video>` element for state changes and relays them via the
+    /// `window.webkit.messageHandlers.ytCallback` bridge.
+    private static let stateDetectionJS: String = """
+    (function() {
+        // Signal bridge availability immediately.
+        try {
+            window.webkit.messageHandlers.ytCallback.postMessage('{"type":"ping"}');
+        } catch(e) {}
+
+        var _prevState = -2;
+        var _prevTime  = -1;
+
+        function pollVideo() {
+            var video = document.querySelector('video');
+            if (!video) return;
+
+            // Derive IFrame-API-compatible state from the video element.
+            var s;
+            if (video.ended) {
+                s = 0;          // ended
+            } else if (video.paused) {
+                s = 2;          // paused
+            } else if (video.readyState >= 3) {
+                s = 1;          // playing (HAVE_FUTURE_DATA or better)
+            } else {
+                s = 3;          // buffering
+            }
+
+            var t = video.currentTime || 0;
+
+            // Fire "ready" once when the video element first appears.
+            if (_prevState === -2) {
+                try {
+                    window.webkit.messageHandlers.ytCallback.postMessage(
+                        JSON.stringify({type: 'ready', duration: video.duration || 0})
+                    );
+                } catch(e) {}
+            }
+
+            // Emit a tick every poll cycle.
+            try {
+                window.webkit.messageHandlers.ytCallback.postMessage(
+                    JSON.stringify({type: 'tick', t: t, state: s})
+                );
+            } catch(e) {}
+
+            // Emit stateChange only on transitions.
+            if (s !== _prevState) {
+                _prevState = s;
+                try {
+                    window.webkit.messageHandlers.ytCallback.postMessage(
+                        JSON.stringify({type: 'stateChange', state: s})
+                    );
+                } catch(e) {}
+            }
+        }
+
+        // Start polling. The video element may not exist immediately at document-end
+        // on YouTube's SPA, so we retry until it appears.
+        var _pollTimer = setInterval(pollVideo, 250);
+    })();
+    """
 }
 
 // MARK: - TOSNavigationDelegate
