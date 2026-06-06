@@ -7350,6 +7350,9 @@
         }
       }
     },
+    "ended" : {
+
+    },
     "English" : {
       "localizations" : {
         "ar" : {
@@ -13935,6 +13938,9 @@
         }
       }
     },
+    "paused" : {
+
+    },
     "Per-Device Recommendations" : {
       "localizations" : {
         "ar" : {
@@ -14408,6 +14414,9 @@
           }
         }
       }
+    },
+    "playing" : {
+
     },
     "Playlist" : {
       "comment" : "Video type search filter option",
@@ -23204,6 +23213,9 @@
           }
         }
       }
+    },
+    "unstarted" : {
+
     },
     "Upload date" : {
       "comment" : "Search filter section header; also a sort order option",

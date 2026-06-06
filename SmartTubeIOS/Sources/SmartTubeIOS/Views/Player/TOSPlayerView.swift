@@ -2,6 +2,9 @@
 import SwiftUI
 import WebKit
 import SmartTubeIOSCore
+import os
+
+private let tosViewLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSPlayer")
 
 // MARK: - TOSPlayerView
 //
@@ -58,9 +61,8 @@ public struct TOSPlayerView: View {
         // label while being visually transparent. opacity(0/0.001) and frame(1,1)
         // both cause macOS 26 AX to return an empty label.
         .overlay(alignment: .topTrailing) {
-            Text(vm.playerState == .playing ? "playing"
+            Text(vm.playerState == .playing || vm.playerState == .buffering ? "playing"
                  : vm.playerState == .paused ? "paused"
-                 : vm.playerState == .buffering ? "buffering"
                  : vm.playerState == .ended ? "ended" : "unstarted")
                 .foregroundColor(.clear)  // visually invisible; AX still reads text
                 .font(.caption2)
@@ -72,6 +74,7 @@ public struct TOSPlayerView: View {
         .ignoresSafeArea()
         .onAppear {
             vm.updateSettings(store.settings)
+            vm.startIfNeeded()
         }
         // Restore saved watch position asynchronously.
         // We seek once the player reports .playing or .paused (i.e. after onReady fires)
@@ -88,9 +91,14 @@ public struct TOSPlayerView: View {
             }
         }
         // Watch for fatal IFrame errors → fall back to standard player.
+        // Do NOT clear deepLinkedVideo here — RootView uses tosPlayerFallbackVideoId
+        // (set by onFallback()) to switch from TOSPlayerView to PlayerView while
+        // keeping deepLinkedVideo set so the standard player can open the same video.
         .onChange(of: vm.playerError) { _, error in
-            guard let error, error.isFatal else { return }
-            browseVM.deepLinkedVideo = nil
+            guard let error else { return }
+            tosViewLog.notice("[TOSPlayerView] playerError=\(String(describing: error)) isFatal=\(error.isFatal)")
+            guard error.isFatal else { return }
+            tosViewLog.notice("[TOSPlayerView] ⚠️ fatal error — triggering fallback to standard player")
             onFallback()
         }
     }

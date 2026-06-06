@@ -316,6 +316,7 @@ struct MainSidebarView: View {
             // Full-window player overlay — avoids macOS sheet coordinate issues that
             // prevent XCUITest click events from reaching controls inside a popover window.
             if let video = browseVM.deepLinkedVideo {
+#if os(macOS)
                 let shouldUseTOS = store.settings.useTOSPlayerOnMac
                                    && tosPlayerFallbackVideoId != video.id
                 if shouldUseTOS {
@@ -336,6 +337,13 @@ struct MainSidebarView: View {
                         .environment(browseVM)
                         .ignoresSafeArea()
                 }
+#else
+                PlayerView(video: video, api: api)
+                    .environment(store)
+                    .environment(auth)
+                    .environment(browseVM)
+                    .ignoresSafeArea()
+#endif
             }
         }
         // When a different video is opened, clear the per-video fallback guard so
