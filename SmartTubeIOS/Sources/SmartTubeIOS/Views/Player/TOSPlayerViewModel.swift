@@ -33,7 +33,7 @@ enum TOSPlayerError: Equatable {
     case notFound
     /// Generic IFrame player error.
     case iframeError(Int)
-    /// WKWebView failed to load the player HTML.
+    /// WKWebView failed to load the player page.
     case webViewLoadFailed
 
     var isFatal: Bool {
@@ -46,17 +46,14 @@ enum TOSPlayerError: Equatable {
 
 // MARK: - TOSPlayerViewModel
 
-/// State owner for the macOS IFrame-based TOS-compliant player.
+/// State owner for the macOS TOS-compliant YouTube embed player.
 ///
-/// Responsibilities:
-/// - Owns and configures the `WKWebView` instance with the YouTube IFrame HTML.
-/// - Receives JS callbacks via `WKScriptMessageHandler` ("ytCallback").
-/// - Exposes playback state (isPlaying, currentTime, duration, speed).
-/// - Fetches and applies SponsorBlock skips via JS `seekTo()`.
-/// - Exposes `playerError` so `TOSPlayerView` can fall back to `PlayerView`.
+/// Architecture: loads `https://www.youtube.com/embed/{videoId}` directly in WKWebView
+/// (not via the IFrame API in our own HTML), then injects `stateDetectionJS` to poll
+/// the `<video>` element and relay state via `window.webkit.messageHandlers.ytCallback`.
 ///
-/// All mutation is `@MainActor`. The `WKScriptMessageHandler` bridge posts
-/// messages back to main actor using `Task { @MainActor in ... }`.
+/// All mutation is `@MainActor`. The `WKScriptMessageHandler` bridge dispatches back
+/// to main actor via `Task { @MainActor in ... }`.
 @MainActor
 @Observable
 final class TOSPlayerViewModel: NSObject {
@@ -70,7 +67,102 @@ final class TOSPlayerViewModel: NSObject {
     var isReady: Bool = false
     /// Non-nil when the player encounters an error that requires falling back.
     var playerError: TOSPlayerError? = nil
-        // IFrame HTML template removed — using direct `loadEmbed` + `stateDetectionJS`.
+
+    // MARK: - SponsorBlock
+
+    var sponsorSegments: [SponsorSegment] = []
+    /// The segment currently showing a skip toast, if any.
+    var currentToastSegment: SponsorSegment? = nil
+
+    // MARK: - Dependencies
+
+    private(set) var settings: AppSettings = AppSettings()
+    private let sponsorService = SponsorBlockService()
+
+    // MARK: - Internal
+
+    let webView: WKWebView
+    private let videoId: String
+    /// Guards against re-triggering a skip within the same segment.
+    private var activeSkipEnd: Double? = nil
+    /// Strong reference to the WKWebView's navigation delegate (WKWebView retains it weakly).
+    private var navigationDelegate: TOSNavigationDelegate?
+    /// Fires the "tickstarted" Darwin notification on the first tick received.
+    private var hasReceivedFirstTick = false
+
+    // MARK: - Init
+
+    init(videoId: String, startTime: Double = 0) {
+        self.videoId = videoId
+
+        let config = WKWebViewConfiguration()
+        // Allow autoplay without user gesture on the main frame (embed URL, not an iframe).
+        config.mediaTypesRequiringUserActionForPlayback = []
+
+        let contentController = WKUserContentController()
+        let proxyHandler = ScriptMessageProxy()
+        // Register in .page world so the WKUserScript (also .page) can call it.
+        contentController.add(proxyHandler, contentWorld: .page, name: "ytCallback")
+
+        // Inject state-detection JS at document-end into YouTube's embed page.
+        let detectionScript = WKUserScript(
+            source: Self.stateDetectionJS,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true,
+            in: .page
+        )
+        contentController.addUserScript(detectionScript)
+
+        config.userContentController = contentController
+
+        self.webView = WKWebView(frame: .zero, configuration: config)
+        self.webView.setValue(false, forKey: "drawsBackground")
+
+        super.init()
+
+        proxyHandler.target = self
+
+        // Separate NSObject navigation delegate avoids Swift 6 @MainActor isolation
+        // interfering with Objective-C WKNavigationDelegate dispatch.
+        let navDel = TOSNavigationDelegate()
+        self.webView.navigationDelegate = navDel
+        self.navigationDelegate = navDel
+
+        loadEmbed(videoId: videoId, startTime: startTime)
+    }
+
+    deinit {
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: "ytCallback",
+            contentWorld: .page
+        )
+    }
+
+    // MARK: - Settings update
+
+    /// Called from `TOSPlayerView.onAppear`. Mirrors `PlaybackViewModel.updateSettings(_:)`.
+    func updateSettings(_ newSettings: AppSettings) {
+        settings = newSettings
+    }
+
+    // MARK: - JS Commands (operating on YouTube embed page's <video> element)
+
+    func play() {
+        eval("var v=document.querySelector('video');if(v)v.play();")
+    }
+
+    func pause() {
+        eval("var v=document.querySelector('video');if(v)v.pause();")
+    }
+
+    func seekTo(_ seconds: Double) {
+        eval("var v=document.querySelector('video');if(v)v.currentTime=\(seconds);")
+    }
+
+    func setPlaybackRate(_ rate: Double) {
+        eval("var v=document.querySelector('video');if(v)v.playbackRate=\(rate);")
+    }
+
     // MARK: - JS Message Handling
 
     /// Called from `ScriptMessageProxy` (main thread guaranteed by WKWebView).
@@ -96,16 +188,15 @@ final class TOSPlayerViewModel: NSObject {
             isReady = true
             duration = (json["duration"] as? Double) ?? 0
             tosLog.notice("[ytCallback] ready — duration=\(self.duration, format: .fixed(precision: 1))s")
-            // Signal UI tests that onPlayerReady fired (JS <-> Swift bridge is working).
             CFNotificationCenterPostNotification(
                 CFNotificationCenterGetDarwinNotifyCenter(),
                 CFNotificationName("com.void.smarttube.tosplayer.ready" as CFString),
                 nil, nil, true
             )
-            // Muted playback bypasses cross-origin iframe autoplay restrictions in WKWebView.
-            // onPlayerReady in JS also calls mute()+playVideo(), but we repeat from Swift
-            // as a belt-and-suspenders in case the JS call was suppressed.
-            eval("ytPlayer.mute(); ytPlayer.playVideo();")
+            // Force muted playback. YouTube's embed page sets autoplay=1&mute=1 via URL
+            // params but WKWebView finds the <video> element before YouTube's own JS calls
+            // play() — so we nudge it here to avoid getting stuck in paused state.
+            eval("var v=document.querySelector('video');if(v){v.muted=true;v.play();}")
             Task { await self.fetchSponsorSegments() }
 
         case "stateChange":
@@ -113,8 +204,6 @@ final class TOSPlayerViewModel: NSObject {
             playerState = YTPlayerState(raw: raw)
             tosLog.debug("[ytCallback] stateChange → \(raw)")
             if playerState == .playing {
-                // Notify UI tests that the IFrame player has started playback.
-                // Mirrors com.void.smarttube.player.ready used by AVPlayer path.
                 CFNotificationCenterPostNotification(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     CFNotificationName("com.void.smarttube.tosplayer.playing" as CFString),
@@ -130,10 +219,9 @@ final class TOSPlayerViewModel: NSObject {
             let s = (json["state"] as? Int) ?? 999
             currentTime = t
             let newState = YTPlayerState(raw: s)
-            // Diagnostics: fire tickstarted on first tick, playing on state=1.
             if !hasReceivedFirstTick {
                 hasReceivedFirstTick = true
-                tosLog.notice("[ytCallback] first tick received — state=\(s) t=\(t, format: .fixed(precision: 2))s")
+                tosLog.notice("[ytCallback] first tick — state=\(s) t=\(t, format: .fixed(precision: 2))s")
                 CFNotificationCenterPostNotification(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     CFNotificationName("com.void.smarttube.tosplayer.tickstarted" as CFString),
@@ -148,12 +236,8 @@ final class TOSPlayerViewModel: NSObject {
                     nil, nil, true
                 )
             }
-            if newState == .buffering && playerState != .buffering {
-                tosLog.notice("[ytCallback] tick detected buffering state")
-            }
             if newState != playerState {
-                tosLog.notice("[ytCallback] tick state changed: \(self.playerState.rawValue) → \(s) at t=\(t, format: .fixed(precision: 1))s")
-                // Fire a state-transition notification so the test can observe it.
+                tosLog.notice("[ytCallback] tick state: \(self.playerState.rawValue) → \(s) at t=\(t, format: .fixed(precision: 1))s")
                 CFNotificationCenterPostNotification(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     CFNotificationName("com.void.smarttube.tosplayer.state.\(s)" as CFString),
@@ -167,12 +251,9 @@ final class TOSPlayerViewModel: NSObject {
             let code = (json["code"] as? Int) ?? -1
             tosLog.warning("[ytCallback] error code=\(code)")
             switch code {
-            case 101, 150:
-                playerError = .embeddingDisabled
-            case 100:
-                playerError = .notFound
-            default:
-                playerError = .iframeError(code)
+            case 101, 150: playerError = .embeddingDisabled
+            case 100:      playerError = .notFound
+            default:       playerError = .iframeError(code)
             }
 
         default:
@@ -201,7 +282,6 @@ final class TOSPlayerViewModel: NSObject {
             return
         }
 
-        // Clear active skip guard when we've passed the skip end point.
         if let end = activeSkipEnd, time >= end { activeSkipEnd = nil }
 
         guard let seg = sponsorSegments.first(where: { time >= $0.start && time < $0.end }) else {
@@ -235,123 +315,19 @@ final class TOSPlayerViewModel: NSObject {
         }
     }
 
-    private func loadHTML(videoId: String, startTime: Double) {
-        let html = Self.buildHTML(videoId: videoId, startTime: startTime)
-        // Use nil baseURL: a remote baseURL (e.g. https://www.youtube.com) causes
-        // macOS WebKit to deny window.webkit.messageHandlers access for security.
-        // The IFrame API script uses an absolute URL so no baseURL is needed.
-        tosLog.notice("[loadHTML] calling loadHTMLString — navigation should fire didFinish shortly")
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName("com.void.smarttube.tosplayer.loadstarted" as CFString),
-            nil, nil, true
-        )
-        webView.loadHTMLString(html, baseURL: nil)
-    }
-
-    // MARK: - HTML template
-
-    private static func buildHTML(videoId: String, startTime: Double) -> String {
-        // Language from current locale (BCP-47 short code).
-        let lang = Locale.current.language.languageCode?.identifier ?? "en"
-        let startSecs = Int(startTime)
-        // controls:1 = Phase 1 (YouTube's own chrome visible).
-        // This is intentional for the experiment — we evaluate behaviour before
-        // hiding controls and painting our own overlay in Phase 2.
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body, html { width: 100%; height: 100%; background: #000; overflow: hidden; }
-          #player { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        </style>
-        </head>
-        <body>
-        <div id="player"></div>
-        <script>
-          var tag = document.createElement('script');
-          tag.src = "https://www.youtube.com/iframe_api";
-          tag.onerror = function() {
-            postMessage('error', { code: -999 }); // iframe_api failed to load
-          };
-          document.head.appendChild(tag);
-
-          var ytPlayer;
-
-          function onYouTubeIframeAPIReady() {
-            ytPlayer = new YT.Player('player', {
-              videoId: '\(videoId)',
-              playerVars: {
-                controls: 1,
-                playsinline: 1,
-                rel: 0,
-                modestbranding: 1,
-                autoplay: 1,
-                start: \(startSecs),
-                hl: '\(lang)',
-                iv_load_policy: 3
-              },
-              events: {
-                onReady:             onPlayerReady,
-                onStateChange:       onPlayerStateChange,
-                onError:             onPlayerError,
-                onPlaybackRateChange: onPlaybackRateChange
-              }
-            });
-          }
-
-          function onPlayerReady(e) {
-            // Muted autoplay works on all browsers/WKWebView; unmuted autoplay
-            // is blocked by macOS WKWebView cross-origin iframe autoplay policy.
-            ytPlayer.mute();
-            ytPlayer.playVideo();
-            postMessage('ready', { duration: ytPlayer.getDuration() });
-            startPolling();
-          }
-          function onPlayerStateChange(e) {
-            postMessage('stateChange', { state: e.data });
-          }
-          function onPlayerError(e) {
-            postMessage('error', { code: e.data });
-          }
-          function onPlaybackRateChange(e) {
-            postMessage('rateChange', { rate: e.data });
-          }
-
-          // Poll currentTime at 250 ms intervals for SponsorBlock.
-          function startPolling() {
-            setInterval(function() {
-              if (ytPlayer && ytPlayer.getCurrentTime) {
-                postMessage('tick', {
-                  t: ytPlayer.getCurrentTime(),
-                  state: ytPlayer.getPlayerState()
-                });
-              }
-            }, 250);
-          }
-
-                </script>
-                </body>
-                </html>
-                """
-        }
-
-        // MARK: - Embed URL loader
+    // MARK: - Embed URL loader
 
     private func loadEmbed(videoId: String, startTime: Double) {
         var comps = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
         comps.queryItems = [
-            URLQueryItem(name: "autoplay",        value: "1"),
-            URLQueryItem(name: "mute",            value: "1"),  // muted = unconditional autoplay
-            URLQueryItem(name: "controls",        value: "1"),
-            URLQueryItem(name: "playsinline",     value: "1"),
-            URLQueryItem(name: "rel",             value: "0"),
-            URLQueryItem(name: "modestbranding",  value: "1"),
-            URLQueryItem(name: "iv_load_policy",  value: "3"),
-            URLQueryItem(name: "start",           value: "\(Int(startTime))"),
+            URLQueryItem(name: "autoplay",       value: "1"),
+            URLQueryItem(name: "mute",           value: "1"),  // muted = unconditional autoplay
+            URLQueryItem(name: "controls",       value: "1"),
+            URLQueryItem(name: "playsinline",    value: "1"),
+            URLQueryItem(name: "rel",            value: "0"),
+            URLQueryItem(name: "modestbranding", value: "1"),
+            URLQueryItem(name: "iv_load_policy", value: "3"),
+            URLQueryItem(name: "start",          value: "\(Int(startTime))"),
         ]
         let url = comps.url!
         tosLog.notice("[loadEmbed] loading \(url)")
@@ -366,53 +342,47 @@ final class TOSPlayerViewModel: NSObject {
     // MARK: - State-detection WKUserScript (injected into YouTube embed page)
 
     /// JavaScript injected at document-end into the YouTube embed page.
-    /// Polls the `<video>` element for state changes and relays them via the
-    /// `window.webkit.messageHandlers.ytCallback` bridge.
+    /// Polls the `<video>` element and relays state via `window.webkit.messageHandlers.ytCallback`.
     private static let stateDetectionJS: String = """
     (function() {
-        // Signal bridge availability immediately.
         try {
             window.webkit.messageHandlers.ytCallback.postMessage('{"type":"ping"}');
         } catch(e) {}
 
         var _prevState = -2;
-        var _prevTime  = -1;
 
         function pollVideo() {
             var video = document.querySelector('video');
             if (!video) return;
 
-            // Derive IFrame-API-compatible state from the video element.
             var s;
             if (video.ended) {
-                s = 0;          // ended
+                s = 0;
             } else if (video.paused) {
-                s = 2;          // paused
+                s = 2;
             } else if (video.readyState >= 3) {
-                s = 1;          // playing (HAVE_FUTURE_DATA or better)
+                s = 1;
             } else {
-                s = 3;          // buffering
+                s = 3;
             }
 
             var t = video.currentTime || 0;
 
-            // Fire "ready" once when the video element first appears.
             if (_prevState === -2) {
                 try {
                     window.webkit.messageHandlers.ytCallback.postMessage(
                         JSON.stringify({type: 'ready', duration: video.duration || 0})
                     );
                 } catch(e) {}
+                _prevState = s;
             }
 
-            // Emit a tick every poll cycle.
             try {
                 window.webkit.messageHandlers.ytCallback.postMessage(
                     JSON.stringify({type: 'tick', t: t, state: s})
                 );
             } catch(e) {}
 
-            // Emit stateChange only on transitions.
             if (s !== _prevState) {
                 _prevState = s;
                 try {
@@ -423,40 +393,25 @@ final class TOSPlayerViewModel: NSObject {
             }
         }
 
-        // Start polling. The video element may not exist immediately at document-end
-        // on YouTube's SPA, so we retry until it appears.
-        var _pollTimer = setInterval(pollVideo, 250);
+        setInterval(pollVideo, 250);
     })();
     """
 }
 
 // MARK: - TOSNavigationDelegate
 
-/// Separate NSObject navigation delegate to ensure Objective-C dispatch works
-/// correctly when the view model is a `@MainActor @Observable` actor-isolated class.
+/// Separate NSObject navigation delegate to ensure Objective-C dispatch works correctly
+/// when the view model is a `@MainActor @Observable` actor-isolated class.
 /// WKWebView holds a weak reference — TOSPlayerViewModel retains this strongly.
 private final class TOSNavigationDelegate: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Signal navigation completion for diagnostics.
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             CFNotificationName("com.void.smarttube.tosplayer.navfinished" as CFString),
             nil, nil, true
         )
-        tosLog.notice("[nav] HTML navigation finished — probing bridge via evaluateJavaScript")
-        // Probe the bridge from the Swift side: if window.webkit.messageHandlers.ytCallback
-        // is available, posting a ping here will fire the Darwin "bridge" notification.
-        let js = """
-        (function() {
-            try {
-                window.webkit.messageHandlers.ytCallback.postMessage('{"type":"ping"}');
-            } catch(e) {}
-        })();
-        """
-        webView.evaluateJavaScript(js) { result, error in
-            if let error { tosLog.warning("[nav] evaluateJavaScript ping error: \(error)") }
-        }
+        tosLog.notice("[nav] navigation finished")
     }
 
     func webView(_ webView: WKWebView,
@@ -478,7 +433,7 @@ private final class TOSNavigationDelegate: NSObject, WKNavigationDelegate {
 // MARK: - ScriptMessageProxy
 
 /// Breaks the retain cycle: `WKUserContentController` retains its handlers strongly.
-/// This lightweight proxy holds a `weak` reference to the real handler target so
+/// This proxy holds a `weak` reference to the real handler target so
 /// `TOSPlayerViewModel` is not kept alive by the web view's content controller.
 private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler, @unchecked Sendable {
     weak var target: TOSPlayerViewModel?
