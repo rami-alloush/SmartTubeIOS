@@ -92,6 +92,8 @@ final class TOSPlayerViewModel: NSObject {
     private var activeSkipEnd: Double? = nil
     /// Strong reference to the WKWebView's navigation delegate (WKWebView retains it weakly).
     private var navigationDelegate: TOSNavigationDelegate?
+    /// Fires the "tickstarted" Darwin notification on the first tick received.
+    private var hasReceivedFirstTick = false
 
     // MARK: - Init
 
@@ -221,8 +223,16 @@ final class TOSPlayerViewModel: NSObject {
             let s = (json["state"] as? Int) ?? 999
             currentTime = t
             let newState = YTPlayerState(raw: s)
-            // Fire playing notification from tick too, in case onPlayerStateChange
-            // was posted before the XCTDarwinNotificationExpectation was created.
+            // Diagnostics: fire tickstarted on first tick, playing on state=1.
+            if !hasReceivedFirstTick {
+                hasReceivedFirstTick = true
+                tosLog.notice("[ytCallback] first tick received — state=\(s) t=\(t, format: .fixed(precision: 2))s")
+                CFNotificationCenterPostNotification(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    CFNotificationName("com.void.smarttube.tosplayer.tickstarted" as CFString),
+                    nil, nil, true
+                )
+            }
             if newState == .playing && playerState != .playing {
                 tosLog.notice("[ytCallback] tick detected playing state — firing notification")
                 CFNotificationCenterPostNotification(
@@ -231,8 +241,11 @@ final class TOSPlayerViewModel: NSObject {
                     nil, nil, true
                 )
             }
-            if s != (json["state"] as? Int ?? 999) || newState != playerState {
-                tosLog.debug("[ytCallback] tick state=\(s) t=\(t, format: .fixed(precision: 1))s")
+            if newState == .buffering && playerState != .buffering {
+                tosLog.notice("[ytCallback] tick detected buffering state")
+            }
+            if newState != playerState {
+                tosLog.notice("[ytCallback] tick state changed: \(self.playerState.rawValue) → \(s) at t=\(t, format: .fixed(precision: 1))s")
             }
             playerState = newState
             checkSponsorSkip(at: t)

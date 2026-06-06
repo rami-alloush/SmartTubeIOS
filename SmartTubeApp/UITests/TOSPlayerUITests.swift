@@ -71,6 +71,7 @@ final class TOSPlayerUITests: XCTestCase {
         let navNote        = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.navfinished")
         let bridgeNote     = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.bridge")
         let readyNote      = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.ready")
+        let tickStartNote  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.tickstarted")
         let playingNote    = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.playing")
 
         // ── 3. Tap the card — the TOS player should open ──────────────────────
@@ -121,6 +122,16 @@ final class TOSPlayerUITests: XCTestCase {
             print("[TOS] ✓ onPlayerReady fired — iframe_api loaded")
         } else if bridgeResult == .completed {
             print("[TOS] ✗ onPlayerReady did NOT fire within 30s — iframe_api script may have failed to load")
+        }
+
+        // Stage 2.5: Tick poll — is startPolling() running?
+        let tickResult = readyResult == .completed
+            ? XCTWaiter().wait(for: [tickStartNote], timeout: 3)
+            : .timedOut
+        if tickResult == .completed {
+            print("[TOS] ✓ tick poll received — startPolling() is running")
+        } else if readyResult == .completed {
+            print("[TOS] ✗ no tick received within 3s of ready — startPolling() may not be called")
         }
 
         // Stage 3: playing state

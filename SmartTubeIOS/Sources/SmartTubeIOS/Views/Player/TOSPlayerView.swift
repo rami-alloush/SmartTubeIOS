@@ -54,16 +54,16 @@ public struct TOSPlayerView: View {
         }
         // Invisible AX label exposing player state for UI tests.
         // Mirrors player.titleLabel / player.probeStreamResult on PlayerView.
-        // Use frame(0×0) + clipped + Color.clear background so the element is in
-        // the AX tree but not visible. opacity(0) and opacity(0.001) both return
-        // empty label on macOS 26 AX; a zero-size clipped frame keeps the label.
+        // foregroundColor(.clear) keeps the text in the AX tree with a readable
+        // label while being visually transparent. opacity(0/0.001) and frame(1,1)
+        // both cause macOS 26 AX to return an empty label.
         .overlay(alignment: .topTrailing) {
             Text(vm.playerState == .playing ? "playing"
                  : vm.playerState == .paused ? "paused"
                  : vm.playerState == .buffering ? "buffering"
                  : vm.playerState == .ended ? "ended" : "unstarted")
-                .frame(width: 1, height: 1)
-                .clipped()
+                .foregroundColor(.clear)  // visually invisible; AX still reads text
+                .font(.caption2)
                 .allowsHitTesting(false)
                 .accessibilityIdentifier("tosPlayer.stateLabel")
                 .accessibilityHidden(false)
