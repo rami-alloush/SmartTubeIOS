@@ -169,8 +169,12 @@ extension InnerTubeAPI {
         // WEB grid (gridVideoRenderer), and TVHTML5 tileRenderer (subs/history/home on TV client).
         // Matches Android MediaServiceCore ItemWrapper renderer dispatch order.
         func walk(_ obj: Any, depth: Int = 0) {
-            guard depth < 30 else {
-                tubeLog.warning("parseVideoGroup: walk depth limit (30) reached — skipping subtree")
+            // Stack frames for this closure are large due to captured dicts and ARC temporaries.
+            // Empirically: 12 frames overflow an 8 MB stack on macOS 26 / arm64.
+            // Limit to 9 to leave headroom while still covering all known YouTube structures
+            // (TV client structural pass-throughs reach depth ~8, WEB client ~6).
+            guard depth < 9 else {
+                tubeLog.warning("parseVideoGroup: walk depth limit (9) reached — skipping subtree")
                 return
             }
             if let dict = obj as? [String: Any] {

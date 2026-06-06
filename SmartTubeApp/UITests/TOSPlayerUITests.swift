@@ -62,14 +62,25 @@ final class TOSPlayerUITests: XCTestCase {
         let cardID = card.identifier  // "video.card.<videoId>"
         print("[TOS] clicking card: \(cardID)")
 
-        // ── 2. Tap the card — the TOS player should open ──────────────────────
+        // ── 2. Register Darwin expectations BEFORE clicking ───────────────────
+        // CRITICAL: The navigation often completes (and notifies) during the 1s
+        // animation that precedes the close button appearing. Expectations must
+        // be created BEFORE the click so they capture notifications that fire
+        // before the close button is visible.
+        let loadStartNote  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.loadstarted")
+        let navNote        = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.navfinished")
+        let bridgeNote     = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.bridge")
+        let readyNote      = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.ready")
+        let playingNote    = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.playing")
+
+        // ── 3. Tap the card — the TOS player should open ──────────────────────
         if !card.isHittable {
             app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: 100)
             Thread.sleep(forTimeInterval: 0.5)
         }
         card.click()
 
-        // ── 3. Wait for the close button (player appeared) ───────────────────
+        // ── 4. Wait for the close button (player appeared) ───────────────────
         let closeBtn = app.buttons["tosPlayer.closeButton"].firstMatch
         XCTAssertTrue(
             closeBtn.waitForExistence(timeout: 15),
@@ -77,23 +88,58 @@ final class TOSPlayerUITests: XCTestCase {
         )
         print("[TOS] ✓ player opened — closeButton visible")
 
-        // ── 4. Wait for IFrame to start playing (Darwin notification) ─────────
-        let playingNote = XCTDarwinNotificationExpectation(
-            notificationName: "com.void.smarttube.tosplayer.playing"
-        )
-        let playResult = XCTWaiter().wait(for: [playingNote], timeout: 30)
+        // ── 5. Collect diagnostic notification results ────────────────────────
+        // Stage 0a: Was loadHTMLString even called?
+        let loadResult = XCTWaiter().wait(for: [loadStartNote], timeout: 1)
+        print("[TOS] loadHTMLString called: \(loadResult == .completed ? "✓ YES" : "✗ NO (loadHTML never called)")")
+
+        // Stage 0b: Nav finished — does WKNavigationDelegate.didFinish fire?
+        let navResult = XCTWaiter().wait(for: [navNote], timeout: 5)
+        if navResult == .completed {
+            print("[TOS] ✓ HTML navigation finished (WKNavigationDelegate.didFinish fired)")
+        } else {
+            print("[TOS] ✗ HTML navigation did NOT finish — didFinish not called within 6s of click")
+        }
+
+        // Stage 1: Bridge check — does JS<->Swift messaging work at all?
+        let bridgeTimeout: Double = navResult == .completed ? 3 : 0
+        let bridgeResult = navResult == .completed
+            ? XCTWaiter().wait(for: [bridgeNote], timeout: bridgeTimeout)
+            : .timedOut
+        if bridgeResult == .completed {
+            print("[TOS] ✓ JS<->Swift bridge confirmed working")
+        } else {
+            print("[TOS] ✗ JS<->Swift bridge NOT working — window.webkit.messageHandlers unavailable")
+        }
+
+        // Stage 2: onPlayerReady — did the iframe_api script load?
+        let readyTimeout: Double = bridgeResult == .completed ? 30 : 0
+        let readyResult = bridgeResult == .completed
+            ? XCTWaiter().wait(for: [readyNote], timeout: readyTimeout)
+            : .timedOut
+        if readyResult == .completed {
+            print("[TOS] ✓ onPlayerReady fired — iframe_api loaded")
+        } else if bridgeResult == .completed {
+            print("[TOS] ✗ onPlayerReady did NOT fire within 30s — iframe_api script may have failed to load")
+        }
+
+        // Stage 3: playing state
+        let playingTimeout: Double = readyResult == .completed ? 15 : 0
+        let playResult = readyResult == .completed
+            ? XCTWaiter().wait(for: [playingNote], timeout: playingTimeout)
+            : .timedOut
 
         // Also poll the AX state label as a secondary check.
-        let stateLabel = app.staticTexts["tosPlayer.stateLabel"].firstMatch
+        let stateLabel = app.descendants(matching: .any).matching(identifier: "tosPlayer.stateLabel").firstMatch
         let isPlaying: Bool
         if playResult == .completed {
             isPlaying = true
             print("[TOS] ✓ Darwin notification received — player is playing")
         } else {
             // Darwin notification timed out — check AX state label directly.
-            let labelValue = (stateLabel.exists ? stateLabel.label : "")
+            let labelValue = stateLabel.exists ? stateLabel.label : "(not found)"
             isPlaying = labelValue == "playing" || labelValue == "buffering"
-            print("[TOS] Darwin notification timed out — stateLabel='\(labelValue)'")
+            print("[TOS] playing notification timed out — stateLabel='\(labelValue)'")
         }
 
         XCTAssertTrue(
@@ -101,7 +147,7 @@ final class TOSPlayerUITests: XCTestCase {
             "TOS player did not reach 'playing' state within 30 s — check network, baseURL whitelist, and autoplay config"
         )
 
-        // ── 5. Let it play for 5 s and verify no crash ───────────────────────
+        // ── 6. Let it play for 5 s and verify no crash ───────────────────────
         Thread.sleep(forTimeInterval: 5)
         XCTAssertTrue(
             closeBtn.exists,
@@ -109,7 +155,7 @@ final class TOSPlayerUITests: XCTestCase {
         )
         print("[TOS] ✓ 5 s of playback — no crash")
 
-        // ── 6. Close the player ───────────────────────────────────────────────
+        // ── 7. Close the player ───────────────────────────────────────────────
         closeBtn.click()
 
         let closedPredicate = NSPredicate(format: "exists == false")

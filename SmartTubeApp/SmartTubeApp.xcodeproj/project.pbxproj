@@ -94,6 +94,7 @@
 		FB01000000000000000000A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = FA01000000000000000000A1 /* GoogleService-Info.plist */; };
 		MAC000000000000000001A2 /* MacVideoPlaybackBenchmarkUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MAC000000000000000001A1 /* MacVideoPlaybackBenchmarkUITests.swift */; };
 		MAC000000000000000002A2 /* MacWKHLSReplayRegressionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MAC000000000000000002A1 /* MacWKHLSReplayRegressionUITests.swift */; };
+		MAC000000000000000003A2 /* TOSPlayerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MAC000000000000000003A1 /* TOSPlayerUITests.swift */; };
 		RS000000000000000000001B /* RSSFeedsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RS000000000000000000001A /* RSSFeedsUITests.swift */; };
 		SE000000000000000000001B /* ShareExtensionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE000000000000000000001A /* ShareExtensionUITests.swift */; };
 		SE000000000000000000002B /* ShareExtensionE2EUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE000000000000000000002A /* ShareExtensionE2EUITests.swift */; };
@@ -248,6 +249,7 @@
 		FA01000000000000000000A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		MAC000000000000000001A1 /* MacVideoPlaybackBenchmarkUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVideoPlaybackBenchmarkUITests.swift; sourceTree = "<group>"; };
 		MAC000000000000000002A1 /* MacWKHLSReplayRegressionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWKHLSReplayRegressionUITests.swift; sourceTree = "<group>"; };
+		MAC000000000000000003A1 /* TOSPlayerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TOSPlayerUITests.swift; sourceTree = "<group>"; };
 		RS000000000000000000001A /* RSSFeedsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSSFeedsUITests.swift; sourceTree = "<group>"; };
 		SE000000000000000000001A /* ShareExtensionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionUITests.swift; sourceTree = "<group>"; };
 		SE000000000000000000002A /* ShareExtensionE2EUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionE2EUITests.swift; sourceTree = "<group>"; };
@@ -374,6 +376,7 @@
 				AA11000000000000000024A1 /* VideoPlaybackBenchmarkUITests.swift */,
 				MAC000000000000000001A1 /* MacVideoPlaybackBenchmarkUITests.swift */,
 				MAC000000000000000002A1 /* MacWKHLSReplayRegressionUITests.swift */,
+				MAC000000000000000003A1 /* TOSPlayerUITests.swift */,
 				AA11000000000000000025A1 /* TimeToPlayBenchmarkUITests.swift */,
 				AA1100000000000000001E01 /* ScrubberUITests.swift */,
 				AA1100000000000000001F01 /* HLSResolutionUITests.swift */,
@@ -885,6 +888,7 @@
 				AA11000000000000000024A2 /* VideoPlaybackBenchmarkUITests.swift in Sources */,
 				MAC000000000000000001A2 /* MacVideoPlaybackBenchmarkUITests.swift in Sources */,
 				MAC000000000000000002A2 /* MacWKHLSReplayRegressionUITests.swift in Sources */,
+				MAC000000000000000003A2 /* TOSPlayerUITests.swift in Sources */,
 				AA11000000000000000025A2 /* TimeToPlayBenchmarkUITests.swift in Sources */,
 				AA1100000000000000001E02 /* ScrubberUITests.swift in Sources */,
 				AA1100000000000000001F02 /* HLSResolutionUITests.swift in Sources */,
