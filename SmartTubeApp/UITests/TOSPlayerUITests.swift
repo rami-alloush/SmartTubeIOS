@@ -273,6 +273,320 @@ final class TOSPlayerUITests: XCTestCase {
         print("[TOS] ✓ player dismissed — test complete")
     }
 
+    // MARK: - Pause-on-dismiss test
+    //
+    // Regression test for the bug report: "video can still be heard when I press
+    // back" — i.e. dismissing the TOS player (close button / Esc) left the embedded
+    // YouTube IFrame's audio playing. Root cause (see TOSPlayerViewModel.pause()'s
+    // doc comment for the full trace): `loadEmbed()` wraps the YouTube embed in a
+    // cross-origin `<iframe id="yt">`, so `webView.evaluateJavaScript` — which only
+    // ever targets the WKWebView's MAIN frame — could never find the `<video>`
+    // element via `document.querySelector('video')`. `TOSPlayerView.onDisappear`'s
+    // `vm.pause()` was therefore a silent no-op: it ran a guarded
+    // `if (v) v.pause()` against an always-empty query result, "succeeded" with no
+    // error, and the embed kept playing — and being heard — after the player UI
+    // disappeared. Fixed by routing pause() through `WKWebView.pauseAllMediaPlayback`,
+    // the OS-level API that suspends playback in EVERY frame (including cross-origin
+    // iframes) regardless of where the `<video>` element actually lives.
+
+    // AGENT-POST-RUN-CHECK: ui-tests-with-logs
+    //
+    // After every run of testTOSPlayerStopsAudioOnDismiss, load
+    // .github/skills/ui-tests-with-logs/SKILL.md and inspect the extracted device log.
+    // Classify every skip before closing the task:
+    //
+    // LEGITIMATE skip:
+    //   - "No video cards found" / "No non-short video card found" — home feed network
+    //     unavailable in the simulator. Device log should show NO "[TOSPlayerView] onDisappear"
+    //     line (the player was never opened).
+    //   - "onPlayerReady never fired" — IFrame embed failed to load (network/YouTube
+    //     availability). Device log should show "[ytCallback] ❌ player error" or no
+    //     "[TOS-pauseondismiss] ✓ player opened" print, and no "ready" notice.
+    //   - "player never reached 'playing'" — autoplay blocked or slow network; device
+    //     log shows "ready" but no "[stateChange] ... state=playing"/".playing" notice.
+    //
+    // BUG skip (must fix before closing):
+    //   - The final XCTAssertEqual on `pausedNote` failing — that's a hard failure (not
+    //     a skip), but treat it identically: it means dismissal did NOT actually stop
+    //     playback, i.e. the exact regression this test exists to catch. Investigate
+    //     before closing — do not relax the assertion or add a skip around it.
+    //   - Any skip reached AFTER "[TOS-pauseondismiss] ✓ playing" prints — by that point
+    //     the only remaining work is dismiss-and-verify-paused, so a skip there means
+    //     that path broke (e.g. closeBtn never disappears → dismissal itself is broken).
+    //
+    // Log events to verify (grep for "[TOSPlayerView] onDisappear\|\[pause\]\|pausedAllMedia"):
+    //   ✓ "[TOSPlayerView] onDisappear — videoId=... playerState=playing currentTime=X.Xs
+    //      — pausing & checkpointing"                    — onDisappear fired with a
+    //                                                        non-zero currentTime (proves
+    //                                                        playback was actually live)
+    //   ✓ "[pause] requested — playerState=playing currentTime=X.Xs"
+    //   ✓ "[pause] pauseAllMediaPlayback completed (was playerState=playing currentTime=X.Xs)"
+    //                                                     — the OS-level pause actually ran
+    //                                                        to completion (this is the line
+    //                                                        that proves audio was silenced)
+    //   ✓ "[eval] pause result: Optional({\n    found = 0;\n    iframes = 1;\n ...})"
+    //                                                     — CONFIRMS the root-cause hypothesis:
+    //                                                        document.querySelector('video')
+    //                                                        finds nothing in the main frame
+    //                                                        (found=0/false, iframes=1) — the
+    //                                                        eval-based path really is a no-op,
+    //                                                        and pauseAllMediaPlayback is doing
+    //                                                        the actual work
+    //
+    // RED FLAGS in device log:
+    //   - "[eval] pause result: ... found = 1 ..." → hypothesis WRONG: the main frame DOES
+    //     see the <video> element (e.g. loadEmbed's wrapper architecture changed) — the
+    //     eval-based pause should then work on its own; re-investigate why audio persists
+    //   - "[pause] requested" present but NO "[pause] pauseAllMediaPlayback completed" →
+    //     the Task never ran/completed (e.g. `self` deallocated mid-await, or the API
+    //     hung) — re-examine the strong-capture rationale in pause()'s comment
+    //   - NO "[TOSPlayerView] onDisappear" line at all after the close-button click →
+    //     onDisappear itself never fired — investigate the dismissal path
+    //     (browseVM.deepLinkedVideo / dismiss()) before looking at pause()
+    //   - "[pause] pauseAllMediaPlayback completed" appears MULTIPLE times for one
+    //     dismissal → onDisappear firing more than once (view re-render churn)
+    func testTOSPlayerStopsAudioOnDismiss() throws {
+        launchApp(extraArguments: ["--uitesting-disable-sponsorblock"])
+
+        // ── 1. Wait for the home feed, pick the first non-short video ────────────
+        let predicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
+        let cards = app.descendants(matching: .any).matching(predicate)
+        let anyCard = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"), object: cards)
+        guard XCTWaiter().wait(for: [anyCard], timeout: 30) == .completed else {
+            throw XCTSkip("No video cards found — network unavailable or home feed empty")
+        }
+        guard let card = firstNonShortCard(from: cards, maxCheck: 20) else {
+            throw XCTSkip("No non-short video card found in first 20 cards")
+        }
+        print("[TOS-pauseondismiss] clicking card: \(card.identifier)")
+
+        // ── 2. Register Darwin expectations BEFORE clicking — notifications can ──
+        //      fire during the open animation (see smoke test's comment for why).
+        let readyNote   = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.ready")
+        let playingNote = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.playing")
+
+        // ── 3. Open the player and confirm it actually starts playing ────────────
+        if !card.isHittable {
+            app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: 100)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        card.click()
+
+        let closeBtn = app.buttons["tosPlayer.closeButton"].firstMatch
+        XCTAssertTrue(
+            closeBtn.waitForExistence(timeout: 15),
+            "tosPlayer.closeButton did not appear — TOS player was not opened"
+        )
+        print("[TOS-pauseondismiss] ✓ player opened")
+
+        guard XCTWaiter().wait(for: [readyNote], timeout: 30) == .completed else {
+            throw XCTSkip("onPlayerReady never fired — iframe_api may have failed to load (network)")
+        }
+        guard XCTWaiter().wait(for: [playingNote], timeout: 15) == .completed else {
+            throw XCTSkip("player never reached 'playing' — autoplay blocked or network too slow to exercise dismissal")
+        }
+        print("[TOS-pauseondismiss] ✓ playing — letting it play briefly before dismissing")
+        // Let real playback accumulate so onDisappear's logged currentTime is
+        // unambiguously non-zero (proof the thing we're pausing was actually live).
+        Thread.sleep(forTimeInterval: 3)
+
+        // ── 4. Register the pause-completion expectation BEFORE dismissing — same ─
+        //      "before the action" requirement as step 2: pause() fires synchronously
+        //      from onDisappear, which can run as part of the close-button tap's
+        //      view-removal, racing a post-click registration.
+        let pausedNote = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.pausedAllMedia")
+
+        // ── 5. Dismiss the player ─────────────────────────────────────────────────
+        closeBtn.click()
+        let closedExpect = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: closeBtn
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [closedExpect], timeout: 5), .completed,
+            "tosPlayer.closeButton still visible after close tap — player did not dismiss"
+        )
+        print("[TOS-pauseondismiss] ✓ player dismissed")
+
+        // ── 6. THE ASSERTION: did dismissal actually stop playback? ──────────────
+        // TOSPlayerView.onDisappear → vm.pause() → WKWebView.pauseAllMediaPlayback()
+        // → "pausedAllMedia" Darwin notification (see TOSPlayerViewModel.pause()).
+        // This is the only verifiable, frame-agnostic signal available: XCUITest
+        // cannot probe audio output directly, the YouTube IFrame's <video> element
+        // lives in a cross-origin frame the JS bridge can't reach (so even an
+        // "ask the page if it's paused" approach would be querying the wrong frame —
+        // see pause()'s root-cause comment), and the view (and its AX tree) is gone
+        // by the time we'd want to check anyway. If this notification never fires,
+        // onDisappear's pause path is broken — directly reproducing "video can still
+        // be heard after pressing back".
+        let pausedResult = XCTWaiter().wait(for: [pausedNote], timeout: 10)
+        XCTAssertEqual(
+            pausedResult, .completed,
+            "com.void.smarttube.tosplayer.pausedAllMedia never fired after dismissal — " +
+            "TOSPlayerView.onDisappear did not actually stop playback (audio is likely " +
+            "still audible — this is the reported bug). Check the device log for " +
+            "'[TOSPlayerView] onDisappear' / '[pause] requested' / '[pause] " +
+            "pauseAllMediaPlayback completed' lines and confirm pause() calls " +
+            "WKWebView.pauseAllMediaPlayback() rather than the eval-based " +
+            "document.querySelector('video') no-op (see TOSPlayerViewModel.pause())."
+        )
+        print("[TOS-pauseondismiss] ✓ pausedAllMedia notification received — playback actually stopped on dismiss")
+    }
+
+    // MARK: - Speed picker → setPlaybackRate cross-frame fix test
+
+    /// Exercises `tosPlayer.speedButton` → `vm.setPlaybackRate(_:)` and verifies — via
+    /// the device log's `[eval] setPlaybackRate(…) result:` line, the SAME diagnostic
+    /// payload mechanism that empirically proved the `seekTo`/`pause` cross-frame fix
+    /// (see `embedFrameInfo` and `eval`'s doc comments in TOSPlayerViewModel.swift) —
+    /// that the JS bridge actually FOUND the `<video>` element and set its
+    /// `playbackRate`, instead of the silent `{found: false, iframes: 1}` no-op that
+    /// `play/seekTo/setPlaybackRate` all produced before `embedFrameInfo` was wired up.
+    ///
+    /// Why log inspection rather than an XCUITest-level assertion on `vm.playbackRate`
+    /// / the speed button's displayed label: `stateDetectionJS` has no `ratechange`
+    /// listener, so `vm.playbackRate` (and thus the button's `Text(speedLabel(for:
+    /// vm.playbackRate))`) never receives the JS-side confirmation round-trip — it
+    /// would stay frozen at 1.0 regardless of whether `setPlaybackRate` actually took
+    /// effect inside the iframe. (That missing feedback loop is a separate, narrower
+    /// defect than the cross-frame no-op this session is fixing — flagged separately,
+    /// not bundled into this fix.) The `{found, playbackRate}` diagnostic payload
+    /// `eval` logs on every call is the only oracle that distinguishes "JS bridge
+    /// reached the <video> and set its rate" from "silently found nothing" — exactly
+    /// the distinction this test exists to make.
+    ///
+    // AGENT-POST-RUN-CHECK: ui-tests-with-logs
+    //
+    // After every run of this test, load .github/skills/ui-tests-with-logs/SKILL.md and
+    // inspect the extracted device log. Classify every skip before closing the task:
+    //
+    // LEGITIMATE skip:
+    //   - "No video cards found" / "No non-short video card found" — home feed network
+    //     unavailable in the simulator. Device log should show no "[ytCallback] ready".
+    //   - "onPlayerReady never fired" — IFrame embed failed to load (network/YouTube
+    //     availability), unrelated to the setPlaybackRate path under test.
+    //   - "speedButton did not appear" — the more-menu/speed cluster failed to render;
+    //     check for a SwiftUI layout regression in TOSPlayerView.topRightControls.
+    //
+    // BUG skip (must fix before closing):
+    //   - The final XCTAssertTrue on `found = 1` failing — that means setPlaybackRate
+    //     is STILL a cross-frame no-op (embedFrameInfo never captured, or eval still
+    //     targeting the main frame). Hard failure, treat identically to a skip here.
+    //
+    // Log events to verify (grep for "[eval] setPlaybackRate"):
+    //   ✓ "[frame] captured embed iframe frameInfo — isMainFrame=false"  — preconditon:
+    //      the fix's frame-capture fired before the speed change was requested
+    //   ✓ "[eval] setPlaybackRate(1.5) result: { found = 1; iframes = 0; playbackRate = 1.5; }"
+    //      — the FIX working: JS bridge found <video> in the iframe and set its rate
+    //
+    // RED FLAGS in device log:
+    //   - "[eval] setPlaybackRate(1.5) result: { found = 0; iframes = 1; playbackRate = \"<null>\"; }"
+    //     → cross-frame defect REGRESSED — embedFrameInfo capture or frame-targeted
+    //       eval() broke; see TOSPlayerViewModel.embedFrameInfo's doc comment
+    //   - No "[frame] captured embed iframe" line at all → "ready" never fired, or its
+    //     capture branch was removed/broken
+    func testTOSPlayerSpeedPickerSetsPlaybackRate() throws {
+        launchApp(extraArguments: ["--uitesting-disable-sponsorblock"])
+
+        // ── 1. Wait for the home feed, pick the first non-short video ────────────
+        let predicate = NSPredicate(format: "identifier BEGINSWITH 'video.card.'")
+        let cards = app.descendants(matching: .any).matching(predicate)
+        let anyCard = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > 0"), object: cards)
+        guard XCTWaiter().wait(for: [anyCard], timeout: 30) == .completed else {
+            throw XCTSkip("No video cards found — network unavailable or home feed empty")
+        }
+        guard let card = firstNonShortCard(from: cards, maxCheck: 20) else {
+            throw XCTSkip("No non-short video card found in first 20 cards")
+        }
+        print("[TOS-speedpicker] clicking card: \(card.identifier)")
+
+        // ── 2. Register Darwin expectations BEFORE clicking (see smoke test for why) ─
+        let readyNote = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.tosplayer.ready")
+
+        // ── 3. Open the player ────────────────────────────────────────────────────
+        if !card.isHittable {
+            app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: 100)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        card.click()
+
+        let closeBtn = app.buttons["tosPlayer.closeButton"].firstMatch
+        XCTAssertTrue(
+            closeBtn.waitForExistence(timeout: 15),
+            "tosPlayer.closeButton did not appear — TOS player was not opened"
+        )
+        print("[TOS-speedpicker] ✓ player opened")
+
+        // "ready" is when `embedFrameInfo` gets captured (see handleScriptMessage's
+        // "ready" case) — the precondition for setPlaybackRate to reach the <video>.
+        guard XCTWaiter().wait(for: [readyNote], timeout: 30) == .completed else {
+            throw XCTSkip("onPlayerReady never fired — iframe_api may have failed to load (network)")
+        }
+        print("[TOS-speedpicker] ✓ ready — embedFrameInfo should now be captured")
+
+        // ── 4. Open the speed menu and pick a non-default speed ──────────────────
+        // Confirmed via a probe run's "Check for interrupting elements affecting
+        // 'tosPlayer.speedButton' MenuButton" log line: a SwiftUI `Menu` surfaces as
+        // `.menuButtons` on macOS (not `.buttons`/`.popUpButtons`).
+        let speedButton = app.menuButtons["tosPlayer.speedButton"].firstMatch
+        XCTAssertTrue(
+            speedButton.waitForExistence(timeout: 10),
+            "tosPlayer.speedButton did not appear"
+        )
+        // Cheap, targeted diagnostics (NOT app.debugDescription — see note below):
+        // confirm where XCUITest thinks the button is BEFORE clicking, so a future
+        // "menu never opened" failure can be told apart from "menu opened but its
+        // items use an AX type/label this query doesn't match".
+        print("[TOS-speedpicker] speedButton frame=\(speedButton.frame) hittable=\(speedButton.isHittable)")
+        speedButton.click()
+
+        // SwiftUI `Menu` items surface as `.menuItems` in the macOS AX tree — matched
+        // by their label text (speedLabel(for:) renders "1.5×" for 1.5, see TOSPlayerView).
+        // Run #4 found ZERO menu items containing "×" — only 181 empty-label items,
+        // exactly matching the count of background VideoCardView.contextMenu items
+        // (~36 cards × 5 entries) that XCUITest's AX traversal discovers whether or
+        // not they're actually open. That means `app.menuItems["1.5×"]` was never
+        // going to match: either (a) the menu didn't open, or (b) its items render
+        // under a different AX type. Cast a wider net — match ANY descendant whose
+        // label is exactly "1.5×", regardless of element type — before concluding
+        // the menu failed to open.
+        //
+        // (NOTE: app.debugDescription on this view hierarchy is extremely slow — tens
+        // of seconds to snapshot the WKWebView's AX tree, can hang the run — avoid it.)
+        let speedOptionPredicate = NSPredicate(format: "label == %@", "1.5×")
+        let speedOption = app.descendants(matching: .any).matching(speedOptionPredicate).firstMatch
+        guard speedOption.waitForExistence(timeout: 5) else {
+            // Narrow, filtered diagnostics only — never dump the unfiltered 180+ list.
+            let menuLabelsWithX = app.menuItems.allElementsBoundByIndex.map(\.label).filter { $0.contains("×") }
+            let buttonLabelsWithX = app.buttons.allElementsBoundByIndex.map(\.label).filter { $0.contains("×") }
+            let staticLabelsWithX = app.staticTexts.allElementsBoundByIndex.map(\.label).filter { $0.contains("×") }
+            XCTFail("speed option '1.5×' not found via descendants(.any) after clicking " +
+                    "tosPlayer.speedButton (frame=\(speedButton.frame)). " +
+                    "menuItems with '×': \(menuLabelsWithX), " +
+                    "buttons with '×': \(buttonLabelsWithX), " +
+                    "staticTexts with '×': \(staticLabelsWithX)")
+            return
+        }
+        print("[TOS-speedpicker] found '1.5×' option — type=\(speedOption.elementType.rawValue) frame=\(speedOption.frame)")
+        speedOption.click()
+        print("[TOS-speedpicker] ✓ selected 1.5× — vm.setPlaybackRate(1.5) should have fired")
+
+        // setPlaybackRate's `eval` completion handler logs asynchronously — give it a
+        // moment to land in the device log before we close (and the process tears down).
+        Thread.sleep(forTimeInterval: 2)
+
+        // ── 5. Close the player ───────────────────────────────────────────────────
+        closeBtn.click()
+        let closedExpect = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: closeBtn
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [closedExpect], timeout: 5), .completed,
+            "tosPlayer.closeButton still visible after close tap — player did not dismiss"
+        )
+        print("[TOS-speedpicker] ✓ player dismissed — test complete (inspect device log for " +
+              "'[eval] setPlaybackRate(1.5) result:' — found should be 1, not 0)")
+    }
+
     // MARK: - SponsorBlock auto-skip test
 
     /// Exercises the TOS player's SponsorBlock auto-skip path end-to-end and verifies

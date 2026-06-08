@@ -141,6 +141,31 @@ final class TOSPlayerViewModel: NSObject {
     /// Prevents loadEmbed from firing in instances SwiftUI creates-then-discards during init.
     private var hasStartedLoading = false
 
+    /// `WKFrameInfo` of the cross-origin YouTube embed `<iframe>` — the ONLY frame
+    /// whose document contains the `<video>` element. Captured from the first "ready"
+    /// message (see `handleScriptMessage`'s "ready" case in +WebBridge.swift).
+    ///
+    /// WHY THIS EXISTS — root cause of `play/pause/seekTo/setPlaybackRate` being
+    /// silent no-ops: `loadEmbed()` wraps the YouTube IFrame embed in a cross-origin
+    /// `<iframe id="yt" src="https://www.youtube.com/embed/...">` inside a wrapper
+    /// page loaded at `https://www.example.com`. `webView.evaluateJavaScript(_:)`
+    /// (no frame parameter) ALWAYS targets the wrapper's MAIN frame — Apple-documented
+    /// behavior — so `document.querySelector('video')` run that way always finds
+    /// nothing (`{found: false, iframes: 1}`, confirmed empirically — see `eval`'s
+    /// diagnostic and the device-log evidence in `pause()`'s doc comment) and the
+    /// `if (v) ...` guards silently no-op every command.
+    ///
+    /// `stateDetectionJS` succeeds where `eval` fails because it's injected with
+    /// `forMainFrameOnly: false` (runs natively inside the iframe's own document).
+    /// It posts "ready" ONLY after `document.querySelector('video')` actually located
+    /// a `<video>` element — so the `WKScriptMessage.frameInfo` carried by that
+    /// specific message is GUARANTEED to be the iframe's frame, not the wrapper's.
+    /// `ScriptMessageProxy` threads that `frameInfo` through to `handleScriptMessage`,
+    /// which stores it here on first sight. From then on, `eval()` targets it directly
+    /// via the frame-aware `evaluateJavaScript(_:in:in:completionHandler:)` overload
+    /// (macOS 11+ / iOS 14+) — the actual fix for the cross-origin-iframe defect.
+    var embedFrameInfo: WKFrameInfo?
+
     // MARK: - Init
 
     init(videoId: String, channelId: String? = nil, startTime: Double = 0, api: InnerTubeAPI) {
@@ -225,27 +250,99 @@ final class TOSPlayerViewModel: NSObject {
     // MARK: - JS Commands (operating on YouTube embed page's <video> element)
 
     func play() {
-        eval("var v=document.querySelector('video');if(v)v.play();")
+        eval("play", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.play();}return {found: !!v, iframes: ifr, paused: v ? v.paused : null};})();")
     }
 
+    /// Stops playback — including audio — regardless of which frame the `<video>`
+    /// element actually lives in.
+    ///
+    /// ROOT CAUSE of "video can still be heard after pressing back" (the same defect
+    /// that made `play/seekTo/setPlaybackRate` silent no-ops — see `embedFrameInfo`'s
+    /// doc comment for the full story): `loadEmbed()` wraps the YouTube IFrame embed
+    /// in a cross-origin `<iframe id="yt" src="https://www.youtube.com/embed/...">`
+    /// inside a wrapper page loaded at `https://www.example.com`. `webView
+    /// .evaluateJavaScript(_:)` with no frame parameter ALWAYS targets the wrapper's
+    /// MAIN frame (Apple-documented behavior) — but the `<video>` element lives
+    /// inside the iframe's own (different-origin) document, which the main frame's
+    /// `document.querySelector` cannot see. Before `embedFrameInfo` was wired up, the
+    /// eval-based "pause" below silently found nothing (`{found: false, iframes: 1}`
+    /// — empirically confirmed via device log) and the JS `if (v) v.pause()` guard
+    /// made it a no-op that "succeeded" with no error. `TOSPlayerView.onDisappear`'s
+    /// `vm.pause()` therefore never actually paused anything, and the embed kept
+    /// playing — and being heard — after the player UI was dismissed.
+    ///
+    /// Fix: `WKWebView.pauseAllMediaPlayback` is the OS-level API purpose-built for
+    /// exactly this — it suspends media playback in EVERY frame of the web view,
+    /// including cross-origin iframes, sidestepping the frame-targeting problem
+    /// entirely (no `document.querySelector` / `WKFrameInfo` needed). This is what
+    /// actually silences the audio on dismissal — kept even after `eval()` became
+    /// frame-aware, because it's strictly stronger (works even before "ready" fires
+    /// and `embedFrameInfo` is captured) and is the dedicated OS primitive for
+    /// "stop everything" scenarios like onDisappear. The `eval("pause", …)` call
+    /// below is now retained purely as ongoing diagnostic instrumentation — it will
+    /// also report `found: true` once `embedFrameInfo` is captured (frame-targeted
+    /// like every other command), confirming the fix from a second angle.
     func pause() {
-        eval("var v=document.querySelector('video');if(v)v.pause();")
+        let stateBefore = playerState
+        let timeBefore = currentTime
+        tosLog.notice("[pause] requested — playerState=\(String(describing: stateBefore), privacy: .public) currentTime=\(timeBefore, format: .fixed(precision: 1))s")
+        // Strong capture deliberate (mirrors saveProgress()/beginWatchtimeTracking()):
+        // this fires from onDisappear, where SwiftUI may release `self` (and thus
+        // `webView`) at any moment — [weak self] would race losing the webView
+        // reference before pauseAllMediaPlayback() is even called, silently
+        // reintroducing the exact bug this method exists to fix.
+        Task {
+            await self.webView.pauseAllMediaPlayback()
+            tosLog.notice("[pause] pauseAllMediaPlayback completed (was playerState=\(String(describing: stateBefore), privacy: .public) currentTime=\(timeBefore, format: .fixed(precision: 1))s)")
+            // Cross-process signal for XCTest — lets a UI test `wait(for:)` confirmation
+            // that the OS-level "stop everything" pause actually completed when the
+            // player is dismissed, instead of guessing a sleep duration. Mirrors the
+            // .loadstarted/.navfinished/.ready/.sponsorskip notifications above.
+            CFNotificationCenterPostNotification(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                CFNotificationName("com.void.smarttube.tosplayer.pausedAllMedia" as CFString),
+                nil, nil, true
+            )
+        }
+        // Diagnostic-only (kept for ongoing monitoring — see eval()'s comment): proves
+        // empirically, on every pause() call, that the main-frame query keeps finding
+        // nothing. Harmless no-op against the wrapper page's empty `document.querySelector`.
+        eval("pause", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.pause();}return {found: !!v, iframes: ifr, paused: v ? v.paused : null};})();")
     }
 
     func seekTo(_ seconds: Double) {
-        eval("var v=document.querySelector('video');if(v)v.currentTime=\(seconds);")
+        eval("seekTo(\(seconds))", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.currentTime=\(seconds);}return {found: !!v, iframes: ifr, currentTime: v ? v.currentTime : null};})();")
     }
 
     func setPlaybackRate(_ rate: Double) {
-        eval("var v=document.querySelector('video');if(v)v.playbackRate=\(rate);")
+        eval("setPlaybackRate(\(rate))", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.playbackRate=\(rate);}return {found: !!v, iframes: ifr, playbackRate: v ? v.playbackRate : null};})();")
     }
 
     // MARK: - Private helpers
 
-    private func eval(_ js: String) {
-        webView.evaluateJavaScript(js) { _, error in
-            if let error {
-                tosLog.debug("[eval] \(js) → \(error)")
+    // FRAME-TARGETED EVAL (the fix for the cross-origin-iframe defect described on
+    // `embedFrameInfo`): `evaluateJavaScript(_:in:in:completionHandler:)` is the
+    // frame-aware overload (macOS 11+ / iOS 14+) — passing `embedFrameInfo` runs
+    // `js` inside the YouTube embed iframe's own document, where `document
+    // .querySelector('video')` actually finds the `<video>` element, instead of the
+    // wrapper page's empty main frame. Until the first "ready" message arrives,
+    // `embedFrameInfo` is nil — `evaluateJavaScript(_:in: nil, ...)` then falls back
+    // to the main frame (the historical, safely-no-op behavior), so commands issued
+    // in the brief pre-ready window degrade gracefully instead of crashing.
+    //
+    // The {found, iframes, ...} diagnostic payload is kept (systematic-debugging
+    // Phase 1 evidence gathering): it now flips to `found: true` once the frame
+    // targeting is correct, which is the empirical proof the fix actually works —
+    // see the device-log comparison in the "before"/"after" sections of this
+    // session's investigation. Logged at .notice (not .debug) so it survives
+    // xcresulttool diagnostic export.
+    private func eval(_ label: String, _ js: String) {
+        webView.evaluateJavaScript(js, in: embedFrameInfo, in: .page) { result in
+            switch result {
+            case .success(let value):
+                tosLog.notice("[eval] \(label, privacy: .public) result: \(String(describing: value), privacy: .public)")
+            case .failure(let error):
+                tosLog.notice("[eval] \(label, privacy: .public) ERROR: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -464,8 +561,21 @@ private final class ScriptMessageProxy: NSObject, WKScriptMessageHandler, @unche
         didReceive message: WKScriptMessage
     ) {
         guard let body = message.body as? String else { return }
-        Task { @MainActor [weak target] in
-            target?.handleScriptMessage(body)
+        // `message.frameInfo` is the missing link for fixing play/seekTo/setPlaybackRate
+        // (see `embedFrameInfo`'s doc comment) — it identifies exactly which frame this
+        // message originated from, including the cross-origin YouTube embed iframe.
+        //
+        // We thread it through via `MainActor.assumeIsolated` rather than the previous
+        // `Task { @MainActor in ... }` hop: WKScriptMessageHandler delivery is
+        // documented by Apple to always occur on the main thread, so `assumeIsolated`
+        // safely asserts that and calls straight into the @MainActor view model with
+        // NO actor-boundary crossing. That matters because `WKFrameInfo` is a non-Sendable
+        // Objective-C type — capturing it in the `@Sendable` closure a `Task { @MainActor
+        // in ... }` requires is a Swift 6 concurrency error, whereas `assumeIsolated`'s
+        // closure is plain `@MainActor`-isolated (no Sendable requirement at all).
+        let frameInfo = message.frameInfo
+        MainActor.assumeIsolated { [weak target] in
+            target?.handleScriptMessage(body, frameInfo: frameInfo)
         }
     }
 }

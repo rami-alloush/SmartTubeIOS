@@ -46,23 +46,41 @@ public struct TOSPlayerView: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .topLeading) {
-            // MARK: WKWebView layer
-            YouTubeWebPlayerView(webView: vm.webView)
-                .ignoresSafeArea()
+        // GeometryReader captures `geo.safeAreaInsets` BEFORE `.ignoresSafeArea()`
+        // erases them — same pattern as PlayerControlsOverlay's
+        // `.padding(.top, max(safeAreaInsets.top, 20))` (PlayerView+ControlElements).
+        //
+        // Why this matters here specifically: TOSPlayerView is presented as a
+        // full-window ZStack overlay *inside* RootView's content view (see
+        // RootView.body — `if let video = browseVM.deepLinkedVideo { TOSPlayerView(...) }`),
+        // sitting alongside (not replacing) the NavigationSplitView. macOS draws the
+        // window's titlebar/toolbar (traffic lights, sidebar toggle, back chevron,
+        // "SmartTube" title) as OS-level chrome ABOVE the content view's z-order —
+        // no amount of SwiftUI overlay/zIndex/.ignoresSafeArea() can cover it, because
+        // it isn't part of the content view's layer at all. `safeAreaInsets.top` is
+        // exactly the height SwiftUI reserves to avoid drawing under that chrome, so
+        // anchoring the close button below it (instead of a flat 16pt that lands the
+        // button's circle squarely under/behind the sidebar-toggle and back-chevron
+        // controls — the "strange position" the user keeps seeing) is the fix.
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                // MARK: WKWebView layer
+                YouTubeWebPlayerView(webView: vm.webView)
+                    .ignoresSafeArea()
 
-            // MARK: Close button (top-left, always visible)
-            closeButton
+                // MARK: Close button (top-left, always visible, clear of titlebar chrome)
+                closeButton(topInset: geo.safeAreaInsets.top)
 
-            // MARK: Top-right control cluster — more menu (like/dislike, sleep
-            // timer, share) + playback speed picker. See topRightControls for why
-            // these are native Menus rather than ports of the standard player's
-            // custom overlay views.
-            topRightControls
+                // MARK: Top-right control cluster — more menu (like/dislike, sleep
+                // timer, share) + playback speed picker. See topRightControls for why
+                // these are native Menus rather than ports of the standard player's
+                // custom overlay views.
+                topRightControls(topInset: geo.safeAreaInsets.top)
 
-            // MARK: SponsorBlock skip toast (bottom-centre)
-            if let seg = vm.currentToastSegment {
-                sponsorToast(for: seg)
+                // MARK: SponsorBlock skip toast (bottom-centre)
+                if let seg = vm.currentToastSegment {
+                    sponsorToast(for: seg)
+                }
             }
         }
         // Invisible AX label exposing player state for UI tests.
@@ -97,6 +115,7 @@ public struct TOSPlayerView: View {
         // silently lost the watch position (resume-from-last-position and "continue
         // watching"/history never worked for TOS sessions — see WatchtimeTracker).
         .onDisappear {
+            tosViewLog.notice("[TOSPlayerView] onDisappear — videoId=\(self.video.id, privacy: .public) playerState=\(String(describing: vm.playerState), privacy: .public) currentTime=\(vm.currentTime, format: .fixed(precision: 1))s — pausing & checkpointing")
             vm.pause()
             vm.saveProgress()
         }
@@ -139,7 +158,14 @@ public struct TOSPlayerView: View {
 
     // MARK: - Close button
 
-    private var closeButton: some View {
+    /// - Parameter topInset: `geo.safeAreaInsets.top` from the body's GeometryReader —
+    ///   the height macOS reserves for the window's titlebar/toolbar chrome (traffic
+    ///   lights, sidebar toggle, back chevron, "SmartTube" title), which floats above
+    ///   the content view and can't be covered by SwiftUI overlay content. Anchoring
+    ///   below `max(topInset, 16)` (mirrors PlayerControlsOverlay's
+    ///   `max(safeAreaInsets.top, 20)`) keeps the button clear of that chrome instead
+    ///   of overlapping it — the "strange position" complaint.
+    private func closeButton(topInset: CGFloat) -> some View {
         Button {
             // Clear deep-link overlay path AND pop NavigationStack path.
             browseVM.deepLinkedVideo = nil
@@ -152,7 +178,7 @@ public struct TOSPlayerView: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .buttonStyle(.plain)
-        .padding(.top, 16)
+        .padding(.top, max(topInset, 16))
         .padding(.leading, 16)
         .accessibilityIdentifier("tosPlayer.closeButton")
         .accessibilityLabel("Close")
@@ -169,13 +195,13 @@ public struct TOSPlayerView: View {
     // as a prerequisite for richer transfers (queue, captions, description, etc.) —
     // this is the lightest possible version of that affordance, available today
     // without waiting on the controls:0 fork.
-    private var topRightControls: some View {
+    private func topRightControls(topInset: CGFloat) -> some View {
         HStack(spacing: 8) {
             Spacer()
             moreButton
             speedButton
         }
-        .padding(.top, 16)
+        .padding(.top, max(topInset, 16))
         .padding(.trailing, 16)
     }
 

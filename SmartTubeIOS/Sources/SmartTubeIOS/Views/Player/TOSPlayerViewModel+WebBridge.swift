@@ -1,6 +1,7 @@
 #if os(macOS)
 import Foundation
 import CoreFoundation
+import WebKit
 import os
 import SmartTubeIOSCore
 
@@ -18,7 +19,10 @@ private let tosLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSP
 extension TOSPlayerViewModel {
 
     /// Called from `ScriptMessageProxy` (main thread guaranteed by WKWebView).
-    func handleScriptMessage(_ body: String) {
+    /// - Parameter frameInfo: the originating frame, threaded through from
+    ///   `WKScriptMessage.frameInfo` — see `embedFrameInfo`'s doc comment for why
+    ///   this is the missing link that fixes `play/seekTo/setPlaybackRate`.
+    func handleScriptMessage(_ body: String, frameInfo: WKFrameInfo) {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = json["type"] as? String
@@ -37,6 +41,19 @@ extension TOSPlayerViewModel {
             )
 
         case "ready":
+            // CAPTURE the embed iframe's frame info — exactly once, from the message
+            // GUARANTEED to originate inside it: `stateDetectionJS` only posts "ready"
+            // after `document.querySelector('video')` actually found the `<video>`
+            // element (see pollVideo's `_prevState === -2` branch), and that query can
+            // only succeed inside the iframe's own (cross-origin) document — never the
+            // wrapper page's main frame, which has no `<video>` at all. From this point
+            // on, `eval()` can target `play/seekTo/setPlaybackRate` JS directly at the
+            // iframe via the frame-aware `evaluateJavaScript` overload. See
+            // `embedFrameInfo`'s doc comment for the full root-cause story.
+            if embedFrameInfo == nil {
+                embedFrameInfo = frameInfo
+                tosLog.notice("[frame] captured embed iframe frameInfo — isMainFrame=\(frameInfo.isMainFrame, privacy: .public) url=\(frameInfo.request.url?.absoluteString ?? "nil", privacy: .public)")
+            }
             isReady = true
             duration = (json["duration"] as? Double) ?? 0
             tosLog.notice("[ytCallback] ready — duration=\(self.duration, format: .fixed(precision: 1))s")
