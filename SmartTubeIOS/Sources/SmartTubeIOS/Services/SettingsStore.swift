@@ -46,6 +46,9 @@ public final class SettingsStore {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-hide-shorts") {
             self.settings.hideShorts = true
         }
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-enable-tos-player-on-ios") {
+            self.settings.useTOSPlayerOnIOS = true
+        }
     }
 
     private func save() {

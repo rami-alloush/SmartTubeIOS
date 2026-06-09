@@ -3,20 +3,36 @@ import SwiftUI
 import WebKit
 import SmartTubeIOSCore
 import os
+#if os(iOS)
+import UIKit
+#endif
 
 private let tosViewLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSPlayer")
 
 // MARK: - TOSPlayerView
 //
-// macOS-only player backed by the YouTube IFrame API in a WKWebView.
-// Renders YouTube's own player chrome (controls:1) with a SponsorBlock skip
-// toast overlaid on top. Dismissal is via Esc (.onExitCommand below) — see
-// its doc comment for why there is deliberately no on-screen back/close button.
+// YouTube IFrame embed player (macOS + iOS). Renders YouTube's own player
+// chrome (controls:1) with a SponsorBlock skip toast overlaid on top.
 //
-// Entry path:
+// Dismissal:
+//   macOS — Esc key (.onExitCommand). No on-screen button: every placement
+//            attempt collided with macOS's OS-level titlebar chrome (traffic
+//            lights, sidebar-toggle) which floats above the content view's
+//            z-order — SwiftUI layout cannot steer clear of it from inside.
+//   iOS   — Back button (top-left). Safe on iOS: full-screen modal has no
+//            OS chrome above it. Back → TOSPlayerStateStore.minimize() so
+//            audio continues in TOSMiniPlayerView.
+//
+// Entry path (macOS):
 //   MainSidebarView (RootView.swift)
 //     └─ store.settings.useTOSPlayerOnMac == true
 //          └─ TOSPlayerView(video:api:)
+//
+// Entry path (iOS):
+//   MainTabView.onChange(of: browseVM.deepLinkedVideo)
+//     └─ store.settings.useTOSPlayerOnIOS == true
+//          └─ TOSPlayerStateStore.play(video:api:) → .landscapePlayerCover
+//               └─ TOSPlayerView(video:api:)
 //
 // When the IFrame player returns error 101/150 (embedding disabled) or 100
 // (not found), `playerError.isFatal` is true and this view calls `onFallback`
@@ -30,20 +46,32 @@ public struct TOSPlayerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(SettingsStore.self) private var store
-    @Environment(BrowseViewModel.self) private var browseVM
     @Environment(AuthService.self) private var authService
-
+    #if os(macOS)
+    @Environment(BrowseViewModel.self) private var browseVM
+    /// On macOS, the view owns the view model directly (no store — the player
+    /// is a full-window overlay that is released when dismissed).
     @State private var vm: TOSPlayerViewModel
+    #else
+    /// On iOS, the view model is owned by TOSPlayerStateStore so it survives
+    /// dismissal to mini-player. The view reads it from the environment.
+    @Environment(TOSPlayerStateStore.self) private var tosState
+    private var vm: TOSPlayerViewModel { tosState.vm! }
+    #endif
 
     public init(video: Video, api: InnerTubeAPI, onFallback: @escaping () -> Void = {}) {
         self.video = video
         self.onFallback = onFallback
+        #if os(macOS)
         // startTime defaults to 0; saved position is restored asynchronously
         // in .task once the view has appeared (see body below).
         // `api` is threaded through so TOSPlayerViewModel can drive a WatchtimeTracker
         // (history/position-checkpoint parity with the standard PlayerView — see
         // TOSPlayerViewModel.saveProgress()).
         _vm = State(initialValue: TOSPlayerViewModel(videoId: video.id, channelId: video.channelId, startTime: 0, api: api))
+        #endif
+        // On iOS, TOSPlayerStateStore.play(video:api:) already created the vm
+        // before presenting this view. Nothing to do here.
     }
 
     public var body: some View {
@@ -84,6 +112,15 @@ public struct TOSPlayerView: View {
                 // custom overlay views.
                 topRightControls(topInset: geo.safeAreaInsets.top)
 
+                #if os(iOS)
+                // MARK: Back button (iOS only)
+                // Safe here — full-screen modal has no OS chrome above it. Tapping
+                // minimizes to the mini-player so audio continues (unlike macOS where
+                // Esc fully dismisses). Position is anchored below the safe-area top
+                // so it clears the status bar on notched devices.
+                backButton(topInset: geo.safeAreaInsets.top)
+                #endif
+
                 // MARK: SponsorBlock skip toast (bottom-centre)
                 if let seg = vm.currentToastSegment {
                     sponsorToast(for: seg)
@@ -111,10 +148,15 @@ public struct TOSPlayerView: View {
             vm.updateSettings(store.settings)
             vm.startIfNeeded()
         }
-        // Pause the embedded <video> element when this view leaves the hierarchy —
-        // via the Esc key or a fallback transition. Without this,
-        // the WKWebView keeps playing (and audio keeps being heard) after the player
-        // UI has been dismissed, since nothing else stops it.
+        // Pause the embedded <video> element when this view leaves the hierarchy.
+        //
+        // On macOS: fires on Esc or fallback — always pause + checkpoint.
+        //
+        // On iOS: fires both on minimize (→ mini-player, audio SHOULD continue)
+        // and on full stop (TOSPlayerStateStore.stop() was called). We only pause
+        // when the store says we're fully stopped (.hidden); TOSPlayerStateStore
+        // .minimize() intentionally does NOT pause so audio keeps playing.
+        // TOSPlayerStateStore.stop() calls vm.pause() itself before releasing the vm.
         //
         // saveProgress() mirrors the standard PlayerView's vm.suspend()/vm.stop() —
         // both of which checkpoint the watch position from the same onDisappear hook
@@ -122,11 +164,23 @@ public struct TOSPlayerView: View {
         // silently lost the watch position (resume-from-last-position and "continue
         // watching"/history never worked for TOS sessions — see WatchtimeTracker).
         .onDisappear {
+            #if os(iOS)
+            // On iOS, only pause when fully stopped — not when minimizing to mini-player.
+            // TOSPlayerStateStore.stop() already calls vm.pause() + vm.saveProgress()
+            // before releasing the vm, so we only log here in that case.
+            guard tosState.presentation == .hidden else {
+                tosViewLog.notice("[TOSPlayerView] onDisappear — minimizing to mini-player, audio continues (videoId=\(self.video.id, privacy: .public))")
+                return
+            }
+            tosViewLog.notice("[TOSPlayerView] onDisappear — fully stopped (videoId=\(self.video.id, privacy: .public)) — stop() already paused & checkpointed")
+            #else
             tosViewLog.notice("[TOSPlayerView] onDisappear — videoId=\(self.video.id, privacy: .public) playerState=\(String(describing: vm.playerState), privacy: .public) currentTime=\(vm.currentTime, format: .fixed(precision: 1))s — pausing & checkpointing")
             vm.pause()
             vm.saveProgress()
+            #endif
         }
-        // Esc key closes the player. This is the ONLY dismissal path now — every
+        #if os(macOS)
+        // Esc key closes the player. This is the ONLY dismissal path on macOS — every
         // on-screen back/close button tried so far ("X", then a back-chevron)
         // ended up rendered on/near the OS-level titlebar chrome (traffic lights,
         // sidebar toggle, native back chevron) no matter how its position was
@@ -141,6 +195,7 @@ public struct TOSPlayerView: View {
             browseVM.deepLinkedVideo = nil
             dismiss()
         }
+        #endif
         // Restore saved watch position asynchronously.
         // We seek once the player reports .playing or .paused (i.e. after onReady fires)
         // so the IFrame API is ready to accept seekTo() calls.
@@ -167,6 +222,35 @@ public struct TOSPlayerView: View {
             onFallback()
         }
     }
+
+    #if os(iOS)
+    // MARK: - Back button (iOS only)
+    //
+    // Positioned below the safe-area top inset so it clears the status bar
+    // on notched / Dynamic Island devices. Calls tosState.minimize() so audio
+    // continues in TOSMiniPlayerView — unlike macOS's Esc which fully stops.
+    private func backButton(topInset: CGFloat) -> some View {
+        VStack {
+            HStack {
+                Button {
+                    tosState.minimize()
+                } label: {
+                    Image(systemName: AppSymbol.chevronLeft)
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .padding(12)
+                        .background(.black.opacity(0.4))
+                        .clipShape(Circle())
+                }
+                .accessibilityIdentifier("tosPlayer.backButton")
+                .padding(.top, topInset + 8)
+                .padding(.leading, 16)
+                Spacer()
+            }
+            Spacer()
+        }
+    }
+    #endif
 
     // MARK: - Top-right control cluster (speed + more)
     //
@@ -352,9 +436,10 @@ public struct TOSPlayerView: View {
 
 // MARK: - YouTubeWebPlayerView (NSViewRepresentable)
 
-/// Wraps the `WKWebView` owned by `TOSPlayerViewModel` in an `NSView`
+/// Wraps the `WKWebView` owned by `TOSPlayerViewModel` in a platform view
 /// so SwiftUI can host it. The view model owns the WKWebView instance;
 /// this representable just displays it.
+#if os(macOS)
 private struct YouTubeWebPlayerView: NSViewRepresentable {
     let webView: WKWebView
 
@@ -365,5 +450,18 @@ private struct YouTubeWebPlayerView: NSViewRepresentable {
 
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
+#else
+private struct YouTubeWebPlayerView: UIViewRepresentable {
+    let webView: WKWebView
+
+    func makeUIView(context: Context) -> WKWebView {
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView.scrollView.isScrollEnabled = false
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+#endif
 
 #endif // !os(tvOS)

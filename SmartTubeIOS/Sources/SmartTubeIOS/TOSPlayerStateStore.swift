@@ -1,0 +1,129 @@
+#if os(iOS)
+import Foundation
+import SwiftUI
+import SmartTubeIOSCore
+import os
+
+private let tosStoreLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSPlayerStateStore")
+
+// MARK: - TOSPlayerStateStore
+//
+// iOS equivalent of PlayerStateStore, but for the WKWebView-backed TOS player.
+// Owns TOSPlayerViewModel (and its WKWebView) so it survives TOSPlayerView
+// dismiss/re-present cycles — enabling mini-player audio continuity.
+//
+// Presentation state:
+//   .hidden     — no video loaded, WKWebView released
+//   .miniPlayer — audio continues in TOSMiniPlayerView, TOSPlayerView dismissed
+//   .fullScreen — TOSPlayerView presented as a full-screen cover
+//
+// Lifecycle:
+//   play(video:api:)  → create/reload vm, set .fullScreen
+//   minimize()        → set .miniPlayer (vm/WKWebView kept alive, audio continues)
+//   expand()          → set .fullScreen (re-present TOSPlayerView)
+//   stop()            → vm.pause() + vm.saveProgress(), release vm, set .hidden
+
+@MainActor
+@Observable
+public final class TOSPlayerStateStore {
+
+    // MARK: - Presentation state
+
+    public enum Presentation: Equatable {
+        case hidden
+        case miniPlayer
+        case fullScreen
+    }
+
+    public private(set) var presentation: Presentation = .hidden
+
+    /// The video currently loaded or playing. Non-nil when presentation != .hidden.
+    public private(set) var currentVideo: Video?
+
+    // MARK: - Per-video fallback guard
+    //
+    // When the embed fires a fatal error (embeddingDisabled / notFound), we mark that
+    // videoId so the next play() call routes to AVPlayer instead of TOS again.
+    // Cleared when a different video is opened.
+    public private(set) var fallbackVideoId: String?
+
+    // MARK: - Owned view model
+    //
+    // Optional — nil when presentation == .hidden (WKWebView released).
+    // The view model lives here, not in TOSPlayerView's @State, so the WKWebView
+    // keeps running after the view is dismissed to mini-player.
+    // Internal (not public) because TOSPlayerViewModel is an internal type;
+    // all consumers (TOSPlayerView, TOSMiniPlayerView) are in the same module.
+    private(set) var vm: TOSPlayerViewModel?
+
+    // MARK: - Init
+
+    public init() {}
+
+    // MARK: - Actions
+
+    /// Load `video` and present the TOS player full-screen.
+    /// If the same video is already loaded and playing, just expands.
+    public func play(video: Video, api: InnerTubeAPI) {
+        tosStoreLog.notice("[TOSPlayerStateStore] play — id=\(video.id) currentPresentation=\(String(describing: self.presentation))")
+
+        if vm?.videoId == video.id, presentation == .miniPlayer {
+            // Same video minimized — just re-expand.
+            expand()
+            return
+        }
+
+        // Stop and release any previous session.
+        if let existingVM = vm {
+            existingVM.pause()
+            existingVM.saveProgress()
+        }
+
+        // Clear fallback guard when opening a new video.
+        if fallbackVideoId != video.id {
+            fallbackVideoId = nil
+        }
+
+        let newVM = TOSPlayerViewModel(videoId: video.id, channelId: video.channelId, startTime: 0, api: api)
+        self.vm = newVM
+        self.currentVideo = video
+        self.presentation = .fullScreen
+        tosStoreLog.notice("[TOSPlayerStateStore] play — presentation set to .fullScreen, vm created for \(video.id)")
+    }
+
+    /// Collapse the full-screen player to the mini-player bar.
+    /// The WKWebView keeps running — audio continues.
+    public func minimize() {
+        tosStoreLog.notice("[TOSPlayerStateStore] minimize — currentPresentation=\(String(describing: self.presentation))")
+        guard presentation == .fullScreen else { return }
+        presentation = .miniPlayer
+        tosStoreLog.notice("[TOSPlayerStateStore] minimize — presentation set to .miniPlayer")
+    }
+
+    /// Expand the mini-player back to full-screen.
+    public func expand() {
+        tosStoreLog.notice("[TOSPlayerStateStore] expand — currentPresentation=\(String(describing: self.presentation))")
+        guard presentation == .miniPlayer else { return }
+        presentation = .fullScreen
+        tosStoreLog.notice("[TOSPlayerStateStore] expand — presentation set to .fullScreen")
+    }
+
+    /// Stop playback completely, release the WKWebView, and hide all player UI.
+    public func stop() {
+        tosStoreLog.notice("[TOSPlayerStateStore] stop — currentPresentation=\(String(describing: self.presentation))")
+        vm?.pause()
+        vm?.saveProgress()
+        vm = nil
+        currentVideo = nil
+        presentation = .hidden
+        tosStoreLog.notice("[TOSPlayerStateStore] stop — presentation set to .hidden, vm released")
+    }
+
+    /// Mark a video as requiring AVPlayer fallback (embedding disabled / not found).
+    /// The next play() call for this videoId will be routed to AVPlayer by the caller.
+    public func markFallback(videoId: String) {
+        tosStoreLog.notice("[TOSPlayerStateStore] markFallback — videoId=\(videoId)")
+        fallbackVideoId = videoId
+    }
+}
+#endif // os(iOS)

@@ -4,6 +4,9 @@ import CoreFoundation
 import WebKit
 import SmartTubeIOSCore
 import os
+#if os(iOS)
+import UIKit
+#endif
 
 private let tosLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSPlayer")
 

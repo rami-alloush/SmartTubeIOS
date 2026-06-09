@@ -26,7 +26,7 @@ public struct SettingsView: View {
             uiSection
             sponsorBlockSection
             deArrowSection
-            #if os(macOS)
+            #if os(macOS) || os(iOS)
             experimentalSection
             #endif
             aboutSection
@@ -278,14 +278,19 @@ public struct SettingsView: View {
         }
     }
 
-    // MARK: - Experimental (macOS)
+    // MARK: - Experimental (macOS + iOS)
 
-    #if os(macOS)
+    #if os(macOS) || os(iOS)
     private var experimentalSection: some View {
         @Bindable var store = store
         return Section {
+            #if os(macOS)
             Toggle("IFrame Player (TOS-compliant, shows ads)", isOn: $store.settings.useTOSPlayerOnMac)
                 .accessibilityIdentifier("settings.useTOSPlayerOnMacToggle")
+            #else
+            Toggle("IFrame Player (TOS-compliant, shows ads)", isOn: $store.settings.useTOSPlayerOnIOS)
+                .accessibilityIdentifier("settings.useTOSPlayerOnIOSToggle")
+            #endif
         } header: {
             Text("Experimental")
         } footer: {

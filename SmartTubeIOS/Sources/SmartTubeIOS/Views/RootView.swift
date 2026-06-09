@@ -139,6 +139,8 @@ struct MainTabView: View {
     @Environment(\.innerTubeAPI) private var api
     #if os(iOS)
     @Environment(PlayerStateStore.self) private var playerState
+    @Environment(TOSPlayerStateStore.self) private var tosState
+    @Environment(SettingsStore.self) private var store
     @Environment(BrowseViewModel.self) private var browseVM
     #endif
 
@@ -159,6 +161,19 @@ struct MainTabView: View {
                 // caused the mini-player X button to unexpectedly restore fullscreen.
                 guard newValue == nil, playerState.presentation == .fullScreen else { return }
                 playerState.minimize()
+            }
+        )
+        // TOS full-screen cover binding — mirrors the AVPlayer binding above.
+        // When the user swipes down or the system dismisses the cover while TOS is
+        // still in .fullScreen, this setter calls minimize() so audio continues in
+        // TOSMiniPlayerView. If tosState.stop() already moved us to .hidden the
+        // setter is a no-op (guard prevents spurious minimize).
+        let tosFullScreenVideo: Video? = tosState.presentation == .fullScreen ? tosState.currentVideo : nil
+        let tosFullScreenBinding = Binding<Video?>(
+            get: { tosFullScreenVideo },
+            set: { newValue in
+                guard newValue == nil, tosState.presentation == .fullScreen else { return }
+                tosState.minimize()
             }
         )
         #endif
@@ -193,7 +208,9 @@ struct MainTabView: View {
         // mini player. Uses a transparent placeholder rather than the real MiniPlayerView
         // to avoid duplicating the PersistentPlayerHostView UIKit layer across tabs.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if playerState.presentation == .miniPlayer {
+            // Reserve vertical space for whichever mini-player is visible so
+            // scrollable content is not obscured (only one can be active at a time).
+            if playerState.presentation == .miniPlayer || tosState.presentation == .miniPlayer {
                 Color.clear.frame(height: 62)
             }
         }
@@ -203,6 +220,8 @@ struct MainTabView: View {
         // already baked it into the safe area. The transparent passthrough spacer below
         // the mini player ensures tab-bar items remain tappable.
         .overlay(alignment: .bottom) {
+            // Only one mini-player can be active at a time: AVPlayer and TOS are
+            // mutually exclusive (onChange stops the other before starting the new one).
             if playerState.presentation == .miniPlayer {
                 VStack(spacing: 0) {
                     MiniPlayerView()
@@ -212,13 +231,43 @@ struct MainTabView: View {
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.2), value: playerState.presentation)
+            } else if tosState.presentation == .miniPlayer {
+                VStack(spacing: 0) {
+                    TOSMiniPlayerView()
+                    Color.clear
+                        .frame(height: tabBarBottomInset)
+                        .allowsHitTesting(false)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.2), value: tosState.presentation)
             }
         }
         .landscapePlayerCover(item: fullScreenBinding) { video in
             PlayerView(video: video, api: api)
         }
+        // TOS player full-screen cover — presented when tosState.presentation == .fullScreen.
+        // TOSPlayerView reads tosState from the environment (injected via AppEntry) so the
+        // WKWebView that was created by TOSPlayerStateStore.play(video:api:) is reused here.
+        .landscapePlayerCover(item: tosFullScreenBinding) { video in
+            TOSPlayerView(video: video, api: api) {
+                // Fatal IFrame error (embedding disabled / not found) — mark this
+                // video so future taps route to AVPlayer, stop TOS, start AVPlayer.
+                tosState.markFallback(videoId: video.id)
+                tosState.stop()
+                playerState.play(video: video)
+            }
+        }
         .onChange(of: browseVM.deepLinkedVideo) { _, video in
             guard let video else { return }
+            if store.settings.useTOSPlayerOnIOS && tosState.fallbackVideoId != video.id {
+                // TOS path — stop any active AVPlayer mini-player first (conflict rule).
+                if playerState.presentation != .hidden { playerState.stop() }
+                tosState.play(video: video, api: api)
+                browseVM.deepLinkedVideo = nil
+                return
+            }
+            // AVPlayer path — stop any active TOS mini-player first (conflict rule).
+            if tosState.presentation != .hidden { tosState.stop() }
             playerState.play(video: video)
             browseVM.deepLinkedVideo = nil
         }
