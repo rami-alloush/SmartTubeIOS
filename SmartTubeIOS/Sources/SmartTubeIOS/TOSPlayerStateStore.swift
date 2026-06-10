@@ -56,6 +56,16 @@ public final class TOSPlayerStateStore {
     // all consumers (TOSPlayerView, TOSMiniPlayerView) are in the same module.
     private(set) var vm: TOSPlayerViewModel?
 
+    // MARK: - Imperative dismiss hook
+
+    /// Set by LandscapePresenter's coordinator when the TOS full-screen player is
+    /// presented. Fired imperatively by minimize() / stop() to bypass the SwiftUI
+    /// update-propagation pause that occurs when the presenting VC's view is removed
+    /// from the window by UIKit's .fullScreen presentation style (so
+    /// updateUIViewController never fires while the cover is on screen). Mirrors
+    /// PlayerStateStore.dismissPlayerAction — see FullScreenPlayerDismissible.
+    var dismissPlayerAction: (() -> Void)?
+
     // MARK: - Init
 
     public init() {}
@@ -97,7 +107,10 @@ public final class TOSPlayerStateStore {
         tosStoreLog.notice("[TOSPlayerStateStore] minimize — currentPresentation=\(String(describing: self.presentation))")
         guard presentation == .fullScreen else { return }
         presentation = .miniPlayer
-        tosStoreLog.notice("[TOSPlayerStateStore] minimize — presentation set to .miniPlayer")
+        let action = dismissPlayerAction
+        dismissPlayerAction = nil
+        tosStoreLog.notice("[TOSPlayerStateStore] minimize — presentation set to .miniPlayer, dismissPlayerAction=\(action != nil)")
+        action?()
     }
 
     /// Expand the mini-player back to full-screen.
@@ -116,7 +129,10 @@ public final class TOSPlayerStateStore {
         vm = nil
         currentVideo = nil
         presentation = .hidden
-        tosStoreLog.notice("[TOSPlayerStateStore] stop — presentation set to .hidden, vm released")
+        let action = dismissPlayerAction
+        dismissPlayerAction = nil
+        tosStoreLog.notice("[TOSPlayerStateStore] stop — presentation set to .hidden, vm released, dismissPlayerAction=\(action != nil)")
+        action?()
     }
 
     /// Mark a video as requiring AVPlayer fallback (embedding disabled / not found).

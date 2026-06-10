@@ -6,6 +6,25 @@ import OSLog
 
 private let landscapeLog = Logger(subsystem: "com.void.smarttube.app", category: "Orientation")
 
+// MARK: - FullScreenPlayerDismissible
+
+/// Conformed to by both PlayerStateStore (AVPlayer) and TOSPlayerStateStore (TOS),
+/// letting LandscapePresenter wire up the same imperative-dismiss-hook pattern for
+/// either pipeline without referencing the other's concrete type.
+///
+/// `dismissPlayerAction` is set by LandscapePresenter's coordinator when this store's
+/// full-screen player is presented, and fired by minimize()/stop() to bypass the
+/// SwiftUI update-propagation pause that occurs when the presenting VC's view is
+/// removed from the window by UIKit's .fullScreen presentation style (so
+/// updateUIViewController never fires while the cover is on screen).
+@MainActor
+protocol FullScreenPlayerDismissible: AnyObject {
+    var dismissPlayerAction: (() -> Void)? { get set }
+}
+
+extension PlayerStateStore: FullScreenPlayerDismissible {}
+extension TOSPlayerStateStore: FullScreenPlayerDismissible {}
+
 // MARK: - LandscapeAwareHostingController
 
 /// UIHostingController whose supportedInterfaceOrientations returns .allButUpsideDown
@@ -37,10 +56,11 @@ extension View {
     /// so UIKit can rotate the window to landscape while the player is active.
     func landscapePlayerCover<Item: Identifiable & Hashable, Content: View>(
         item: Binding<Item?>,
+        dismissStore: any FullScreenPlayerDismissible,
         @ViewBuilder content: @escaping (Item) -> Content
     ) -> some View {
         self.background(
-            LandscapePresenter(item: item, content: { AnyView(content($0)) })
+            LandscapePresenter(item: item, dismissStore: dismissStore, content: { AnyView(content($0)) })
                 .frame(width: 0, height: 0)
                 .allowsHitTesting(false)
         )
@@ -51,6 +71,11 @@ extension View {
 
 private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControllerRepresentable {
     @Binding var item: Item?
+    /// The presentation store for THIS cover (PlayerStateStore for the AVPlayer cover,
+    /// TOSPlayerStateStore for the TOS cover). Wired up imperatively below so
+    /// minimize()/stop() can dismiss the hosted VC directly — see
+    /// FullScreenPlayerDismissible's doc comment.
+    let dismissStore: any FullScreenPlayerDismissible
     let content: (Item) -> AnyView
 
     // Capture the env objects that PlayerView (and anything it hosts) needs.
@@ -76,6 +101,7 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
         let coordinator = context.coordinator
         coordinator.latestItem = item
         coordinator.capturedPlayerState = playerState
+        coordinator.capturedDismissStore = dismissStore
         // Wrap the content with the environment objects so the new UIHostingController
         // root gets the same env as the parent SwiftUI tree.
         let capturedStore = store
@@ -125,6 +151,7 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
         var contentBuilder: ((Item) -> AnyView)?
         var latestBinding: Binding<Item?>?
         var capturedPlayerState: PlayerStateStore?
+        var capturedDismissStore: (any FullScreenPlayerDismissible)?
         var hostedVC: LandscapeAwareHostingController?
         var presentedID: AnyHashable?
         var isTransitioning = false
@@ -186,7 +213,7 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
                         self?.presentationGeneration += 1
                         self?.latestItem = nil
                         self?.latestBinding?.wrappedValue = nil
-                        self?.capturedPlayerState?.dismissPlayerAction = nil
+                        self?.capturedDismissStore?.dismissPlayerAction = nil
                         self?.hostedVC = nil
                         self?.presentedID = nil
                         self?.isTransitioning = false
@@ -197,7 +224,7 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
                     // Register imperative dismiss hook so minimize()/stop() can dismiss
                     // the VC directly without relying on SwiftUI's updateUIViewController,
                     // which stalls when the hosting VC's view is off-screen (.fullScreen style).
-                    self.capturedPlayerState?.dismissPlayerAction = { [weak hc, weak self] in
+                    self.capturedDismissStore?.dismissPlayerAction = { [weak hc, weak self] in
                         guard let hc, !hc.isBeingDismissed,
                               hc.presentingViewController != nil else { return }
                         landscapeLog.notice("[LandscapePresenter] dismissPlayerAction fired — dismissing")

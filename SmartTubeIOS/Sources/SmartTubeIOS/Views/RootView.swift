@@ -242,13 +242,13 @@ struct MainTabView: View {
                 .animation(.easeInOut(duration: 0.2), value: tosState.presentation)
             }
         }
-        .landscapePlayerCover(item: fullScreenBinding) { video in
+        .landscapePlayerCover(item: fullScreenBinding, dismissStore: playerState) { video in
             PlayerView(video: video, api: api)
         }
         // TOS player full-screen cover — presented when tosState.presentation == .fullScreen.
         // TOSPlayerView reads tosState from the environment (injected via AppEntry) so the
         // WKWebView that was created by TOSPlayerStateStore.play(video:api:) is reused here.
-        .landscapePlayerCover(item: tosFullScreenBinding) { video in
+        .landscapePlayerCover(item: tosFullScreenBinding, dismissStore: tosState) { video in
             TOSPlayerView(video: video, api: api) {
                 // Fatal IFrame error (embedding disabled / not found) — mark this
                 // video so PlayerRouter routes it to AVPlayer (and any future taps
