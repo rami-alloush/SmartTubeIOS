@@ -281,7 +281,7 @@ public struct AppSettings: Codable {
         #else
         useTOSPlayerOnIOS    = false
         #endif
-        settingsVersion      = 1
+        settingsVersion      = 2
     }
 }
 
@@ -295,6 +295,8 @@ public struct AppSettings: Codable {
 //  - New fields get their default value when absent from old JSON (forward compatibility).
 //  - Renamed/type-changed fields fall back to defaults rather than wiping everything.
 //  - settingsVersion = 0 in old JSON signals a pre-migration store for future use.
+//  - One-time migrations bump settingsVersion so they run exactly once — see the
+//    `useTOSPlayerOnIOS` migration at the end of init(from:) for the pattern.
 
 private extension KeyedDecodingContainer {
     /// Decodes T if the key exists and the value is the right type; returns `defaultValue`
@@ -390,5 +392,19 @@ extension AppSettings {
         iCloudSyncEnabled            = c.safeDecode(Bool.self,              forKey: .iCloudSyncEnabled,            default: d.iCloudSyncEnabled)
         useTOSPlayerOnMac            = c.safeDecode(Bool.self,              forKey: .useTOSPlayerOnMac,            default: d.useTOSPlayerOnMac)
         useTOSPlayerOnIOS            = c.safeDecode(Bool.self,              forKey: .useTOSPlayerOnIOS,            default: d.useTOSPlayerOnIOS)
+
+        // One-time migration (settingsVersion 1 → 2): `useTOSPlayerOnIOS` used to
+        // default to `false` on every platform, so existing installs have it
+        // explicitly persisted as `false`. `safeDecode` above sees the key present
+        // and keeps that old value, silently masking the new iOS default of `true`
+        // introduced alongside settingsVersion 2. Force it on once for any
+        // pre-2 store, then bump the stored version so this never re-fires —
+        // a later explicit user toggle back to `false` will stick.
+        if settingsVersion < 2 {
+            #if os(iOS)
+            useTOSPlayerOnIOS = true
+            #endif
+            settingsVersion = 2
+        }
     }
 }

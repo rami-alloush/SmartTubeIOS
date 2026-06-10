@@ -86,8 +86,10 @@ struct AppSettingsMigrationTests {
         #expect(settings.preferH264 == true)
         #expect(settings.iCloudSyncEnabled == true)
 
-        // Missing field must decode to 0 (the pre-migration sentinel)
-        #expect(settings.settingsVersion == 0, "Old JSON without settingsVersion should decode as 0 (migration sentinel), not fail")
+        // Missing field decodes as 0 (the pre-migration sentinel), then the one-time
+        // migration in init(from:) bumps it to the current settingsVersion (2) so
+        // version-gated migrations don't re-run on every subsequent load.
+        #expect(settings.settingsVersion == 2, "Old JSON without settingsVersion should be migrated to the current settingsVersion")
     }
 
     // MARK: - Type-mismatched field → default for that field, others preserved
@@ -141,7 +143,10 @@ struct AppSettingsMigrationTests {
         // All other stored values must survive
         #expect(settings.preferredQuality == .q720)
         #expect(settings.playbackSpeed == 2.0)
-        #expect(settings.settingsVersion == 1)
+
+        // settingsVersion 1 predates the useTOSPlayerOnIOS-default migration, so the
+        // one-time migration in init(from:) bumps it to the current version (2).
+        #expect(settings.settingsVersion == 2)
     }
 
     // MARK: - Round-trip: encode then decode preserves all values
@@ -168,7 +173,10 @@ struct AppSettingsMigrationTests {
         original.sponsorBlockEnabled = false
         original.deArrowEnabled = true
         original.iCloudSyncEnabled = true
-        original.settingsVersion = 1
+        // settingsVersion 2 is the current version (post useTOSPlayerOnIOS migration),
+        // so round-tripping it should be a pure no-op — see
+        // AppSettingsTOSPlayerMigrationTests for the settingsVersion 1 → 2 migration itself.
+        original.settingsVersion = 2
 
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: encoded)
@@ -207,6 +215,72 @@ struct AppSettingsMigrationTests {
         #expect(settings.autoplayEnabled == defaults.autoplayEnabled)
         #expect(settings.seekBackSeconds == defaults.seekBackSeconds)
         #expect(settings.sponsorBlockEnabled == defaults.sponsorBlockEnabled)
-        #expect(settings.settingsVersion == 0, "Empty JSON should yield settingsVersion=0 (migration sentinel)")
+        #expect(settings.settingsVersion == 2, "Empty JSON should be migrated to the current settingsVersion")
+    }
+}
+
+// MARK: - useTOSPlayerOnIOS one-time migration (settingsVersion 1 → 2)
+//
+// Before settingsVersion 2, `useTOSPlayerOnIOS` defaulted to `false` on every
+// platform, so existing installs persisted that value explicitly. When the iOS
+// default changed to `true`, `safeDecode` saw the key present in old JSON and kept
+// the stale `false` — silently negating the new default for any non-fresh install.
+//
+// Fix: a one-time migration in init(from:) forces `useTOSPlayerOnIOS = true` on iOS
+// for any store with settingsVersion < 2, then bumps settingsVersion to 2 so the
+// migration never re-applies (and a later explicit user opt-out sticks).
+
+@Suite("AppSettings useTOSPlayerOnIOS migration (settingsVersion 1 → 2)")
+struct AppSettingsTOSPlayerMigrationTests {
+
+    @Test("Pre-migration store (settingsVersion 1, useTOSPlayerOnIOS=false) is migrated")
+    func preMigrationStoreIsMigrated() throws {
+        let json = """
+        {
+            "settingsVersion": 1,
+            "useTOSPlayerOnIOS": false,
+            "useTOSPlayerOnMac": false
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(AppSettings.self, from: json)
+
+        #if os(iOS)
+        #expect(settings.useTOSPlayerOnIOS == true, "Pre-migration iOS stores must have useTOSPlayerOnIOS forced on")
+        #endif
+        #expect(settings.settingsVersion == 2, "Migration must bump settingsVersion so it doesn't re-fire")
+    }
+
+    @Test("Pre-migration store with no settingsVersion at all (settingsVersion 0) is migrated")
+    func preMigrationStoreWithoutVersionIsMigrated() throws {
+        let json = """
+        {
+            "useTOSPlayerOnIOS": false
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(AppSettings.self, from: json)
+
+        #if os(iOS)
+        #expect(settings.useTOSPlayerOnIOS == true, "Pre-migration iOS stores must have useTOSPlayerOnIOS forced on")
+        #endif
+        #expect(settings.settingsVersion == 2, "Migration must bump settingsVersion so it doesn't re-fire")
+    }
+
+    @Test("Post-migration store with useTOSPlayerOnIOS explicitly off stays off")
+    func postMigrationExplicitOptOutIsPreserved() throws {
+        // A user already on settingsVersion 2 who explicitly disabled the TOS
+        // player via Settings must not be re-migrated back to true.
+        let json = """
+        {
+            "settingsVersion": 2,
+            "useTOSPlayerOnIOS": false
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(AppSettings.self, from: json)
+
+        #expect(settings.useTOSPlayerOnIOS == false, "Explicit opt-out after migration must be preserved")
+        #expect(settings.settingsVersion == 2)
     }
 }
