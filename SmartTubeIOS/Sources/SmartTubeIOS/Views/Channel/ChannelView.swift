@@ -25,7 +25,7 @@ public struct ChannelView: View {
     @Environment(AuthService.self) private var auth
     @Environment(\.innerTubeAPI) private var api
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
 
     public init(channelId: String) {
@@ -166,7 +166,7 @@ public struct ChannelView: View {
                             .accessibilityIdentifier("video.card.\(video.id)")
                             .onTapGesture {
                                 #if os(iOS)
-                                playerState.play(video: video)
+                                playerRouter.open(video: video, api: api)
                                 #else
                                 selectedVideo = video
                                 #endif
@@ -209,7 +209,7 @@ public struct ChannelView: View {
                             .accessibilityIdentifier("video.card.\(video.id)")
                             .onTapGesture {
                                 #if os(iOS)
-                                playerState.play(video: video)
+                                playerRouter.open(video: video, api: api)
                                 #else
                                 selectedVideo = video
                                 #endif

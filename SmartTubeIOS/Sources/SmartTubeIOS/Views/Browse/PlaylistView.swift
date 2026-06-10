@@ -18,7 +18,7 @@ public struct PlaylistView: View {
     @State private var selectedVideo: Video?
     @State private var channelDestination: ChannelDestination?
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
 
     public init(playlistId: String, playlistTitle: String, api: InnerTubeAPI) {
@@ -120,7 +120,7 @@ public struct PlaylistView: View {
                                     await CurrentQueueStore.shared.replaceAll(with: captured)
                                     let startIdx = video.playlistIndex ?? captured.firstIndex(where: { $0.id == video.id }) ?? 0
                                     let toPlay = await CurrentQueueStore.shared.videoAt(index: startIdx) ?? video
-                                    playerState.play(video: toPlay)
+                                    playerRouter.open(video: toPlay, api: api)
                                 }
                                 #else
                                 selectedVideo = video
@@ -179,7 +179,7 @@ public struct PlaylistView: View {
                                     await CurrentQueueStore.shared.replaceAll(with: captured)
                                     let startIdx = video.playlistIndex ?? captured.firstIndex(where: { $0.id == video.id }) ?? 0
                                     let toPlay = await CurrentQueueStore.shared.videoAt(index: startIdx) ?? video
-                                    playerState.play(video: toPlay)
+                                    playerRouter.open(video: toPlay, api: api)
                                 }
                                 #else
                                 Task { @MainActor in

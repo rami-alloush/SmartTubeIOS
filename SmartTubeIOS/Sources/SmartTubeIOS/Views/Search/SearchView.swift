@@ -15,7 +15,7 @@ public struct SearchView: View {
     @State private var showFilterSheet = false
     @FocusState private var isSearchFocused: Bool
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
 
     public init() {}
@@ -170,7 +170,7 @@ public struct SearchView: View {
                         let startIdx = captured.firstIndex(where: { $0.id == video.id }) ?? 0
                         let toPlay = await CurrentQueueStore.shared.videoAt(index: startIdx) ?? video
                         #if os(iOS)
-                        playerState.play(video: toPlay)
+                        playerRouter.open(video: toPlay, api: api)
                         #else
                         selectedVideo = toPlay
                         #endif

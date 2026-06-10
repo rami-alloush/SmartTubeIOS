@@ -21,6 +21,7 @@ struct AppEntry: App {
     #if os(iOS)
     @State private var playerStateStore: PlayerStateStore
     @State private var tosPlayerStateStore: TOSPlayerStateStore
+    @State private var playerRouter: PlayerRouter
     #endif
     @State private var deepLinkLaunchArgConsumed = false
     @State private var pendingVideoArgConsumed = false
@@ -59,8 +60,15 @@ struct AppEntry: App {
         _browseViewModel = State(initialValue: BrowseViewModel(api: api))
         _settingsStore   = State(initialValue: settingsStore)
         #if os(iOS)
-        _playerStateStore    = State(initialValue: PlayerStateStore(api: api))
-        _tosPlayerStateStore = State(initialValue: TOSPlayerStateStore())
+        let playerStateStore = PlayerStateStore(api: api)
+        let tosPlayerStateStore = TOSPlayerStateStore()
+        _playerStateStore    = State(initialValue: playerStateStore)
+        _tosPlayerStateStore = State(initialValue: tosPlayerStateStore)
+        _playerRouter = State(initialValue: PlayerRouter(
+            playerState: playerStateStore,
+            tosState: tosPlayerStateStore,
+            settingsStore: settingsStore
+        ))
         #endif
         _cardDownloadService = State(initialValue: VideoDownloadService(api: api))
 
@@ -210,6 +218,7 @@ struct AppEntry: App {
                     #if os(iOS)
                     .environment(playerStateStore)
                     .environment(tosPlayerStateStore)
+                    .environment(playerRouter)
                     #endif
                     .onChange(of: authService.accessToken, initial: true) { _, newToken in
                         #if os(iOS)

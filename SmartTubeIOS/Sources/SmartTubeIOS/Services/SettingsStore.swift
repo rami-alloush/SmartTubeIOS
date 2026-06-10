@@ -49,6 +49,12 @@ public final class SettingsStore {
         if ProcessInfo.processInfo.arguments.contains("--uitesting-enable-tos-player-on-ios") {
             self.settings.useTOSPlayerOnIOS = true
         }
+        // useTOSPlayerOnIOS now defaults to true on iOS, so suites that exercise the
+        // AVPlayer-based pipeline (quality picker, captions, SponsorBlock, mini player,
+        // PIP, DASH switching, etc.) opt back into it with this flag.
+        if ProcessInfo.processInfo.arguments.contains("--uitesting-disable-tos-player-on-ios") {
+            self.settings.useTOSPlayerOnIOS = false
+        }
     }
 
     private func save() {

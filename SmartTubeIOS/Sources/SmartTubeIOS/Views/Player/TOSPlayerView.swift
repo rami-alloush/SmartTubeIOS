@@ -75,9 +75,17 @@ public struct TOSPlayerView: View {
     }
 
     public var body: some View {
-        // GeometryReader captures `geo.safeAreaInsets` BEFORE `.ignoresSafeArea()`
-        // erases them — same pattern as PlayerControlsOverlay's
-        // `.padding(.top, max(safeAreaInsets.top, 20))` (PlayerView+ControlElements).
+        // IMPORTANT: `.ignoresSafeArea()` must NOT be applied to this GeometryReader
+        // (or anywhere in its modifier chain) — doing so makes `geo.safeAreaInsets`
+        // report all-zero insets, which previously caused tosPlayer.backButton to
+        // render under the status bar / Dynamic Island where XCUITest taps (and
+        // real touches) never reach the SwiftUI view hierarchy. Instead, the
+        // full-bleed black background and the WKWebView layer each call
+        // `.ignoresSafeArea()` on themselves individually inside the ZStack below.
+        // This keeps `geo.safeAreaInsets` reporting the real device insets — same
+        // pattern as PlayerView+Lifecycle.swift's playerContentView and
+        // PlayerControlsOverlay's `.padding(.top, max(safeAreaInsets.top, 20))`
+        // (PlayerView+ControlElements).
         //
         // Why this matters here specifically: TOSPlayerView is presented as a
         // full-window ZStack overlay *inside* RootView's content view (see
@@ -102,6 +110,16 @@ public struct TOSPlayerView: View {
         // is the dismissal path now — see its doc comment.
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
+                // Full-bleed black background. `.ignoresSafeArea()` is applied to
+                // this layer (and to the WKWebView layer below) individually —
+                // NOT to the GeometryReader itself — so `geo.safeAreaInsets`
+                // continues to report the real device insets (status bar /
+                // Dynamic Island / home indicator). topRightControls and
+                // backButton below need that real inset to anchor themselves
+                // clear of that unsafe-area chrome. (Mirrors the working pattern
+                // in PlayerView+Lifecycle.swift's playerContentView.)
+                Color.black.ignoresSafeArea()
+
                 // MARK: WKWebView layer
                 YouTubeWebPlayerView(webView: vm.webView)
                     .ignoresSafeArea()
@@ -142,8 +160,6 @@ public struct TOSPlayerView: View {
                 .accessibilityIdentifier("tosPlayer.stateLabel")
                 .accessibilityHidden(false)
         }
-        .background(Color.black)
-        .ignoresSafeArea()
         .onAppear {
             vm.updateSettings(store.settings)
             vm.startIfNeeded()

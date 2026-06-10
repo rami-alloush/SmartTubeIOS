@@ -19,7 +19,7 @@ public struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
 
     // "Home" is always first; its type is .home.
@@ -651,7 +651,7 @@ public struct HomeView: View {
             #endif
         } else {
             #if os(iOS)
-            playerState.play(video: video)
+            playerRouter.open(video: video, api: api)
             #else
             selectedVideo = video
             #endif

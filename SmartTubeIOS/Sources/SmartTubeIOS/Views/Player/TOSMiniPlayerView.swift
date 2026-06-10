@@ -81,6 +81,13 @@ struct TOSMiniPlayerView: View {
         .padding(.leading, 4)
         .frame(height: 62)
         .background(.regularMaterial)
+        // Without this, SwiftUI flattens this HStack's accessibility tree so each
+        // child Button (play/pause, expand, close) inherits THIS container's
+        // identifier ("tosPlayer.miniPlayerBar") instead of its own — e.g.
+        // app.buttons["tosPlayer.miniPlayer.closeButton"] is never found by
+        // XCUITest. .contain keeps each child individually discoverable. Same
+        // fix as MiniPlayerView.bar — see its comment for details.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tosPlayer.miniPlayerBar")
     }
 }

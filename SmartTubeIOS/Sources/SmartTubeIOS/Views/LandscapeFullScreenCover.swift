@@ -57,6 +57,11 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
     @Environment(SettingsStore.self) private var store
     @Environment(AuthService.self) private var authService
     @Environment(PlayerStateStore.self) private var playerState
+    // TOSPlayerView (presented via the tosFullScreenBinding cover) reads this from
+    // the environment — without it, UIHostingController's fresh view hierarchy has
+    // no ancestor providing TOSPlayerStateStore and `tosState.vm!` force-unwrap path
+    // crashes with "No Observable object of type TOSPlayerStateStore found".
+    @Environment(TOSPlayerStateStore.self) private var tosState
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -76,12 +81,14 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
         let capturedStore = store
         let capturedAuth = authService
         let capturedPlayerState = playerState
+        let capturedTosState = tosState
         coordinator.contentBuilder = { [content] item in
             AnyView(
                 content(item)
                     .environment(capturedStore)
                     .environment(capturedAuth)
                     .environment(capturedPlayerState)
+                    .environment(capturedTosState)
             )
         }
         coordinator.latestBinding = _item

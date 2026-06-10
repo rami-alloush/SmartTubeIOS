@@ -17,7 +17,7 @@ public struct BrowseView: View {
     @State private var showSignIn = false
     @State private var showError = false
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
 
     public init() {}
@@ -115,7 +115,7 @@ public struct BrowseView: View {
             shortsPresentation = ShortsPresentation(videos: shorts, startIndex: idx)
         } else {
             #if os(iOS)
-            playerState.play(video: video)
+            playerRouter.open(video: video, api: api)
             #else
             selectedVideo = video
             #endif

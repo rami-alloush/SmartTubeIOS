@@ -154,7 +154,9 @@ public struct AppSettings: Codable {
 
     /// When `true` on iOS, the YouTube IFrame-based TOS-compliant player is used
     /// instead of the AVPlayer-based pipeline. Ads will play. Quality control is unavailable.
-    /// Opt-in experiment — has no effect on macOS or tvOS.
+    /// Defaults to `true` on iOS — has no effect on macOS or tvOS. Automatically falls back
+    /// to the AVPlayer pipeline for a given video if the embed reports a fatal error
+    /// (TOSPlayerStateStore.markFallback — see TOSPlayerView.onFallback).
     public var useTOSPlayerOnIOS: Bool
 
     // MARK: Schema version
@@ -274,7 +276,11 @@ public struct AppSettings: Codable {
         #else
         useTOSPlayerOnMac    = false
         #endif
+        #if os(iOS)
+        useTOSPlayerOnIOS    = true
+        #else
         useTOSPlayerOnIOS    = false
+        #endif
         settingsVersion      = 1
     }
 }

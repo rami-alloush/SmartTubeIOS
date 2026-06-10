@@ -13,7 +13,7 @@ struct RSSFeedsView: View {
     @State private var showManageFeeds = false
 
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #else
     @State private var selectedVideo: Video?
     #endif
@@ -110,7 +110,7 @@ struct RSSFeedsView: View {
                 videos: displayVideos,
                 onSelect: { video in
                     #if os(iOS)
-                    playerState.play(video: video)
+                    playerRouter.open(video: video, api: api)
                     #else
                     selectedVideo = video
                     #endif

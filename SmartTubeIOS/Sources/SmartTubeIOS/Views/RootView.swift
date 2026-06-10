@@ -77,7 +77,7 @@ public struct RootView: View {
         }
         #if os(iOS)
         // Deep link is handled by MainTabView.onChange(of: browseVM.deepLinkedVideo)
-        // which calls playerState.play(video:). No landscapePlayerCover needed here.
+        // which calls playerRouter.open(video:api:). No landscapePlayerCover needed here.
         #elseif !os(macOS) && !os(tvOS)
         .fullScreenCover(item: $browseVM.deepLinkedVideo) { video in
             PlayerView(video: video, api: api)
@@ -140,7 +140,7 @@ struct MainTabView: View {
     #if os(iOS)
     @Environment(PlayerStateStore.self) private var playerState
     @Environment(TOSPlayerStateStore.self) private var tosState
-    @Environment(SettingsStore.self) private var store
+    @Environment(PlayerRouter.self) private var playerRouter
     @Environment(BrowseViewModel.self) private var browseVM
     #endif
 
@@ -251,30 +251,21 @@ struct MainTabView: View {
         .landscapePlayerCover(item: tosFullScreenBinding) { video in
             TOSPlayerView(video: video, api: api) {
                 // Fatal IFrame error (embedding disabled / not found) — mark this
-                // video so future taps route to AVPlayer, stop TOS, start AVPlayer.
+                // video so PlayerRouter routes it to AVPlayer (and any future taps
+                // on the same video), then re-open it through the router.
                 tosState.markFallback(videoId: video.id)
-                tosState.stop()
-                playerState.play(video: video)
+                playerRouter.open(video: video, api: api)
             }
         }
         .onChange(of: browseVM.deepLinkedVideo) { _, video in
             guard let video else { return }
-            if store.settings.useTOSPlayerOnIOS && tosState.fallbackVideoId != video.id {
-                // TOS path — stop any active AVPlayer mini-player first (conflict rule).
-                if playerState.presentation != .hidden { playerState.stop() }
-                tosState.play(video: video, api: api)
-                browseVM.deepLinkedVideo = nil
-                return
-            }
-            // AVPlayer path — stop any active TOS mini-player first (conflict rule).
-            if tosState.presentation != .hidden { tosState.stop() }
-            playerState.play(video: video)
+            playerRouter.open(video: video, api: api)
             browseVM.deepLinkedVideo = nil
         }
         // UI-testing only: invisible button that re-opens the deeplink video in the
         // same session after stop() so testSecondOpenAfterStopPlays can verify the fix.
         // Uses the same browseVM.deepLinkedVideo path as the production deeplink, so
-        // the full playerState.play() code path is exercised.
+        // the full playerRouter.open() code path is exercised.
         .overlay(alignment: .bottomLeading) {
             let isUITesting = ProcessInfo.processInfo.arguments.contains("--uitesting")
             let deeplinkArg = ProcessInfo.processInfo.arguments
@@ -283,7 +274,8 @@ struct MainTabView: View {
                 let id = String($0.dropFirst("--uitesting-deeplink-video=".count))
                 return id.isEmpty ? nil : id
             } ?? nil
-            if isUITesting, let id = deeplinkID, playerState.presentation == .hidden {
+            if isUITesting, let id = deeplinkID,
+               playerState.presentation == .hidden, tosState.presentation == .hidden {
                 Button {
                     browseVM.deepLinkedVideo = Video(id: id, title: "", channelTitle: "")
                 } label: {

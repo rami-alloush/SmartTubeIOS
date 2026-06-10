@@ -21,7 +21,7 @@ public struct LibraryView: View {
     @State private var restoreOffset: CGFloat? = nil
     @State private var queueVideosCount: Int = 0
     #if os(iOS)
-    @Environment(PlayerStateStore.self) private var playerState
+    @Environment(PlayerRouter.self) private var playerRouter
     #endif
     #if os(tvOS)
     @FocusState private var focusedSection: LibrarySection?
@@ -167,7 +167,7 @@ public struct LibraryView: View {
                                     selectedPlaylist = video
                                 } else {
                                     #if os(iOS)
-                                    playerState.play(video: video)
+                                    playerRouter.open(video: video, api: api)
                                     #else
                                     selectedVideo = video
                                     #endif
