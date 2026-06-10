@@ -21,7 +21,7 @@ final class PlayerAndMiniPlayerUITests: XCTestCase {
     override class func setUp() {
         super.setUp()
         let app = XCUIApplication()
-        app.launchArguments = ["--uitesting"]
+        app.launchArguments = ["--uitesting", "--uitesting-disable-tos-player-on-ios"]
         app.launch()
         sharedApp = app
 

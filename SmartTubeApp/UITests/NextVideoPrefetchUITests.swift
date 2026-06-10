@@ -54,6 +54,7 @@ final class NextVideoPrefetchUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-inject-queue-video-ids=\(Self.videoAID),\(Self.videoBID)",
             "--uitesting-show-controls",
             "--uitesting-disable-sponsorblock"

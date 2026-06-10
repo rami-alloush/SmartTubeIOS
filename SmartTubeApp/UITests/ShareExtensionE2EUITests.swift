@@ -47,6 +47,37 @@ final class ShareExtensionE2EUITests: XCTestCase {
         smartTube = nil
     }
 
+    // MARK: - Player-backend-agnostic helpers
+    //
+    // SmartTube is launched here via the OS-level share-extension responder chain,
+    // NOT via `XCUIApplication().launch()` — so `--uitesting-disable-tos-player-on-ios`
+    // (the launch argument other UI tests use to force the AVPlayer pipeline) cannot
+    // be injected into this process. TOS (IFrame/WKWebView) is the iOS default player
+    // as of the PlayerRouter refactor and uses a disjoint `tosPlayer.*` accessibility-ID
+    // namespace, so these helpers check for either backend's equivalent element —
+    // matching this test's actual intent ("the video player opened"), not a specific
+    // pipeline.
+
+    /// Waits for either `player.titleLabel` (AVPlayer pipeline) or `tosPlayer.stateLabel`
+    /// (TOS pipeline) to appear — both are always-visible AX labels present once their
+    /// respective player view appears.
+    private func waitForPlayerToOpen(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "identifier == 'player.titleLabel' OR identifier == 'tosPlayer.stateLabel'")
+        return app.staticTexts.matching(predicate).firstMatch.waitForExistence(timeout: timeout)
+    }
+
+    /// The back/dismiss button for whichever player backend is active.
+    private func playerBackButton(in app: XCUIApplication) -> XCUIElement {
+        let predicate = NSPredicate(format: "identifier == 'player.backButton' OR identifier == 'tosPlayer.backButton'")
+        return app.buttons.matching(predicate).firstMatch
+    }
+
+    /// The mini-player container for whichever player backend is active.
+    private func miniPlayerBar(in app: XCUIApplication) -> XCUIElement {
+        let predicate = NSPredicate(format: "identifier == 'miniPlayer.bar' OR identifier == 'tosPlayer.miniPlayerBar'")
+        return app.otherElements.matching(predicate).firstMatch
+    }
+
     // MARK: - Tests
 
     /// Full system share flow: Safari → SmartTube extension → player opens.
@@ -79,10 +110,9 @@ final class ShareExtensionE2EUITests: XCTestCase {
         }
 
         // 5. The video player must open.
-        let titleLabel = smartTube.staticTexts["player.titleLabel"].firstMatch
-        guard titleLabel.waitForExistence(timeout: 20) else {
+        guard waitForPlayerToOpen(in: smartTube, timeout: 20) else {
             try captureAndSkip(
-                "player.titleLabel did not appear within 20 s — " +
+                "Neither player.titleLabel nor tosPlayer.stateLabel appeared within 20 s — " +
                 "SmartTube opened but InnerTube may not have resolved the video (network unavailable)",
                 in: smartTube
             )
@@ -112,17 +142,17 @@ final class ShareExtensionE2EUITests: XCTestCase {
             try captureAndSkip("SmartTube did not come to the foreground — Share Extension infrastructure not ready on this simulator clone", in: smartTube)
         }
 
-        guard smartTube.staticTexts["player.titleLabel"].firstMatch.waitForExistence(timeout: 20) else {
+        guard waitForPlayerToOpen(in: smartTube, timeout: 20) else {
             try captureAndSkip("Player did not appear within 20 s — network unavailable", in: smartTube)
         }
 
         // Dismiss the player.
-        let backButton = smartTube.buttons["player.backButton"].firstMatch
+        let backButton = playerBackButton(in: smartTube)
         if backButton.waitForExistence(timeout: 5) {
             backButton.tap()
             // Wait for the player to minimize; if it doesn't, the precondition for this
             // test (player dismissed before backgrounding) is not met.
-            let miniBar = smartTube.otherElements["miniPlayer.bar"].firstMatch
+            let miniBar = miniPlayerBar(in: smartTube)
             guard miniBar.waitForExistence(timeout: 5) else {
                 try captureAndSkip("Player did not minimize after back tap — cannot verify pending ID consumption", in: smartTube)
             }
@@ -135,9 +165,8 @@ final class ShareExtensionE2EUITests: XCTestCase {
         smartTube.activate()
 
         // Player must NOT reopen — pending key was already consumed.
-        let playerAfterReturn = smartTube.staticTexts["player.titleLabel"].firstMatch
-        guard !playerAfterReturn.waitForExistence(timeout: 5) else {
-            try captureAndSkip("player.titleLabel reappeared after re-foregrounding — " +
+        guard !waitForPlayerToOpen(in: smartTube, timeout: 5) else {
+            try captureAndSkip("player title/state label reappeared after re-foregrounding — " +
                           "pendingVideoID may not have been cleared or player did not fully dismiss", in: smartTube)
         }
     }

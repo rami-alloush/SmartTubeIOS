@@ -62,6 +62,7 @@ final class WKHLSReplayRegressionUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-disable-sponsorblock",
         ]
         #if os(iOS)

@@ -50,6 +50,7 @@ final class ScrubberUITests: XCTestCase {
         let appUnderTest = XCUIApplication()
         appUnderTest.launchArguments = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-deeplink-video=\(videoID)"
         ]
         appUnderTest.launch()

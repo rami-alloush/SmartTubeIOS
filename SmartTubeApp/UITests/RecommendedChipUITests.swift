@@ -35,7 +35,7 @@ final class RecommendedChipUITests: XCTestCase {
     override class func setUp() {
         super.setUp()
         sharedApp = XCUIApplication()
-        sharedApp.launchArguments += ["--uitesting", "--uitesting-extended-fetch-timeout", Self.injectArg]
+        sharedApp.launchArguments += ["--uitesting", "--uitesting-disable-tos-player-on-ios", "--uitesting-extended-fetch-timeout", Self.injectArg]
         sharedApp.launch()
     }
 

@@ -69,6 +69,7 @@ final class WrongVideoRegressionUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-disable-sponsorblock",
         ]
         app.launch()

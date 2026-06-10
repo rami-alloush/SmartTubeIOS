@@ -247,6 +247,7 @@ final class TimeToPlayBenchmarkUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-inject-recommended-ids=\(videoId)",
             "--uitesting-disable-sponsorblock",
             "--uitesting-extended-fetch-timeout",

@@ -31,6 +31,7 @@ final class PlayerMoreMenuDuplicationUITests: XCTestCase {
         let app = XCUIApplication()
         var args: [String] = [
             "--uitesting",
+            "--uitesting-disable-tos-player-on-ios",
             "--uitesting-deeplink-video=dQw4w9WgXcQ",
             "--uitesting-open-more-menu"
         ]
