@@ -114,10 +114,13 @@ public struct TOSPlayerView: View {
                 // this layer (and to the WKWebView layer below) individually —
                 // NOT to the GeometryReader itself — so `geo.safeAreaInsets`
                 // continues to report the real device insets (status bar /
-                // Dynamic Island / home indicator). topRightControls and
-                // backButton below need that real inset to anchor themselves
-                // clear of that unsafe-area chrome. (Mirrors the working pattern
-                // in PlayerView+Lifecycle.swift's playerContentView.)
+                // Dynamic Island / home indicator), and non-ignoring children
+                // below (topRightControls, backButton, sponsorToast) are laid
+                // out with their origin already past that inset. topRightControls
+                // additionally adds `geo.safeAreaInsets.top` to clear macOS's
+                // titlebar chrome (see backButton's doc comment for why iOS must
+                // NOT do the same). (Mirrors the working pattern in
+                // PlayerView+Lifecycle.swift's playerContentView.)
                 Color.black.ignoresSafeArea()
 
                 // MARK: WKWebView layer
@@ -134,9 +137,10 @@ public struct TOSPlayerView: View {
                 // MARK: Back button (iOS only)
                 // Safe here — full-screen modal has no OS chrome above it. Tapping
                 // minimizes to the mini-player so audio continues (unlike macOS where
-                // Esc fully dismisses). Position is anchored below the safe-area top
-                // so it clears the status bar on notched devices.
-                backButton(topInset: geo.safeAreaInsets.top)
+                // Esc fully dismisses). A small fixed padding is enough to clear the
+                // status bar — see backButton's doc comment for why `topInset` must
+                // NOT be added here too.
+                backButton()
                 #endif
 
                 // MARK: SponsorBlock skip toast (bottom-centre)
@@ -242,10 +246,22 @@ public struct TOSPlayerView: View {
     #if os(iOS)
     // MARK: - Back button (iOS only)
     //
-    // Positioned below the safe-area top inset so it clears the status bar
-    // on notched / Dynamic Island devices. Calls tosState.minimize() so audio
-    // continues in TOSMiniPlayerView — unlike macOS's Esc which fully stops.
-    private func backButton(topInset: CGFloat) -> some View {
+    // Calls tosState.minimize() so audio continues in TOSMiniPlayerView —
+    // unlike macOS's Esc which fully stops.
+    //
+    // Positioning: this view is placed inside the GeometryReader/ZStack in
+    // `body`, which does NOT call `.ignoresSafeArea()` on itself — only the
+    // full-bleed background and WKWebView layers opt out individually. That
+    // means SwiftUI already constrains this view's layout to the safe area:
+    // its origin (0,0) starts AT the safe-area boundary (i.e. just below the
+    // status bar / Dynamic Island), with the inset amount reported separately
+    // via `geo.safeAreaInsets`. A plain `.padding(.top, 8)` therefore lands
+    // 8pt below the status bar — adding `geo.safeAreaInsets.top` on top of
+    // that (as a previous version of this code did) double-counts the inset
+    // and pushes the button ~60pt further down than intended, into the row
+    // where the IFrame player's own channel-info overlay sits — which is the
+    // "back button is too low and doesn't work" regression reported on-device.
+    private func backButton() -> some View {
         VStack {
             HStack {
                 Button {
@@ -259,7 +275,7 @@ public struct TOSPlayerView: View {
                         .clipShape(Circle())
                 }
                 .accessibilityIdentifier("tosPlayer.backButton")
-                .padding(.top, topInset + 8)
+                .padding(.top, 8)
                 .padding(.leading, 16)
                 Spacer()
             }
