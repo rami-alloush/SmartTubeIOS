@@ -152,12 +152,13 @@ public struct AppSettings: Codable {
     /// Opt-in experiment — has no effect on tvOS.
     public var useTOSPlayerOnMac: Bool
 
-    /// When `true` on iOS, the YouTube IFrame-based TOS-compliant player is used
-    /// instead of the AVPlayer-based pipeline. Ads will play. Quality control is unavailable.
-    /// Defaults to `true` on iOS — has no effect on macOS or tvOS. Automatically falls back
-    /// to the AVPlayer pipeline for a given video if the embed reports a fatal error
-    /// (TOSPlayerStateStore.markFallback — see TOSPlayerView.onFallback).
-    public var useTOSPlayerOnIOS: Bool
+    // Note: there is no `useTOSPlayerOnIOS` setting. The TOS-compliant player is
+    // always used on iOS (PlayerRouter.open(), gated #if os(iOS)) — see
+    // SettingsStore.useTOSPlayerOnIOS, which is a non-persisted, hardcoded-true
+    // property (overridable only by UI test launch arguments). It has no effect
+    // on macOS or tvOS. Automatically falls back to the AVPlayer pipeline for a
+    // given video if the embed reports a fatal error (TOSPlayerStateStore.markFallback
+    // — see TOSPlayerView.onFallback).
 
     // MARK: Schema version
     /// Persisted schema version. Starts at 1 for newly stored settings.
@@ -276,12 +277,7 @@ public struct AppSettings: Codable {
         #else
         useTOSPlayerOnMac    = false
         #endif
-        #if os(iOS)
-        useTOSPlayerOnIOS    = true
-        #else
-        useTOSPlayerOnIOS    = false
-        #endif
-        settingsVersion      = 2
+        settingsVersion      = 1
     }
 }
 
@@ -295,8 +291,6 @@ public struct AppSettings: Codable {
 //  - New fields get their default value when absent from old JSON (forward compatibility).
 //  - Renamed/type-changed fields fall back to defaults rather than wiping everything.
 //  - settingsVersion = 0 in old JSON signals a pre-migration store for future use.
-//  - One-time migrations bump settingsVersion so they run exactly once — see the
-//    `useTOSPlayerOnIOS` migration at the end of init(from:) for the pattern.
 
 private extension KeyedDecodingContainer {
     /// Decodes T if the key exists and the value is the right type; returns `defaultValue`
@@ -347,7 +341,6 @@ extension AppSettings {
         case preferH264
         case iCloudSyncEnabled
         case useTOSPlayerOnMac
-        case useTOSPlayerOnIOS
     }
 
     public init(from decoder: Decoder) throws {
@@ -391,20 +384,5 @@ extension AppSettings {
         preferH264                   = c.safeDecode(Bool.self,              forKey: .preferH264,                   default: d.preferH264)
         iCloudSyncEnabled            = c.safeDecode(Bool.self,              forKey: .iCloudSyncEnabled,            default: d.iCloudSyncEnabled)
         useTOSPlayerOnMac            = c.safeDecode(Bool.self,              forKey: .useTOSPlayerOnMac,            default: d.useTOSPlayerOnMac)
-        useTOSPlayerOnIOS            = c.safeDecode(Bool.self,              forKey: .useTOSPlayerOnIOS,            default: d.useTOSPlayerOnIOS)
-
-        // One-time migration (settingsVersion 1 → 2): `useTOSPlayerOnIOS` used to
-        // default to `false` on every platform, so existing installs have it
-        // explicitly persisted as `false`. `safeDecode` above sees the key present
-        // and keeps that old value, silently masking the new iOS default of `true`
-        // introduced alongside settingsVersion 2. Force it on once for any
-        // pre-2 store, then bump the stored version so this never re-fires —
-        // a later explicit user toggle back to `false` will stick.
-        if settingsVersion < 2 {
-            #if os(iOS)
-            useTOSPlayerOnIOS = true
-            #endif
-            settingsVersion = 2
-        }
     }
 }

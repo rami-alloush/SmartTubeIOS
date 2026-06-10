@@ -14,9 +14,10 @@ import SmartTubeIOSCore
 // place instead of duplicated across every view.
 //
 // Routing rules:
-//   - If `useTOSPlayerOnIOS` is enabled and this video hasn't previously hit a
-//     fatal embed error (TOSPlayerStateStore.fallbackVideoId), present the
-//     WKWebView-based TOS-compliant player.
+//   - If `settingsStore.useTOSPlayerOnIOS` is true (the default — always on except
+//     for UI tests that opt out) and this video hasn't previously hit a fatal embed
+//     error (TOSPlayerStateStore.fallbackVideoId), present the WKWebView-based
+//     TOS-compliant player.
 //   - Otherwise present the AVPlayer-based pipeline.
 // In both cases, any active mini-player for the *other* pipeline is stopped
 // first — AVPlayer and TOS playback are mutually exclusive.
@@ -35,7 +36,7 @@ public final class PlayerRouter {
 
     /// Open `video` in whichever player pipeline is currently preferred.
     public func open(video: Video, api: InnerTubeAPI) {
-        if settingsStore.settings.useTOSPlayerOnIOS && tosState.fallbackVideoId != video.id {
+        if settingsStore.useTOSPlayerOnIOS && tosState.fallbackVideoId != video.id {
             if playerState.presentation != .hidden { playerState.stop() }
             tosState.play(video: video, api: api)
             return

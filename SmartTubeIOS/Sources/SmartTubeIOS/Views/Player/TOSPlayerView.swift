@@ -29,8 +29,8 @@ private let tosViewLog = Logger(subsystem: "com.void.smarttube.app", category: "
 //          └─ TOSPlayerView(video:api:)
 //
 // Entry path (iOS):
-//   MainTabView.onChange(of: browseVM.deepLinkedVideo)
-//     └─ store.settings.useTOSPlayerOnIOS == true
+//   PlayerRouter.open(video:api:)
+//     └─ store.useTOSPlayerOnIOS == true (always, by default — no user setting)
 //          └─ TOSPlayerStateStore.play(video:api:) → .landscapePlayerCover
 //               └─ TOSPlayerView(video:api:)
 //
