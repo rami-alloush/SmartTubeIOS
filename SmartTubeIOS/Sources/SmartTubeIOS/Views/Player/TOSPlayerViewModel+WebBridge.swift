@@ -91,9 +91,6 @@ extension TOSPlayerViewModel {
                 )
             }
 
-        case "rateChange":
-            playbackRate = (json["rate"] as? Double) ?? 1.0
-
         case "autoUnmuted":
             // One-shot trace from stateDetectionJS's pollVideo: confirms the
             // load-muted-then-unmute workaround dropped the mute once forward

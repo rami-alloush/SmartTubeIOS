@@ -68,7 +68,6 @@ final class TOSPlayerViewModel: NSObject {
     var playerState: YTPlayerState = .unstarted
     var currentTime: Double = 0
     var duration: Double = 0
-    var playbackRate: Double = 1.0
     var isReady: Bool = false
     /// Non-nil when the player encounters an error that requires falling back.
     var playerError: TOSPlayerError? = nil

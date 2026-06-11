@@ -451,17 +451,14 @@ final class TOSPlayerUITests: XCTestCase {
     /// `playbackRate`, instead of the silent `{found: false, iframes: 1}` no-op that
     /// `play/seekTo/setPlaybackRate` all produced before `embedFrameInfo` was wired up.
     ///
-    /// Why log inspection rather than an XCUITest-level assertion on `vm.playbackRate`
-    /// / the speed button's displayed label: `stateDetectionJS` has no `ratechange`
-    /// listener, so `vm.playbackRate` (and thus the button's `Text(speedLabel(for:
-    /// vm.playbackRate))`) never receives the JS-side confirmation round-trip — it
-    /// would stay frozen at 1.0 regardless of whether `setPlaybackRate` actually took
-    /// effect inside the iframe. (That missing feedback loop is a separate, narrower
-    /// defect than the cross-frame no-op this session is fixing — flagged separately,
-    /// not bundled into this fix.) The `{found, playbackRate}` diagnostic payload
-    /// `eval` logs on every call is the only oracle that distinguishes "JS bridge
-    /// reached the <video> and set its rate" from "silently found nothing" — exactly
-    /// the distinction this test exists to make.
+    /// Why log inspection rather than an XCUITest-level assertion on the speed
+    /// button's displayed label: `speedButton` carries a static
+    /// `.accessibilityLabel("Playback speed")`, so `.label` never reflects the
+    /// dynamically-displayed speed text (`store.settings.playbackSpeed`) regardless
+    /// of what's on screen — there is no AX-based oracle for "the pill shows 1.5×".
+    /// The `{found, playbackRate}` diagnostic payload `eval` logs on every call is
+    /// the oracle that distinguishes "JS bridge reached the <video> and set its rate"
+    /// from "silently found nothing" — exactly the distinction this test exists to make.
     ///
     // AGENT-POST-RUN-CHECK: ui-tests-with-logs
     //

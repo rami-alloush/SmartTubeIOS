@@ -320,8 +320,9 @@ public struct TOSPlayerView: View {
 
     /// Transferred from PlayerView+PickerOverlays.speedPickerOverlay — same source of
     /// truth (`AppSettings.availableSpeeds` / `store.settings.playbackSpeed`) and the
-    /// same JS-bridge call (`vm.setPlaybackRate`). Current rate is read live from
-    /// `vm.playbackRate`, which the JS bridge already reports via "rateChange"/"tick".
+    /// same JS-bridge call (`vm.setPlaybackRate`). The displayed speed is
+    /// `store.settings.playbackSpeed` (the user's selection) — `stateDetectionJS` has
+    /// no `ratechange` listener, so there is no live rate to read back from the player.
     private var speedButton: some View {
         Menu {
             ForEach(AppSettings.availableSpeeds, id: \.self) { speed in
@@ -329,7 +330,7 @@ public struct TOSPlayerView: View {
                     store.settings.playbackSpeed = speed
                     vm.setPlaybackRate(speed)
                 } label: {
-                    if abs(vm.playbackRate - speed) < 0.01 {
+                    if abs(store.settings.playbackSpeed - speed) < 0.01 {
                         Label(speedLabel(for: speed), systemImage: "checkmark")
                     } else {
                         Text(speedLabel(for: speed))
@@ -337,7 +338,7 @@ public struct TOSPlayerView: View {
                 }
             }
         } label: {
-            Text(speedLabel(for: vm.playbackRate))
+            Text(speedLabel(for: store.settings.playbackSpeed))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
