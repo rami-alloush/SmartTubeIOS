@@ -4,6 +4,26 @@ All notable changes to SmartTube are documented here.
 
 ---
 
+## [4.5] – 2026-06-11
+
+### Added
+- **TOS-compliant player is now the default on iOS** — playback uses an embedded YouTube IFrame player (WKWebView) with native SwiftUI controls, replacing the AVPlayer-based stream-extraction pipeline on iOS. Removes the entire class of playback failures caused by CDN/geo blocks, BotGuard/PO-token issues, and HLS/DASH manifest-parsing errors
+- **Comments** added to the player's "..." overflow menu on iOS
+
+### Changed
+- Existing iOS installs are migrated automatically to the new default player; the experimental `useTOSPlayerOnIOS` toggle has been removed
+- Video quality/ABR on iOS is now controlled entirely by YouTube's own player — manual quality and "max resolution" selection no longer apply on iOS
+- Speed and "..." menu controls repositioned next to the back button on iOS
+
+### Fixed
+- **Mini-player** — video now keeps playing when minimized instead of stopping
+- Playback speed pill stuck showing "Normal (1x)" after a speed change
+- Audio occasionally cutting to silent shortly after auto-unmute
+- Full-screen player no longer lingers after minimize/stop
+- Safe-area inset double-counted on the back button
+
+---
+
 ## [4.1] – 2026-05-27
 
 ### Added
