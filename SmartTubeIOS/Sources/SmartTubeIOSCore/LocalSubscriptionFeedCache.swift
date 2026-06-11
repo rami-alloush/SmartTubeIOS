@@ -13,13 +13,6 @@ public actor LocalSubscriptionFeedCache {
 
     public static let shared = LocalSubscriptionFeedCache()
 
-    // MARK: - Cache entry
-
-    private struct Entry {
-        let videos: [Video]
-        let fetchedAt: Date
-    }
-
     // MARK: - TTL
 
     /// Cache lifetime — matches FreeTube's implicit refresh behaviour.
@@ -27,7 +20,7 @@ public actor LocalSubscriptionFeedCache {
 
     // MARK: - State
 
-    private var cache: [String: Entry] = [:]
+    private var cache = TTLCache<String, [Video]>(ttl: LocalSubscriptionFeedCache.ttl)
 
     public init() {}
 
@@ -35,23 +28,21 @@ public actor LocalSubscriptionFeedCache {
 
     /// Returns cached videos for `channelId` if still within TTL; nil if stale or missing.
     public func videos(for channelId: String) -> [Video]? {
-        guard let entry = cache[channelId] else { return nil }
-        guard Date().timeIntervalSince(entry.fetchedAt) < Self.ttl else { return nil }
-        return entry.videos
+        cache.get(channelId)
     }
 
     /// Stores a fetch result for `channelId`, stamped with the current time.
     public func store(videos: [Video], for channelId: String) {
-        cache[channelId] = Entry(videos: videos, fetchedAt: Date())
+        cache.set(videos, for: channelId)
     }
 
     /// Removes the cached entry for `channelId` (e.g. after unfollow).
     public func invalidate(channelId: String) {
-        cache.removeValue(forKey: channelId)
+        cache.invalidate(channelId)
     }
 
     /// Clears all cached entries. Call on manual pull-to-refresh.
     public func invalidateAll() {
-        cache.removeAll()
+        cache.invalidateAll()
     }
 }
