@@ -140,21 +140,21 @@ extension TOSPlayerViewModel {
     /// auto-skips, shows a toast, or clears any active toast — driven by every
     /// "tick" message (see `handleScriptMessage`'s "tick" case).
     func checkSponsorSkip(at time: Double) {
-        guard settings.sponsorBlockEnabled else {
-            currentToastSegment = nil
-            return
-        }
-
         if let end = activeSkipEnd, time >= end { activeSkipEnd = nil }
 
-        guard let seg = sponsorSegments.first(where: { time >= $0.start && time < $0.end }) else {
-            currentToastSegment = nil
-            return
-        }
+        let decision = SponsorBlockDecisionEngine.decide(
+            at: time,
+            segments: sponsorSegments,
+            settings: settings,
+            isSkipInProgress: activeSkipEnd != nil,
+            duration: duration
+        )
 
-        switch settings.sponsorAction(for: seg.category) {
-        case .skip:
-            guard activeSkipEnd == nil else { return }
+        switch decision {
+        case .clearToast:
+            currentToastSegment = nil
+
+        case .skip(let target, let seg):
             activeSkipEnd = seg.end
             currentToastSegment = nil
 
@@ -162,15 +162,15 @@ extension TOSPlayerViewModel {
             // for to correlate a skip with the segment that caused it. The "AFTER"/landing
             // line (logged from the "tick" handler once the seek is confirmed) carries the
             // matching beforeTime so the pair can be joined without timestamps.
-            tosLog.notice("[SponsorBlock] skip TRIGGER category=\(seg.category.rawValue) action=skip segment=[\(seg.start, format: .fixed(precision: 1))s–\(seg.end, format: .fixed(precision: 1))s] (duration=\(seg.end - seg.start, format: .fixed(precision: 1))s) before=\(time, format: .fixed(precision: 2))s target=\(seg.end, format: .fixed(precision: 2))s")
+            tosLog.notice("[SponsorBlock] skip TRIGGER category=\(seg.category.rawValue) action=skip segment=[\(seg.start, format: .fixed(precision: 1))s–\(seg.end, format: .fixed(precision: 1))s] (duration=\(seg.end - seg.start, format: .fixed(precision: 1))s) before=\(time, format: .fixed(precision: 2))s target=\(target, format: .fixed(precision: 2))s")
             pendingSkipLog = PendingSkipLog(
                 category: seg.category,
                 segmentStart: seg.start,
                 segmentEnd: seg.end,
                 beforeTime: time,
-                targetTime: seg.end
+                targetTime: target
             )
-            seekTo(seg.end)
+            seekTo(target)
             // Cross-process signal for XCTest (mirrors .ready/.playing/.tickstarted below) —
             // lets a UI test `wait(for:)` the skip deterministically instead of guessing
             // a sleep duration long enough to cover "segment start + startup latency".
@@ -180,7 +180,19 @@ extension TOSPlayerViewModel {
                 nil, nil, true
             )
 
-        case .showToast:
+        case .skipToPlaybackEnd(let seg):
+            // TOS has no handlePlaybackEnd() equivalent (loop/autoplay/queue-next are
+            // standard-player-only concepts) — and the natural "ended" stateChange
+            // already fires once the video plays through. Rather than seeking past the
+            // end (which previously left TOS with no fallback at all), let playback
+            // continue through this last ~2s to its real end.
+            currentToastSegment = nil
+            if lastLoggedNearEndSegment?.start != seg.start || lastLoggedNearEndSegment?.category != seg.category {
+                lastLoggedNearEndSegment = seg
+                tosLog.notice("[SponsorBlock] near-end segment — letting playback continue to natural end category=\(seg.category.rawValue) segment=[\(seg.start, format: .fixed(precision: 1))s–\(seg.end, format: .fixed(precision: 1))s]")
+            }
+
+        case .showToast(let seg):
             // Log only on the transition into a new segment — `checkSponsorSkip` runs on
             // every ~250ms tick while inside the segment, and logging here unconditionally
             // would spam ~4 identical lines/second for the toast's entire visible window.
@@ -190,8 +202,8 @@ extension TOSPlayerViewModel {
             }
             currentToastSegment = seg
 
-        case .nothing:
-            currentToastSegment = nil
+        case .none:
+            break
         }
     }
 

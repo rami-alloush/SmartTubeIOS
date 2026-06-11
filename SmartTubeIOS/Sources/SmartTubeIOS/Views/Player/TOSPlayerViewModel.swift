@@ -146,6 +146,10 @@ final class TOSPlayerViewModel: NSObject {
     /// notice only on the transition into a new segment — not on every tick while the
     /// toast remains visible (which would spam the log at ~4 lines/second).
     var lastLoggedToastSegment: SponsorSegment? = nil
+    /// The most recently logged near-end segment (`.skipToPlaybackEnd`), so
+    /// `checkSponsorSkip` logs once per segment rather than on every tick until
+    /// the video naturally ends.
+    var lastLoggedNearEndSegment: SponsorSegment? = nil
     /// Strong reference to the WKWebView's navigation delegate (WKWebView retains it weakly).
     private var navigationDelegate: TOSNavigationDelegate?
     /// Fires the "tickstarted" Darwin notification on the first tick received.

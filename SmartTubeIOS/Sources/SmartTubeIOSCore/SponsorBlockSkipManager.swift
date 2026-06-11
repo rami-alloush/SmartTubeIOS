@@ -57,46 +57,49 @@ public final class SponsorBlockSkipManager {
     /// Returns true if an auto-seek was triggered.
     @discardableResult
     public func checkSponsorSkip(at time: TimeInterval) -> Bool {
-        guard let delegate, delegate.settings.sponsorBlockEnabled else {
+        guard let delegate else {
             currentToastSegment = nil
             return false
         }
-        if let seg = sponsorSegments.first(where: { time >= $0.start && time < $0.end }) {
-            switch delegate.settings.sponsorAction(for: seg.category) {
-            case .skip:
-                guard !isSkippingSegment else { return true }
-                currentToastSegment = nil
-                let effectiveDuration = player?.currentItem?.duration.seconds ?? delegate.duration
-                if effectiveDuration > 0 && seg.end >= effectiveDuration - 2.0 {
-                    delegate.handlePlaybackEnd()
-                    return true
-                }
-                isSkippingSegment = true
-                guard let player else { return true }
-                player.seek(
-                    to: CMTime(seconds: seg.end, preferredTimescale: 600),
-                    toleranceBefore: .zero,
-                    toleranceAfter: CMTime(seconds: 0.5, preferredTimescale: 600)
-                ) { [weak self] finished in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        if finished { self.delegate?.snapCurrentTime(to: seg.end) }
-                        try? await Task.sleep(nanoseconds: 200_000_000)
-                        self.isSkippingSegment = false
-                    }
-                }
-                return true
-            case .showToast:
-                currentToastSegment = seg
-                return false
-            case .nothing:
-                currentToastSegment = nil
-                return false
-            }
-        } else {
+        let effectiveDuration = player?.currentItem?.duration.seconds ?? delegate.duration
+        let decision = SponsorBlockDecisionEngine.decide(
+            at: time,
+            segments: sponsorSegments,
+            settings: delegate.settings,
+            isSkipInProgress: isSkippingSegment,
+            duration: effectiveDuration
+        )
+        switch decision {
+        case .clearToast:
             currentToastSegment = nil
+            return false
+        case .showToast(let seg):
+            currentToastSegment = seg
+            return false
+        case .skipToPlaybackEnd:
+            currentToastSegment = nil
+            delegate.handlePlaybackEnd()
+            return true
+        case .skip(let target, _):
+            currentToastSegment = nil
+            isSkippingSegment = true
+            guard let player else { return true }
+            player.seek(
+                to: CMTime(seconds: target, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: CMTime(seconds: 0.5, preferredTimescale: 600)
+            ) { [weak self] finished in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if finished { self.delegate?.snapCurrentTime(to: target) }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    self.isSkippingSegment = false
+                }
+            }
+            return true
+        case .none:
+            return true
         }
-        return false
     }
 
     /// Manually skip the segment shown in `currentToastSegment` (called by skip button).
