@@ -142,6 +142,7 @@ struct MainTabView: View {
     @Environment(TOSPlayerStateStore.self) private var tosState
     @Environment(PlayerRouter.self) private var playerRouter
     @Environment(BrowseViewModel.self) private var browseVM
+    @State private var showSrcSwapSpike = false
     #endif
 
     var body: some View {
@@ -282,6 +283,14 @@ struct MainTabView: View {
                     Color.clear.frame(width: 44, height: 44)
                 }
                 .accessibilityIdentifier("uitesting.reopenDeeplinkVideoButton")
+            }
+        }
+        .fullScreenCover(isPresented: $showSrcSwapSpike) {
+            ShortsEmbedSrcSwapSpikeView()
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("--uitesting-shorts-srcswap-spike") {
+                showSrcSwapSpike = true
             }
         }
         #endif
