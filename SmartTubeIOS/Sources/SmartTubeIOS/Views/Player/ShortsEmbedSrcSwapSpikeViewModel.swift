@@ -21,27 +21,15 @@ private let spikeLog = Logger(subsystem: "com.void.smarttube.app", category: "Sh
 @Observable
 final class ShortsEmbedSrcSwapSpikeViewModel: NSObject {
 
-    /// Four distinct, long-lived public videos with different durations — chosen so
-    /// `readyDurations` entries are distinguishable across swaps (freshReady check).
-    /// `BaW_jenozKc` (originally in this list) returns HTTP 404 from YouTube's oembed
-    /// endpoint — no longer embeddable — and reliably produced "error code=153" with
-    /// `duration=0.0` during the Task 1 spike run. Replaced with `kJQP7kiw5Fk`
-    /// ("Despacito", ~282s), confirmed embeddable (oembed HTTP 200) and distinct in
-    /// duration from the other three (19s, 213s, 252s).
-    /// `jNQXAC9IVRw` ("Me at the zoo", originally index 0, ~19s) reliably produced
-    /// `ready duration=0.0` — `stateDetectionJS`'s `pollVideo()` fires its one-shot
-    /// `ready` on the *first* poll (every 250ms) after `loadHTMLString` where
-    /// `document.querySelector('video')` is non-null, and for this video
-    /// `video.duration` was still `NaN` at that point on every observed run.
-    /// Replaced with `XqZsoesa55w` ("Baby Shark Dance", ~136s — YouTube's
-    /// most-viewed video ever, "Music"-adjacent high-traffic embed, confirmed
-    /// embeddable via oembed/yt-dlp), which has `video.duration` populated by the
-    /// first poll in the large majority of runs (≥3 consecutive passes observed
-    /// repeatedly) and stays distinct from the other three (213s, 252s, 282s). Index
-    /// 0 — loaded via the *initial* `loadHTMLString`, before any network connections
-    /// are warm — is inherently racier than the src-swap indices 1-3 (which reuse an
-    /// already-warm WKWebView); this remains the most reliable video found for that
-    /// cold-start slot.
+    /// Four distinct, long-lived public videos with different durations (~136s, 213s,
+    /// 252s, 282s) — chosen so `readyDurations` entries are distinguishable across
+    /// swaps (freshReady check). Index 0 is loaded via the *initial* `loadHTMLString`
+    /// (no warm network connections yet) and is inherently racier than indices 1-3,
+    /// which reuse an already-warm WKWebView after a src swap: `stateDetectionJS`'s
+    /// `pollVideo()` fires its one-shot `ready` on the first 250ms poll, and
+    /// `video.duration` can still occasionally read `NaN`/0 for index 0 at that point.
+    /// See git history for videos that were tried and rejected (`BaW_jenozKc`,
+    /// `jNQXAC9IVRw` — both reliably produced `ready duration=0.0` or embed errors).
     static let testVideoIds = ["XqZsoesa55w", "kJQP7kiw5Fk", "dQw4w9WgXcQ", "9bZkp7q19f0"]
 
     /// How long after each "ready" to count "tick" messages (ticksResume/tickRateStable checks).
