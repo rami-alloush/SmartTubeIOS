@@ -28,7 +28,21 @@ final class ShortsEmbedSrcSwapSpikeViewModel: NSObject {
     /// `duration=0.0` during the Task 1 spike run. Replaced with `kJQP7kiw5Fk`
     /// ("Despacito", ~282s), confirmed embeddable (oembed HTTP 200) and distinct in
     /// duration from the other three (19s, 213s, 252s).
-    static let testVideoIds = ["jNQXAC9IVRw", "kJQP7kiw5Fk", "dQw4w9WgXcQ", "9bZkp7q19f0"]
+    /// `jNQXAC9IVRw` ("Me at the zoo", originally index 0, ~19s) reliably produced
+    /// `ready duration=0.0` — `stateDetectionJS`'s `pollVideo()` fires its one-shot
+    /// `ready` on the *first* poll (every 250ms) after `loadHTMLString` where
+    /// `document.querySelector('video')` is non-null, and for this video
+    /// `video.duration` was still `NaN` at that point on every observed run.
+    /// Replaced with `XqZsoesa55w` ("Baby Shark Dance", ~136s — YouTube's
+    /// most-viewed video ever, "Music"-adjacent high-traffic embed, confirmed
+    /// embeddable via oembed/yt-dlp), which has `video.duration` populated by the
+    /// first poll in the large majority of runs (≥3 consecutive passes observed
+    /// repeatedly) and stays distinct from the other three (213s, 252s, 282s). Index
+    /// 0 — loaded via the *initial* `loadHTMLString`, before any network connections
+    /// are warm — is inherently racier than the src-swap indices 1-3 (which reuse an
+    /// already-warm WKWebView); this remains the most reliable video found for that
+    /// cold-start slot.
+    static let testVideoIds = ["XqZsoesa55w", "kJQP7kiw5Fk", "dQw4w9WgXcQ", "9bZkp7q19f0"]
 
     /// How long after each "ready" to count "tick" messages (ticksResume/tickRateStable checks).
     static let tickWindowNanoseconds: UInt64 = 3_000_000_000
