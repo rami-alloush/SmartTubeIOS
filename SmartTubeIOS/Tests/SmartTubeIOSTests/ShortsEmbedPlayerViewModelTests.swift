@@ -114,5 +114,80 @@ struct ShortsEmbedPlayerViewModelTests {
 
         #expect(vm.pendingSkipLog == nil)
     }
+
+    @Test("isPlaying reflects playerState")
+    func isPlayingReflectsPlayerState() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.isPlaying == false)  // .unstarted
+        vm.playerState = .playing
+        #expect(vm.isPlaying == true)
+        vm.playerState = .buffering
+        #expect(vm.isPlaying == true)
+        vm.playerState = .paused
+        #expect(vm.isPlaying == false)
+    }
+
+    @Test("currentVideoId tracks videoId after loadShort")
+    func currentVideoIdTracksVideoId() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.currentVideoId == "")
+        vm.loadShort(video: Video(id: "abc123", title: "Test Short", channelTitle: "Channel"))
+        #expect(vm.currentVideoId == "abc123")
+        #expect(vm.currentVideoId == vm.videoId)
+    }
+
+    @Test("showControls and toggleControls update controlsVisible")
+    func showControlsAndToggleControls() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.controlsVisible == false)
+        vm.showControls()
+        #expect(vm.controlsVisible == true)
+        vm.toggleControls()
+        #expect(vm.controlsVisible == false)
+        vm.toggleControls()
+        #expect(vm.controlsVisible == true)
+        vm.cancelControlsHide()
+        #expect(vm.controlsVisible == true)
+    }
+
+    @Test("handleBackground pauses and sets wasPlayingBeforeSuspend; handleForeground resumes")
+    func handleBackgroundAndForeground() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        vm.playerState = .playing
+        vm.handleBackground()
+        #expect(vm.wasPlayingBeforeSuspend == true)
+        vm.handleForeground()
+        #expect(vm.wasPlayingBeforeSuspend == false)
+    }
+
+    @Test("handleBackground does nothing when not playing")
+    func handleBackgroundNoOpWhenNotPlaying() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.playerState == .unstarted)
+        vm.handleBackground()
+        #expect(vm.wasPlayingBeforeSuspend == false)
+    }
+
+    @Test("errorMessage maps each TOSPlayerError case to a non-empty string")
+    func errorMessageMapsErrorCases() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.errorMessage == nil)
+        vm.playerError = .notFound
+        #expect(vm.errorMessage?.isEmpty == false)
+        vm.playerError = .embeddingDisabled
+        #expect(vm.errorMessage?.isEmpty == false)
+        vm.playerError = .iframeError(153)
+        #expect(vm.errorMessage?.isEmpty == false)
+        vm.playerError = .webViewLoadFailed
+        #expect(vm.errorMessage?.isEmpty == false)
+    }
+
+    @Test("togglePlayPause replays from start when the video has ended")
+    func togglePlayPauseReplaysWhenVideoEnded() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        vm.videoEnded = true
+        vm.togglePlayPause()
+        #expect(vm.videoEnded == false)
+    }
 }
 #endif

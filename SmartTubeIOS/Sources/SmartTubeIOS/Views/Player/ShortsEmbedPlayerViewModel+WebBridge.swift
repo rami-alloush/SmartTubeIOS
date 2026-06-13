@@ -44,6 +44,11 @@ extension ShortsEmbedPlayerViewModel {
             )
 
         case "ready":
+            // Cancel the "ready" timeout started by loadShort() — see
+            // startReadyTimeout(for:) (ShortsEmbedPlayerViewModel.swift).
+            readyTimeoutTask?.cancel()
+            readyTimeoutTask = nil
+
             // CAPTURE the embed iframe's frame info — `embedFrameInfo` is reset to
             // nil in loadShort(), so each iframe-src swap re-captures its own
             // frame here exactly once. See embedFrameInfo's doc comment

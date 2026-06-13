@@ -36,6 +36,23 @@ final class ShortsEmbedPlayerViewModel: NSObject {
     /// (e.g. auto-advancing to the next Short — see Task 9).
     var playerError: TOSPlayerError? = nil
 
+    // MARK: - View State
+    //
+    // Controls visibility, playback-ended state, and lifecycle bookkeeping —
+    // surfaced via ShortsEmbedPlayerViewModel+ViewState.swift (Task 9) to give this
+    // type the same name-matching surface as PlaybackViewModel, which
+    // ShortsPlayerView's shared (non-#if) call sites rely on.
+
+    var controlsVisible: Bool = false
+    var videoEnded: Bool = false
+    var wasPlayingBeforeSuspend: Bool = false
+    var controlsTimer: Task<Void, Never>?
+    /// Cancelled once "ready" arrives for the in-flight `loadShort` (see
+    /// ShortsEmbedPlayerViewModel+WebBridge.swift's "ready" case); if it fires
+    /// first, `playerError` is set to `.webViewLoadFailed` so the new `advanceAfterError()`
+    /// (below) can skip to the next Short.
+    var readyTimeoutTask: Task<Void, Never>?
+
     // MARK: - SponsorBlock
     //
     // Declared here so Task 4 compiles standalone. Fetch (loadShort → Task 6's
@@ -190,6 +207,7 @@ final class ShortsEmbedPlayerViewModel: NSObject {
         duration = 0
         isReady = false
         playerError = nil
+        videoEnded = false
         embedFrameInfo = nil
         hasReceivedFirstTick = false
         sponsorSegments = []
@@ -211,6 +229,8 @@ final class ShortsEmbedPlayerViewModel: NSObject {
             hasStarted = true
             startEmbed(videoId: video.id)
         }
+
+        startReadyTimeout(for: video.id)
     }
 
     /// First-ever load for this session — loads the HTML wrapper page via
@@ -238,6 +258,23 @@ final class ShortsEmbedPlayerViewModel: NSObject {
         let url = ShortsEmbedURL.embedURL(videoId: videoId)
         shortsLog.notice("[loadShort] src swap — videoId=\(videoId, privacy: .public)")
         eval("swap", "document.getElementById('yt').src = '\(url.absoluteString)';")
+    }
+
+    /// Starts a 9s timeout for the in-flight `loadShort(video:)` call. Cancelled by
+    /// the "ready" case in ShortsEmbedPlayerViewModel+WebBridge.swift once the new
+    /// frame reports ready; if it fires first, sets `playerError =
+    /// .webViewLoadFailed` so ShortsPlayerView+Navigation.swift's
+    /// `advanceAfterError()` can skip to the next Short. Mirrors the design spec's
+    /// Error Handling section ("ready" timeout, ~8-10s).
+    private func startReadyTimeout(for videoId: String) {
+        readyTimeoutTask?.cancel()
+        readyTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(9))
+            guard let self, !Task.isCancelled else { return }
+            guard self.videoId == videoId, !self.isReady else { return }
+            shortsLog.notice("[loadShort] ready TIMEOUT — videoId=\(videoId, privacy: .public) after 9s")
+            self.playerError = .webViewLoadFailed
+        }
     }
 
     // MARK: - JS Commands (operating on YouTube embed page's <video> element)
