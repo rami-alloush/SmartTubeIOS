@@ -105,8 +105,77 @@ extension ShortsPlayerView {
     func loadVideo(at index: Int) {
         let video = videos[index]
         CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
+        #if os(iOS)
+        vm.updateSettings(store.settings)
+        vm.loadShort(video: video)
+        #else
         vm.load(video: video)
         vm.setPlaybackSpeed(store.settings.playbackSpeed)
         vm.updateSettings(store.settings)
+        #endif
     }
+
+    #if os(iOS)
+
+    // MARK: - End of video / error recovery (iOS)
+
+    /// Replicates `PlaybackViewModel.handlePlaybackEnd()`'s decision tree
+    /// (PlaybackViewModel+Navigation.swift:114-163) for Shorts, via
+    /// `ShortsEndOfVideoDecision` (Task 3) — called from `.onChange(of:
+    /// vm.playerState)` when the TOS embed's `"stateChange"` reports `.ended`.
+    func handleShortEnded() {
+        switch ShortsEndOfVideoDecision.decide(settings: store.settings, currentIndex: currentIndex, count: videos.count) {
+        case .replay:
+            vm.seekTo(0)
+            vm.play()
+        case .advance(let next):
+            performVerticalTransition(direction: -1) { goTo(next) }
+        case .freeze:
+            vm.videoEnded = true
+        }
+    }
+
+    /// Per the design spec's Error Handling section: on a per-Short load failure or
+    /// "ready" timeout, log it and auto-advance to the next Short after a brief
+    /// delay (so the error banner is visible), mirroring swipe-up. If there's no
+    /// next Short, freeze like a natural end.
+    func advanceAfterError() {
+        guard let error = vm.playerError else { return }
+        let erroredVideoId = vm.currentVideoId
+        logEmbedLoadError(error, videoId: erroredVideoId)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard vm.currentVideoId == erroredVideoId, !isTransitioning else { return }
+            if let next = ShortsNavigation.targetIndex(vertical: -100, horizontal: 0, current: currentIndex, count: videos.count) {
+                performVerticalTransition(direction: -1) { goTo(next) }
+            } else {
+                vm.videoEnded = true
+            }
+        }
+    }
+
+    /// Logs a Shorts embed load failure via Crashlytics — mirrors the stall-logging
+    /// pattern at PlaybackViewModel+Loading.swift:938 (bug #193), giving visibility
+    /// into real-world embed failure rates per the design spec's Error Handling
+    /// section.
+    private func logEmbedLoadError(_ error: TOSPlayerError, videoId: String) {
+        let reason: String
+        switch error {
+        case .notFound:              reason = "notFound"
+        case .embeddingDisabled:     reason = "embeddingDisabled"
+        case .iframeError(let code): reason = "iframeError(\(code))"
+        case .webViewLoadFailed:     reason = "readyTimeout"
+        }
+        let nsError = NSError(
+            domain: "SmartTube.ShortsEmbedLoadFailure",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Shorts embed load failure: \(reason) (video \(videoId))"]
+        )
+        CrashlyticsLogger(category: "ShortsPlayer").recordNonFatal(nsError, userInfo: [
+            "video_id": videoId,
+            "reason": reason
+        ])
+    }
+
+    #endif
 }

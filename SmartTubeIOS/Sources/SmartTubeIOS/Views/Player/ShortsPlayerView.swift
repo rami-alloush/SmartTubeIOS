@@ -19,7 +19,11 @@ import UIKit
 public struct ShortsPlayerView: View {
     public let startIndex: Int
     @State var videos: [Video]
+    #if os(iOS)
+    @State var vm: ShortsEmbedPlayerViewModel
+    #else
     @State var vm: PlaybackViewModel
+    #endif
     @State var currentIndex: Int
     @Environment(\.dismiss) var dismiss
     @Environment(\.scenePhase) var scenePhase
@@ -39,7 +43,11 @@ public struct ShortsPlayerView: View {
         self.api = api
         self._videos = State(initialValue: videos)
         self._currentIndex = State(initialValue: startIndex)
+        #if os(iOS)
+        self._vm = State(initialValue: ShortsEmbedPlayerViewModel(api: api))
+        #else
         self._vm = State(initialValue: PlaybackViewModel(api: api))
+        #endif
     }
 
     var currentVideo: Video { videos[currentIndex] }
@@ -49,10 +57,15 @@ public struct ShortsPlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
+            #if os(iOS)
+            ShortsTOSWebView(vm: vm)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+            #else
             if ProcessInfo.processInfo.arguments.contains("--uitesting") {
                 Color.black.ignoresSafeArea()
             } else {
-                #if os(iOS) || os(tvOS)
+                #if os(tvOS)
                 // PlayerAVLayerView instead of VideoPlayer/AVPlayerViewController.
                 // Using AVPlayerViewController (VideoPlayer) causes it to dominate
                 // the entire UIKit accessibility tree, hiding all overlaid SwiftUI
@@ -65,6 +78,7 @@ public struct ShortsPlayerView: View {
                 Color.black.ignoresSafeArea()
                 #endif
             }
+            #endif
 
             // Gesture capture layer — a UIViewRepresentable that installs a
             // UIPanGestureRecognizer at the UIKit level so it fires even when
@@ -88,7 +102,7 @@ public struct ShortsPlayerView: View {
                     }
                 },
                 onTap: { vm.showControls() },
-                onTwoFingerTap: { vm.toggleStatsForNerds() },
+                onTwoFingerTap: {},
                 onPanChanged: { dy in
                     guard !isTransitioning else { return }
                     let canGoUp   = ShortsNavigation.targetIndex(vertical: -100, horizontal: 0, current: currentIndex, count: videos.count) != nil
@@ -107,6 +121,7 @@ public struct ShortsPlayerView: View {
             .accessibilityHidden(true)
             #endif
 
+            #if !os(iOS)
             if vm.isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -131,6 +146,7 @@ public struct ShortsPlayerView: View {
                     .transition(.opacity)
                     .animation(.easeInOut(duration: 0.2), value: vm.statsForNerdsVisible)
             }
+            #endif
         }
         // SwiftUI tap gesture — fires when the player area is tapped.
         // This complements the UIKit UITapGestureRecognizer in SwipeGestureOverlay,
@@ -168,10 +184,6 @@ public struct ShortsPlayerView: View {
         .overlay {
             if vm.controlsVisible {
                 shortsOverlay
-                    // .contain makes the VStack an explicit accessibility
-                    // container so its children keep their own identifiers
-                    // (e.g. shorts.backButton) instead of inheriting the
-                    // container's identifier.
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("shorts.controlsOverlay")
                     .transition(.opacity)
@@ -179,6 +191,17 @@ public struct ShortsPlayerView: View {
             }
         }
         .overlay {
+            #if os(iOS)
+            if let msg = vm.errorMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(.black.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityIdentifier("shorts.errorBanner")
+            }
+            #else
             if let err = vm.error {
                 Text(err.localizedDescription)
                     .font(.caption)
@@ -188,6 +211,7 @@ public struct ShortsPlayerView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .accessibilityIdentifier("shorts.errorBanner")
             }
+            #endif
         }
         .overlay(alignment: .bottomTrailing) {
             if isFetchingMore {
@@ -209,19 +233,11 @@ public struct ShortsPlayerView: View {
         #endif
         .ignoresSafeArea()
         .onAppear {
-            // Guard against spurious re-appears (e.g. sheet dismissal on top of
-            // the NavigationStack) triggering an unnecessary full reload.
             if vm.currentVideoId == videos[currentIndex].id {
                 if vm.wasPlayingBeforeSuspend { vm.resume() }
             } else {
                 loadVideo(at: currentIndex)
             }
-            // UI testing only: show the controls overlay so tests can verify
-            // accessibility of the controls elements without relying on gesture
-            // delivery, which is unreliable in the simulator.
-            // Called AFTER loadVideo so it runs after controlsVisible is reset.
-            // cancelControlsHide() keeps the overlay permanently visible so tests
-            // do not race against the 4 s auto-hide timer.
             if ProcessInfo.processInfo.arguments.contains("--uitesting-show-controls") {
                 vm.showControls()
                 vm.cancelControlsHide()
@@ -243,10 +259,21 @@ public struct ShortsPlayerView: View {
                 break
             }
         }
+        #if os(iOS)
+        .onChange(of: vm.playerState) { _, newState in
+            if newState == .ended {
+                handleShortEnded()
+            }
+        }
+        .onChange(of: vm.playerError) { _, newError in
+            if newError != nil {
+                advanceAfterError()
+            }
+        }
+        #endif
         .navigationDestination(item: $channelDestination) { dest in
             ChannelView(channelId: dest.channelId)
         }
         } // NavigationStack
     }
 }
-

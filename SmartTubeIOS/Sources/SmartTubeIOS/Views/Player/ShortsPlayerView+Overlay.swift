@@ -53,12 +53,21 @@ extension ShortsPlayerView {
 
                 HStack(alignment: .bottom, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
+                        #if os(iOS)
+                        Text(currentVideo.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                        let channelId = currentVideo.channelId
+                        let channelTitle = currentVideo.channelTitle
+                        #else
                         Text(vm.playerInfo?.video.title ?? currentVideo.title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.white)
                             .lineLimit(2)
                         let channelId = vm.playerInfo?.video.channelId ?? currentVideo.channelId
                         let channelTitle = vm.playerInfo?.video.channelTitle ?? currentVideo.channelTitle
+                        #endif
                         Button {
                             guard let cid = channelId, !cid.isEmpty else { return }
                             channelDestination = ChannelDestination(channelId: cid)
