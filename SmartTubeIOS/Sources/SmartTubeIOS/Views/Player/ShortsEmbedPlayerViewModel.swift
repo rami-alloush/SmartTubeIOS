@@ -271,13 +271,6 @@ final class ShortsEmbedPlayerViewModel: NSObject {
         eval("setPlaybackRate(\(rate))", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.playbackRate=\(rate);}return {found: !!v, iframes: ifr, playbackRate: v ? v.playbackRate : null};})();")
     }
 
-    // MARK: - JS bridge (stub for Task 5)
-
-    /// Placeholder — Task 5 (`ShortsEmbedPlayerViewModel+WebBridge.swift`) replaces this
-    /// with the full "ping"/"ready"/"stateChange"/"tick"/"error" message switch. Required
-    /// now so `ShortsScriptMessageProxy` (below) compiles.
-    func handleScriptMessage(_ body: String, frameInfo: WKFrameInfo) {}
-
     // MARK: - Private helpers
 
     /// Frame-targeted eval — see `TOSPlayerViewModel.eval`'s doc comment
