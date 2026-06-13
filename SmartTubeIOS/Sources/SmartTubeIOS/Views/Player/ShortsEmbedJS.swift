@@ -1,0 +1,172 @@
+#if !os(tvOS)
+import Foundation
+
+/// JS source strings and embed-URL/HTML-wrapper helpers shared by the Task 1
+/// iframe-src-swap spike (`ShortsEmbedSrcSwapSpikeViewModel`) and, from Task 4
+/// onward, `ShortsEmbedPlayerViewModel`.
+///
+/// `embedURL`/`htmlWrapper` intentionally duplicate what Task 2 extracts as a pure
+/// function in `SmartTubeIOSCore` (`ShortsEmbedURL.swift`). Task 1 cannot depend on
+/// Task 2 — the spike must be self-contained and runnable first. Once Task 2 lands,
+/// `ShortsEmbedPlayerViewModel` (Task 4) uses the `SmartTubeIOSCore` version; these
+/// copies remain spike-only.
+enum ShortsEmbedJS {
+
+    /// Injected at `.atDocumentStart` into every frame — verbatim copy of
+    /// `TOSPlayerViewModel.webkitHiderJS` (TOSPlayerViewModel.swift:460-475). Hides
+    /// `window.webkit` before any page script runs so YouTube's player can't detect
+    /// the WKWebView environment, and stashes the native `ytCallback` handler as
+    /// `window.__nativeYTCallback` for `stateDetectionJS` to use.
+    static let webkitHiderJS: String = """
+    (function() {
+        try {
+            var wk = window.webkit;
+            if (!wk) return;
+            var mh = wk.messageHandlers;
+            window.__nativeYTCallback = (mh && mh.ytCallback) ? mh.ytCallback : null;
+            Object.defineProperty(window, 'webkit', {
+                get: function() { return undefined; },
+                set: function() {},
+                configurable: true,
+                enumerable: false
+            });
+        } catch(e) {}
+    })();
+    """
+
+    /// Injected at `.atDocumentEnd` into every frame — verbatim copy of
+    /// `TOSPlayerViewModel.stateDetectionJS` (TOSPlayerViewModel.swift:480-587). Polls
+    /// the `<video>` element every 250ms and relays `ping`/`ready`/`tick`/`stateChange`/
+    /// `autoUnmuted`/`error` via `window.__nativeYTCallback.postMessage`.
+    static let stateDetectionJS: String = """
+    (function() {
+        try {
+            var _cb = window.__nativeYTCallback;
+            if (_cb) _cb.postMessage('{"type":"ping"}');
+        } catch(e) {}
+
+        var _prevState = -2;
+        var _playAttempts = 0;
+        var _autoUnmuted = false;
+
+        function postMsg(obj) {
+            try {
+                var cb = window.__nativeYTCallback;
+                if (cb) cb.postMessage(JSON.stringify(obj));
+            } catch(e) {}
+        }
+
+        var _errorReported = false;
+        function checkErrorOverlay(node) {
+            if (_errorReported) return;
+            var errEl = node.nodeType === 1 && (
+                (node.classList && node.classList.contains('ytp-error')) ||
+                node.querySelector && node.querySelector('.ytp-error')
+            );
+            if (!errEl) return;
+            _errorReported = true;
+            var txt = (typeof errEl === 'object' ? (errEl.textContent || '') : (node.textContent || ''));
+            var m = txt.match(/Error\\s+(\\d+)/i);
+            postMsg({type: 'error', code: m ? parseInt(m[1], 10) : 153, text: txt.trim().substring(0, 200)});
+        }
+        var _observer = new MutationObserver(function(mutations) {
+            for (var i = 0; i < mutations.length; i++) {
+                var added = mutations[i].addedNodes;
+                for (var j = 0; j < added.length; j++) { checkErrorOverlay(added[j]); }
+            }
+        });
+        _observer.observe(document.documentElement, {childList: true, subtree: true});
+
+        function pollVideo() {
+            var video = document.querySelector('video');
+            if (!video) return;
+
+            var s;
+            if (video.ended) {
+                s = 0;
+            } else if (video.paused) {
+                s = 2;
+            } else if (video.readyState >= 3) {
+                s = 1;
+            } else {
+                s = 3;
+            }
+
+            var t = video.currentTime || 0;
+
+            if (_prevState === -2) {
+                _prevState = s;
+                postMsg({type: 'ready', duration: video.duration || 0,
+                         readyState: video.readyState, buffered: video.buffered.length});
+            }
+
+            if (video.paused && t === 0 && _playAttempts < 20) {
+                _playAttempts++;
+                video.muted = true;
+                var p = video.play();
+                if (p && p['catch']) { p['catch'](function() {}); }
+            }
+
+            if (!_autoUnmuted && !video.paused && t > 0.1) {
+                _autoUnmuted = true;
+                video.muted = false;
+                var ytPlayer = document.getElementById('movie_player');
+                if (ytPlayer && typeof ytPlayer.unMute === 'function') { ytPlayer.unMute(); }
+                postMsg({type: 'autoUnmuted', t: t, muted: video.muted});
+            }
+
+            postMsg({type: 'tick', t: t, state: s});
+
+            if (s !== _prevState) {
+                _prevState = s;
+                postMsg({type: 'stateChange', state: s});
+            }
+        }
+
+        setInterval(pollVideo, 250);
+    })();
+    """
+
+    /// Builds `https://www.youtube.com/embed/{videoId}?...` — mirrors
+    /// `TOSPlayerViewModel.loadEmbed`'s query items (TOSPlayerViewModel.swift:405-416).
+    static func embedURL(videoId: String, startTime: Double = 0) -> URL {
+        var comps = URLComponents(string: "https://www.youtube.com/embed/\(videoId)")!
+        comps.queryItems = [
+            URLQueryItem(name: "autoplay",       value: "1"),
+            URLQueryItem(name: "mute",           value: "1"),
+            URLQueryItem(name: "controls",       value: "1"),
+            URLQueryItem(name: "playsinline",    value: "1"),
+            URLQueryItem(name: "rel",            value: "0"),
+            URLQueryItem(name: "iv_load_policy", value: "3"),
+            URLQueryItem(name: "start",          value: "\(Int(startTime))"),
+            URLQueryItem(name: "origin",         value: "https://www.example.com"),
+        ]
+        return comps.url!
+    }
+
+    /// Wraps an embed URL in the `<iframe id="yt">` HTML page — mirrors
+    /// `TOSPlayerViewModel.loadEmbed`'s HTML template (TOSPlayerViewModel.swift:427-446).
+    static func htmlWrapper(embedURL: URL) -> String {
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <style>
+                html,body,iframe{margin:0;padding:0;border:0;width:100%;height:100%;background:#000}
+                iframe{position:absolute;top:0;left:0}
+            </style>
+        </head>
+        <body>
+            <iframe id="yt"
+                src="\(embedURL.absoluteString)"
+                frameborder="0"
+                allow="autoplay; encrypted-media; fullscreen"
+                allowfullscreen>
+            </iframe>
+        </body>
+        </html>
+        """
+    }
+}
+#endif
