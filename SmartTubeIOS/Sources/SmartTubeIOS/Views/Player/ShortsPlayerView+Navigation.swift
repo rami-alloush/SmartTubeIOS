@@ -140,7 +140,7 @@ extension ShortsPlayerView {
     /// delay (so the error banner is visible), mirroring swipe-up. If there's no
     /// next Short, freeze like a natural end.
     func advanceAfterError() {
-        guard let error = vm.playerError else { return }
+        guard let error = vm.playerError, error.isFatal else { return }
         let erroredVideoId = vm.currentVideoId
         logEmbedLoadError(error, videoId: erroredVideoId)
         Task { @MainActor in
