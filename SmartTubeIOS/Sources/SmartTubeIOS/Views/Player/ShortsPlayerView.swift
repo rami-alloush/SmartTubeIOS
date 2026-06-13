@@ -61,6 +61,18 @@ public struct ShortsPlayerView: View {
             ShortsTOSWebView(vm: vm)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
+
+            // The persistent WKWebView retains the outgoing Short's last-painted
+            // frame across an iframe-src swap until the new embed renders its
+            // first frame. Cover it until "ready" fires for the new Short, so the
+            // gap shows as blank (per the design spec) instead of a stale frame
+            // from the previous video.
+            if !vm.isReady {
+                Color.black.ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .accessibilityIdentifier("shorts.loadingCover")
+            }
             #else
             if ProcessInfo.processInfo.arguments.contains("--uitesting") {
                 Color.black.ignoresSafeArea()
