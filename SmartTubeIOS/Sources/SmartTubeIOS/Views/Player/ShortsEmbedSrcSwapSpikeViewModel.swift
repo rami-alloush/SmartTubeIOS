@@ -23,7 +23,12 @@ final class ShortsEmbedSrcSwapSpikeViewModel: NSObject {
 
     /// Four distinct, long-lived public videos with different durations — chosen so
     /// `readyDurations` entries are distinguishable across swaps (freshReady check).
-    static let testVideoIds = ["jNQXAC9IVRw", "BaW_jenozKc", "dQw4w9WgXcQ", "9bZkp7q19f0"]
+    /// `BaW_jenozKc` (originally in this list) returns HTTP 404 from YouTube's oembed
+    /// endpoint — no longer embeddable — and reliably produced "error code=153" with
+    /// `duration=0.0` during the Task 1 spike run. Replaced with `kJQP7kiw5Fk`
+    /// ("Despacito", ~282s), confirmed embeddable (oembed HTTP 200) and distinct in
+    /// duration from the other three (19s, 213s, 252s).
+    static let testVideoIds = ["jNQXAC9IVRw", "kJQP7kiw5Fk", "dQw4w9WgXcQ", "9bZkp7q19f0"]
 
     /// How long after each "ready" to count "tick" messages (ticksResume/tickRateStable checks).
     static let tickWindowNanoseconds: UInt64 = 3_000_000_000
