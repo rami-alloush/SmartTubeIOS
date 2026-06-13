@@ -6,12 +6,20 @@ import UIKit
 // MARK: - SwipeGestureOverlay
 
 #if os(iOS)
-/// A transparent UIKit view that captures pan and tap gestures before
-/// AVPlayerViewController can consume them.
+/// A transparent UIKit view whose pan/tap gesture recognizers are mirrored onto
+/// the window, so they fire *alongside* — not instead of — touches delivered to
+/// the WKWebView below. This lets YouTube's native `controls=1` chrome (play/pause,
+/// volume, CC, settings gear, etc.) remain tappable while swipe up/down still
+/// drives Shorts navigation and a tap still toggles `shortsOverlay`.
 ///
-/// - `cancelsTouchesInView = false` lets taps still reach controls below.
-/// - `require(toFail:)` is called against every sibling recognizer in the
-///   window so this pan always wins when predominantly vertical.
+/// - `hitTest` always returns `nil`, so this view itself never intercepts a
+///   touch — the WKWebView underneath becomes the hit-tested view.
+/// - `didMoveToWindow` re-homes the recognizers onto the window (an ancestor of
+///   both this view and the WKWebView), which is required for them to receive
+///   touches that hit-test to a sibling view.
+/// - The `shouldRecognizeSimultaneouslyWith` delegate returns `true` so these
+///   window-level recognizers don't block WKWebView's own touch handling.
+/// - `require(toFail:)` keeps the tap from firing until a vertical pan is ruled out.
 struct SwipeGestureOverlay: UIViewRepresentable {
     var onSwipeUp:        () -> Void
     var onSwipeDown:      () -> Void
@@ -22,39 +30,43 @@ struct SwipeGestureOverlay: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> PassthroughGestureView {
+        let view = PassthroughGestureView()
         view.backgroundColor = .clear
 
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
-        pan.cancelsTouchesInView = true
-        view.addGestureRecognizer(pan)
-        context.coordinator.pan = pan
+        pan.cancelsTouchesInView = false
+        pan.delegate = context.coordinator
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap))
         tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
         tap.require(toFail: pan)
-        view.addGestureRecognizer(tap)
 
         let twoFingerTap = UITapGestureRecognizer(target: context.coordinator,
                                                    action: #selector(Coordinator.handleTwoFingerTap))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.cancelsTouchesInView = false
-        view.addGestureRecognizer(twoFingerTap)
+        twoFingerTap.delegate = context.coordinator
 
+        view.managedGestureRecognizers = [pan, tap, twoFingerTap]
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: PassthroughGestureView, context: Context) {
         context.coordinator.parent = self
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: SwipeGestureOverlay
-        weak var pan: UIPanGestureRecognizer?
         private let minDistance: CGFloat = 40
 
         init(_ parent: SwipeGestureOverlay) { self.parent = parent }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                                shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
 
         @MainActor @objc func handlePan(_ gr: UIPanGestureRecognizer) {
             let t = gr.translation(in: gr.view)
@@ -76,6 +88,28 @@ struct SwipeGestureOverlay: UIViewRepresentable {
 
         @MainActor @objc func handleTap() { parent.onTap() }
         @MainActor @objc func handleTwoFingerTap() { parent.onTwoFingerTap() }
+    }
+}
+
+/// A fully click-through view: `hitTest` always returns `nil` so it never becomes
+/// the hit-tested view, and its `managedGestureRecognizers` are moved onto the
+/// window (rather than kept on this view) once it's installed, so they still
+/// receive touches that hit-test to a sibling view below.
+final class PassthroughGestureView: UIView {
+    var managedGestureRecognizers: [UIGestureRecognizer] = []
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        for gr in managedGestureRecognizers {
+            if let currentView = gr.view, currentView !== window {
+                currentView.removeGestureRecognizer(gr)
+            }
+            if let window, gr.view !== window {
+                window.addGestureRecognizer(gr)
+            }
+        }
     }
 }
 #endif

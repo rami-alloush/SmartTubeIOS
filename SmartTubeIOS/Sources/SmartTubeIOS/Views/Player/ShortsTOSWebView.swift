@@ -28,6 +28,7 @@ struct ShortsTOSWebView: UIViewRepresentable {
     private func attach(to container: UIView) {
         let webView = vm.webView
         webView.scrollView.isScrollEnabled = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.isUserInteractionEnabled = true
         webView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(webView)

@@ -17,7 +17,7 @@ extension ShortsPlayerView {
             .background(.black.opacity(0.4))
             .clipShape(Capsule())
             .accessibilityIdentifier("shorts.indexLabel")
-            .padding(.top, 60)
+            .padding(.top, 12)
             .padding(.trailing, 20)
     }
 
@@ -39,78 +39,9 @@ extension ShortsPlayerView {
                 Spacer()
             }
             .padding(.horizontal, 20)
-            .padding(.top, 60)
+            .padding(.top, 12)
 
             Spacer()
-
-            // Bottom section: navigation hints + title + play-pause
-            VStack(spacing: 8) {
-                if currentIndex > 0 {
-                    Image(systemName: AppSymbol.chevronUp)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .font(.caption)
-                }
-
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        #if os(iOS)
-                        Text(currentVideo.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        let channelId = currentVideo.channelId
-                        let channelTitle = currentVideo.channelTitle
-                        #else
-                        Text(vm.playerInfo?.video.title ?? currentVideo.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        let channelId = vm.playerInfo?.video.channelId ?? currentVideo.channelId
-                        let channelTitle = vm.playerInfo?.video.channelTitle ?? currentVideo.channelTitle
-                        #endif
-                        Button {
-                            guard let cid = channelId, !cid.isEmpty else { return }
-                            channelDestination = ChannelDestination(channelId: cid)
-                        } label: {
-                            Text(channelTitle)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                                .lineLimit(1)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(channelId == nil || channelId?.isEmpty == true)
-                        .accessibilityIdentifier("shorts.channelButton")
-                    }
-                    Spacer()
-                    Button { vm.togglePlayPause() } label: {
-                        Image(systemName: vm.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 30))
-                            .foregroundStyle(.white)
-                            .padding(12)
-                            .background(.black.opacity(0.4))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal, 20)
-
-                if currentIndex < videos.count - 1 {
-                    Image(systemName: AppSymbol.chevronDown)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .font(.caption)
-                }
-            }
-            .padding(.bottom, 40)
-            .background(
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.65)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 200)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-            )
         }
         // Allow swipe navigation even when the controls overlay is on screen.
         // .simultaneousGesture fires alongside button taps so controls remain

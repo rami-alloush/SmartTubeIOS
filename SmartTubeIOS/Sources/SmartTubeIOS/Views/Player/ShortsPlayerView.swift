@@ -32,7 +32,6 @@ public struct ShortsPlayerView: View {
     @State var slideOffset: CGFloat = 0
     @State var isTransitioning = false
     @State var isFetchingMore = false
-    @State var channelDestination: ChannelDestination?
     /// True while the app is backgrounded — guards onDisappear from calling stop()
     /// when iOS fires it as a side-effect of backgrounding rather than navigation.
     @State var isInBackground = false
@@ -49,8 +48,6 @@ public struct ShortsPlayerView: View {
         self._vm = State(initialValue: PlaybackViewModel(api: api))
         #endif
     }
-
-    var currentVideo: Video { videos[currentIndex] }
 
     public var body: some View {
         NavigationStack {
@@ -283,9 +280,6 @@ public struct ShortsPlayerView: View {
             }
         }
         #endif
-        .navigationDestination(item: $channelDestination) { dest in
-            ChannelView(channelId: dest.channelId)
-        }
         } // NavigationStack
     }
 }
