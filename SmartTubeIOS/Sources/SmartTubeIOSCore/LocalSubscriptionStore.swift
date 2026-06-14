@@ -53,6 +53,11 @@ public actor LocalSubscriptionStore: UserDefaultsBackedStore {
         }
     }
 
+    /// Returns all followed channels sorted by subscription date, newest-first.
+    public func allChannelsSortedBySubscriptionDate() -> [LocalChannel] {
+        channels.values.sorted { $0.addedAt > $1.addedAt }
+    }
+
     /// Follows a channel. Idempotent — following the same ID again is a no-op.
     public func follow(_ channel: LocalChannel) {
         guard channels[channel.id] == nil else { return }

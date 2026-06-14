@@ -78,6 +78,24 @@ struct LocalSubscriptionStoreTests {
         #expect(all.map(\.title) == ["Apple Channel", "Mango Channel", "Zebra Channel"])
     }
 
+    @Test("allChannelsSortedBySubscriptionDate returns channels newest-subscribed-first")
+    func allChannelsSortedByDateDescending() async {
+        let store = makeStore()
+        var older = makeChannel(id: "UC1", title: "Older Channel")
+        older.addedAt = Date(timeIntervalSinceReferenceDate: 1000)
+        var newer = makeChannel(id: "UC2", title: "Newer Channel")
+        newer.addedAt = Date(timeIntervalSinceReferenceDate: 3000)
+        var middle = makeChannel(id: "UC3", title: "Middle Channel")
+        middle.addedAt = Date(timeIntervalSinceReferenceDate: 2000)
+
+        await store.follow(older)
+        await store.follow(newer)
+        await store.follow(middle)
+
+        let sorted = await store.allChannelsSortedBySubscriptionDate()
+        #expect(sorted.map(\.id) == ["UC2", "UC3", "UC1"])
+    }
+
     // MARK: - updateMetadata
 
     @Test("updateMetadata refreshes title and thumbnail for followed channel")

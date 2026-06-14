@@ -381,6 +381,7 @@ public final class BrowseViewModel {
                         isAuthRequired = group.videos.isEmpty
                         var deduped = group
                         deduped.videos = deduplicated(group.videos)
+                            .sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
                         videoGroups = deduped.videos.isEmpty ? [] : [deduped]
                     }
                 } else {
@@ -388,6 +389,7 @@ public final class BrowseViewModel {
                     if !Task.isCancelled {
                         isAuthRequired = false
                         let deduped = deduplicated(videos)
+                            .sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
                         videoGroups = deduped.isEmpty ? [] : [VideoGroup(title: "Subscriptions", videos: deduped)]
                     }
                 }
@@ -434,8 +436,8 @@ public final class BrowseViewModel {
                         }
                     }
                 } else {
-                    let localChannels = await LocalSubscriptionStore.shared.allChannels()
-                    browseLog.notice("channels (local): \(localChannels.count) followed channels, isCancelled=\(Task.isCancelled)")
+                    let localChannels = await LocalSubscriptionStore.shared.allChannelsSortedBySubscriptionDate()
+                    browseLog.notice("channels (local): \(localChannels.count) followed channels sorted by subscription date, isCancelled=\(Task.isCancelled)")
                     if !Task.isCancelled {
                         isAuthRequired = false
                         subscribedChannels = localChannels.map { $0.toChannel() }
@@ -536,12 +538,12 @@ public final class BrowseViewModel {
                 } else {
                     browseLog.notice("fetchNextPage success: section=\(section.title) newVideos=\(group.videos.count) nextToken=\(group.nextPageToken != nil)")
                     mergeIntoFirstGroup(group)
-                    // NOTE: Do NOT sort after appending. The YouTube subscription feed API
-                    // returns pages in reverse-chronological order — page N+1 videos are
-                    // always older than page N. Sorting the entire array after each append
-                    // reorders existing items in SwiftUI's ForEach, which breaks the
-                    // LazyVGrid scroll position (content shifts under the user's offset,
-                    // making previously-seen cards reappear and the list appear to jump).
+                    // Re-sort newest-first after merging the new page. The YouTube
+                    // subscriptions API returns each page in roughly-reverse-chronological
+                    // order, but page boundaries don't align with publish dates — a video
+                    // from page 2 can be newer than the oldest video on page 1. Sorting
+                    // here keeps the merged feed globally ordered by publishedAt.
+                    videoGroups[0].videos.sort { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
                 }
             case .history:
                 let group = try await retryWithBackoff(label: "BrowseVM[\(section.title)]") {
