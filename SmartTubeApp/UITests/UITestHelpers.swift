@@ -81,17 +81,22 @@ enum UITestHelpers {
 
     // MARK: - Scroll helpers
 
-    /// Swipes up in `scrollView` until `element` exists in the accessibility tree,
+    /// Swipes up in `scrollView` until `element` exists and is hittable,
     /// or until `maxSwipes` attempts are exhausted.
     /// Waits up to `scrollViewTimeout` seconds for `scrollView` itself to appear
     /// before attempting any swipes — prevents "No matches found" on slow loads.
+    ///
+    /// Checking `isHittable` (not just `exists`) matters near the bottom of a
+    /// scroll view: a row can already be present in the accessibility tree while
+    /// still being visually covered by the tab bar, so taps on it land on the
+    /// tab bar instead.
     static func scrollUntilVisible(_ element: XCUIElement,
                                    in scrollView: XCUIElement,
                                    maxSwipes: Int = 8,
                                    scrollViewTimeout: TimeInterval = 5) {
         guard scrollView.waitForExistence(timeout: scrollViewTimeout) else { return }
         var attempts = 0
-        while !element.exists && attempts < maxSwipes {
+        while (!element.exists || !element.isHittable) && attempts < maxSwipes {
             scrollView.swipeUp()
             attempts += 1
         }
