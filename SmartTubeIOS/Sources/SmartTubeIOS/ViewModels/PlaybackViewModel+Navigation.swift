@@ -127,9 +127,9 @@ extension PlaybackViewModel {
                         CrashlyticsLogger.setIntendedVideo(id: pick.id, title: pick.title)
                         load(video: pick)
                     } else {
-                        playerLog.notice("Autoplay (queue, shuffle): exhausted, clearing")
+                        playerLog.notice("Autoplay (queue, shuffle): exhausted, falling back to recommendations")
                         await CurrentQueueStore.shared.clear()
-                        videoEnded = true
+                        autoplayFromRecommendations()
                     }
                 } else {
                     if let next = await CurrentQueueStore.shared.videoAt(index: idx + 1) {
@@ -138,14 +138,22 @@ extension PlaybackViewModel {
                         CrashlyticsLogger.setIntendedVideo(id: next.id, title: next.title)
                         load(video: next)
                     } else {
-                        playerLog.notice("Autoplay (queue): exhausted, clearing")
+                        playerLog.notice("Autoplay (queue): exhausted, falling back to recommendations")
                         await CurrentQueueStore.shared.clear()
-                        videoEnded = true
+                        autoplayFromRecommendations()
                     }
                 }
             }
             return
         }
+        autoplayFromRecommendations()
+    }
+
+    /// Falls back to a recommended video when there's no active queue (or the
+    /// queue has just been exhausted): shuffles from `relatedVideos` if shuffle
+    /// is enabled, otherwise autoplays the first related video if autoplay is
+    /// enabled, otherwise marks the video as ended.
+    private func autoplayFromRecommendations() {
         if settings.shuffleEnabled, !relatedVideos.isEmpty {
             let pick = relatedVideos[Int.random(in: 0..<relatedVideos.count)]
             playerLog.notice("Shuffle: loading id=\(pick.id)")
