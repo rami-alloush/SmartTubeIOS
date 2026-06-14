@@ -32,7 +32,6 @@ struct AppSettingsMigrationTests {
             "preferredQuality": "1080p",
             "playbackSpeed": 1.5,
             "autoplayEnabled": false,
-            "subtitlesEnabled": true,
             "backgroundPlaybackEnabled": false,
             "landscapeAlwaysPlay": true,
             "pipEnabled": false,
@@ -55,7 +54,6 @@ struct AppSettingsMigrationTests {
             "sponsorBlockMinSegmentDuration": 2.5,
             "sponsorBlockExcludedChannels": {},
             "deArrowEnabled": true,
-            "forceIPv4": false,
             "audioOnlyMode": true,
             "preferH264": true,
             "iCloudSyncEnabled": true
@@ -68,7 +66,6 @@ struct AppSettingsMigrationTests {
         #expect(settings.preferredQuality == .q1080)
         #expect(settings.playbackSpeed == 1.5)
         #expect(settings.autoplayEnabled == false)
-        #expect(settings.subtitlesEnabled == true)
         #expect(settings.landscapeAlwaysPlay == true)
         #expect(settings.pipEnabled == false)
         #expect(settings.seekBackSeconds == 15)
@@ -102,7 +99,6 @@ struct AppSettingsMigrationTests {
             "preferredQuality": "720p",
             "playbackSpeed": 2.0,
             "autoplayEnabled": true,
-            "subtitlesEnabled": false,
             "backgroundPlaybackEnabled": false,
             "landscapeAlwaysPlay": false,
             "pipEnabled": true,
@@ -125,7 +121,6 @@ struct AppSettingsMigrationTests {
             "sponsorBlockMinSegmentDuration": 0,
             "sponsorBlockExcludedChannels": {},
             "deArrowEnabled": false,
-            "forceIPv4": false,
             "audioOnlyMode": false,
             "preferH264": false,
             "iCloudSyncEnabled": false,
@@ -155,7 +150,6 @@ struct AppSettingsMigrationTests {
         original.preferredQuality = .q1440
         original.playbackSpeed = 0.75
         original.autoplayEnabled = false
-        original.subtitlesEnabled = true
         original.subtitlesLanguage = "fr"
         original.landscapeAlwaysPlay = true
         original.seekBackSeconds = 20
@@ -176,7 +170,6 @@ struct AppSettingsMigrationTests {
         #expect(decoded.preferredQuality == original.preferredQuality)
         #expect(decoded.playbackSpeed == original.playbackSpeed)
         #expect(decoded.autoplayEnabled == original.autoplayEnabled)
-        #expect(decoded.subtitlesEnabled == original.subtitlesEnabled)
         #expect(decoded.subtitlesLanguage == original.subtitlesLanguage)
         #expect(decoded.landscapeAlwaysPlay == original.landscapeAlwaysPlay)
         #expect(decoded.seekBackSeconds == original.seekBackSeconds)

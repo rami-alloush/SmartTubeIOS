@@ -93,6 +93,7 @@ public struct SettingsView: View {
                 }
             }
 
+            #if !os(iOS)
             Picker("Max Resolution", selection: $store.settings.preferredQuality) {
                 ForEach(AppSettings.VideoQuality.allCases, id: \.self) { q in
                     Text(q.rawValue.capitalized).tag(q)
@@ -115,6 +116,7 @@ public struct SettingsView: View {
                 Text("Original Track Only").tag("original" as String?)
             }
             .accessibilityIdentifier("settings.preferredAudioLanguageRow")
+            #endif
 
             #if os(tvOS)
             Picker("Seek Back", selection: $store.settings.seekBackSeconds) {
@@ -129,7 +131,7 @@ public struct SettingsView: View {
                 }
             }
             .accessibilityIdentifier("settings.seekForwardRow")
-            #else
+            #elseif os(macOS)
             Stepper(
                 "Seek Back: \(store.settings.seekBackSeconds) s",
                 value: $store.settings.seekBackSeconds,
@@ -146,6 +148,7 @@ public struct SettingsView: View {
             .accessibilityIdentifier("settings.seekForwardRow")
             #endif
 
+            #if !os(iOS)
             Picker("Hide Controls After", selection: $store.settings.controlsHideTimeout) {
                 Text("2s").tag(2)
                 Text("3s").tag(3)
@@ -159,20 +162,16 @@ public struct SettingsView: View {
                 Text("Fit (letterbox)").tag(AppSettings.VideoGravityMode.fit)
                 Text("Fill (crop)").tag(AppSettings.VideoGravityMode.fill)
             }
+            #endif
 
             Toggle("Loop Video", isOn: $store.settings.loopEnabled)
             Toggle("Shuffle", isOn: $store.settings.shuffleEnabled)
 
             Toggle("Autoplay next video", isOn: $store.settings.autoplayEnabled)
-            Toggle("Subtitles", isOn: $store.settings.subtitlesEnabled)
             Toggle("Background Playback", isOn: $store.settings.backgroundPlaybackEnabled)
+            #if !os(iOS)
             Toggle("Prefer H.264 Codec", isOn: $store.settings.preferH264)
                 .accessibilityIdentifier("settings.preferH264Toggle")
-            #if os(iOS)
-            Toggle("Picture in Picture", isOn: $store.settings.pipEnabled)
-                .accessibilityIdentifier("settings.pipToggle")
-            Toggle("In-App Mini Player", isOn: $store.settings.miniPlayerEnabled)
-                .accessibilityIdentifier("settings.miniPlayerToggle")
             #endif
         }
     }
@@ -186,8 +185,6 @@ public struct SettingsView: View {
                 Text("Enabled").tag(AppSettings.HistoryState.enabled)
                 Text("Disabled").tag(AppSettings.HistoryState.disabled)
             }
-            Toggle("Force IPv4 (VPN users)", isOn: $store.settings.forceIPv4)
-                .accessibilityIdentifier("settings.forceIPv4Toggle")
             Toggle("Sync to iCloud", isOn: $store.settings.iCloudSyncEnabled)
                 .accessibilityIdentifier("settings.iCloudSyncToggle")
         }

@@ -9,7 +9,6 @@ public struct AppSettings: Codable {
     public var preferredQuality: VideoQuality
     public var playbackSpeed: Double
     public var autoplayEnabled: Bool
-    public var subtitlesEnabled: Bool
     public var subtitlesLanguage: String?
     public var backgroundPlaybackEnabled: Bool
     /// When `true`, the player automatically rotates to landscape when a video starts on iPhone.
@@ -119,11 +118,6 @@ public struct AppSettings: Codable {
     public var deArrowEnabled: Bool
 
     // MARK: Network
-    /// Placeholder for future IPv4-forcing transport. Currently inert — no network behaviour
-    /// is changed when this is `true`. The transport implementation will be added once the
-    /// approach is validated on device (see docs/vpn-fix.md §Step 4).
-    public var forceIPv4: Bool
-
     /// Optional URL of a self-hosted poToken microservice (e.g. youtube-trusted-session-generator).
     /// When set, `ServerPoTokenProvider` is wired up to `InnerTubeAPI` so poToken is injected
     /// into every `/player` request. Nil by default — no token is sent until the user configures
@@ -227,7 +221,6 @@ public struct AppSettings: Codable {
         preferredQuality     = .auto
         playbackSpeed        = 1.0
         autoplayEnabled      = true
-        subtitlesEnabled     = false
         subtitlesLanguage    = nil
         backgroundPlaybackEnabled = false
         landscapeAlwaysPlay  = false
@@ -267,7 +260,6 @@ public struct AppSettings: Codable {
         preferredAudioLanguage = nil
         preferredCaptionLanguage = nil
         deArrowEnabled       = false
-        forceIPv4            = false
         poTokenServiceURL    = nil
         audioOnlyMode        = false
         preferH264           = false
@@ -307,7 +299,6 @@ extension AppSettings {
         case preferredQuality
         case playbackSpeed
         case autoplayEnabled
-        case subtitlesEnabled
         case subtitlesLanguage
         case backgroundPlaybackEnabled
         case landscapeAlwaysPlay
@@ -335,7 +326,6 @@ extension AppSettings {
         case preferredAudioLanguage
         case preferredCaptionLanguage
         case deArrowEnabled
-        case forceIPv4
         case poTokenServiceURL
         case audioOnlyMode
         case preferH264
@@ -350,7 +340,6 @@ extension AppSettings {
         preferredQuality             = c.safeDecode(VideoQuality.self,      forKey: .preferredQuality,             default: d.preferredQuality)
         playbackSpeed                = c.safeDecode(Double.self,            forKey: .playbackSpeed,                default: d.playbackSpeed)
         autoplayEnabled              = c.safeDecode(Bool.self,              forKey: .autoplayEnabled,              default: d.autoplayEnabled)
-        subtitlesEnabled             = c.safeDecode(Bool.self,              forKey: .subtitlesEnabled,             default: d.subtitlesEnabled)
         subtitlesLanguage            = c.safeDecode(String?.self,           forKey: .subtitlesLanguage,            default: d.subtitlesLanguage)
         backgroundPlaybackEnabled    = c.safeDecode(Bool.self,              forKey: .backgroundPlaybackEnabled,    default: d.backgroundPlaybackEnabled)
         landscapeAlwaysPlay          = c.safeDecode(Bool.self,              forKey: .landscapeAlwaysPlay,          default: d.landscapeAlwaysPlay)
@@ -378,7 +367,6 @@ extension AppSettings {
         preferredAudioLanguage       = c.safeDecode(String?.self,           forKey: .preferredAudioLanguage,       default: d.preferredAudioLanguage)
         preferredCaptionLanguage     = c.safeDecode(String?.self,           forKey: .preferredCaptionLanguage,     default: d.preferredCaptionLanguage)
         deArrowEnabled               = c.safeDecode(Bool.self,              forKey: .deArrowEnabled,               default: d.deArrowEnabled)
-        forceIPv4                    = c.safeDecode(Bool.self,              forKey: .forceIPv4,                    default: d.forceIPv4)
         poTokenServiceURL            = c.safeDecode(URL?.self,              forKey: .poTokenServiceURL,            default: d.poTokenServiceURL)
         audioOnlyMode                = c.safeDecode(Bool.self,              forKey: .audioOnlyMode,                default: d.audioOnlyMode)
         preferH264                   = c.safeDecode(Bool.self,              forKey: .preferH264,                   default: d.preferH264)

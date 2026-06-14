@@ -76,7 +76,6 @@ struct AppSettingsTests {
         #expect(settings.preferredQuality == .auto)
         #expect(settings.playbackSpeed == 1.0)
         #expect(settings.autoplayEnabled)
-        #expect(!settings.subtitlesEnabled)
         #expect(settings.sponsorBlockEnabled)
         #expect(!settings.deArrowEnabled)
         #expect(settings.themeName == .system)
