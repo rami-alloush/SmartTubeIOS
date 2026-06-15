@@ -55,8 +55,11 @@ public struct TOSPlayerView: View {
     #else
     /// On iOS, the view model is owned by TOSPlayerStateStore so it survives
     /// dismissal to mini-player. The view reads it from the environment.
+    /// `tosState.vm` is optional — `stop()` sets it to nil while this view
+    /// may still be mounted during a dismiss animation. `body` guards on it
+    /// below and passes the unwrapped vm to all helper view-builders, so
+    /// there is no force-unwrap anywhere in this file.
     @Environment(TOSPlayerStateStore.self) private var tosState
-    private var vm: TOSPlayerViewModel { tosState.vm! }
     #endif
 
     /// Drives `commentsOverlay` (see moreButton's Comments row). Plain view state —
@@ -105,6 +108,11 @@ public struct TOSPlayerView: View {
         // those controls under/behind the sidebar-toggle and back-chevron controls)
         // keeps them clear of it.
         //
+        // On iOS, `tosState.vm` can become nil (TOSPlayerStateStore.stop()) while
+        // this view is still mounted during a dismiss-animation. Guard here and
+        // render a black placeholder in that case — avoids a force-unwrap crash
+        // (Crashlytics #259) in the AX-label overlay and everywhere else below.
+        //
         // NOTE: there is intentionally NO on-screen back/close button here anymore —
         // every attempt at one (an "X" close button, then a back-chevron button)
         // ended up rendered in/near the OS-level titlebar chrome (traffic lights,
@@ -113,6 +121,12 @@ public struct TOSPlayerView: View {
         // above the content view's z-order and isn't something SwiftUI layout can
         // reliably steer clear of from inside this view. Esc (.onExitCommand below)
         // is the dismissal path now — see its doc comment.
+        #if os(iOS)
+        guard let vm = tosState.vm else {
+            return AnyView(Color.black.ignoresSafeArea())
+        }
+        #endif
+        return AnyView(
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 // Full-bleed black background. `.ignoresSafeArea()` is applied to
@@ -139,7 +153,7 @@ public struct TOSPlayerView: View {
                 // custom overlay views. On iOS both live in the back-button row
                 // instead (see backButton()) — there's no on-screen back button here
                 // to anchor them to on macOS.
-                topRightControls(topInset: geo.safeAreaInsets.top)
+                topRightControls(topInset: geo.safeAreaInsets.top, vm: vm)
                 #endif
 
                 #if os(iOS)
@@ -149,17 +163,17 @@ public struct TOSPlayerView: View {
                 // Esc fully dismisses). A small fixed padding is enough to clear the
                 // status bar — see backButton's doc comment for why `topInset` must
                 // NOT be added here too.
-                backButton()
+                backButton(vm: vm)
                 #endif
 
                 // MARK: SponsorBlock skip toast (bottom-centre)
                 if let seg = vm.currentToastSegment {
-                    sponsorToast(for: seg)
+                    sponsorToast(for: seg, vm: vm)
                 }
 
                 // MARK: Comments overlay (triggered from moreButton)
                 if showCommentsSheet {
-                    commentsOverlay
+                    commentsOverlay(vm: vm)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .animation(.easeOut(duration: 0.2), value: showCommentsSheet)
                 }
@@ -257,6 +271,7 @@ public struct TOSPlayerView: View {
             tosViewLog.notice("[TOSPlayerView] ⚠️ fatal error — triggering fallback to standard player")
             onFallback()
         }
+        )
     }
 
     #if os(iOS)
@@ -277,7 +292,7 @@ public struct TOSPlayerView: View {
     // and pushes the button ~60pt further down than intended, into the row
     // where the IFrame player's own channel-info overlay sits — which is the
     // "back button is too low and doesn't work" regression reported on-device.
-    private func backButton() -> some View {
+    private func backButton(vm: TOSPlayerViewModel) -> some View {
         VStack {
             HStack(spacing: 8) {
                 Button {
@@ -295,8 +310,8 @@ public struct TOSPlayerView: View {
                 // Playback speed pill + more menu — placed here (rather than top-right)
                 // so they don't overlap the IFrame's own video-title/channel row, which
                 // sits just below the top-right corner.
-                speedButton
-                moreButton
+                speedButton(vm: vm)
+                moreButton(vm: vm)
 
                 Spacer()
             }
@@ -319,11 +334,11 @@ public struct TOSPlayerView: View {
     // this is the lightest possible version of that affordance, available today
     // without waiting on the controls:0 fork.
     #if os(macOS)
-    private func topRightControls(topInset: CGFloat) -> some View {
+    private func topRightControls(topInset: CGFloat, vm: TOSPlayerViewModel) -> some View {
         HStack(spacing: 8) {
             Spacer()
-            moreButton
-            speedButton
+            moreButton(vm: vm)
+            speedButton(vm: vm)
         }
         .padding(.top, max(topInset, 16))
         .padding(.trailing, 16)
@@ -335,7 +350,7 @@ public struct TOSPlayerView: View {
     /// same JS-bridge call (`vm.setPlaybackRate`). The displayed speed is
     /// `store.settings.playbackSpeed` (the user's selection) — `stateDetectionJS` has
     /// no `ratechange` listener, so there is no live rate to read back from the player.
-    private var speedButton: some View {
+    private func speedButton(vm: TOSPlayerViewModel) -> some View {
         Menu {
             ForEach(AppSettings.availableSpeeds, id: \.self) { speed in
                 Button {
@@ -380,7 +395,7 @@ public struct TOSPlayerView: View {
     //   • Comments      — PlayerView+Overlays.swift's commentsOverlay/loadComments:
     //                     pure InnerTubeAPI fetch, rendered via the shared
     //                     CommentRowView (PlayerView+AuxViews.swift).
-    private var moreButton: some View {
+    private func moreButton(vm: TOSPlayerViewModel) -> some View {
         Menu {
             if authService.isSignedIn {
                 Button {
@@ -424,7 +439,7 @@ public struct TOSPlayerView: View {
                     }
                 }
             } label: {
-                Label(sleepTimerLabel, systemImage: "moon.zzz")
+                Label(sleepTimerLabel(vm: vm), systemImage: "moon.zzz")
             }
             .accessibilityIdentifier("tosPlayer.moreMenu.sleepTimerRow")
 
@@ -455,7 +470,7 @@ public struct TOSPlayerView: View {
         .accessibilityLabel("More")
     }
 
-    private var sleepTimerLabel: String {
+    private func sleepTimerLabel(vm: TOSPlayerViewModel) -> String {
         guard let minutes = vm.sleepTimerMinutes else { return "Sleep Timer" }
         return "Sleep Timer (\(minutes)m)"
     }
@@ -465,7 +480,7 @@ public struct TOSPlayerView: View {
     // Transferred from PlayerView+Overlays.commentsOverlay — same dim-backdrop +
     // bottom-sheet layout and the same shared CommentRowView. tvOS-only bits
     // (focusScope/.onExitCommand) are dropped: TOSPlayerView is `!os(tvOS)`.
-    private var commentsOverlay: some View {
+    private func commentsOverlay(vm: TOSPlayerViewModel) -> some View {
         CommentsOverlayView(
             comments: vm.comments.comments,
             isLoading: vm.comments.isLoading,
@@ -476,7 +491,7 @@ public struct TOSPlayerView: View {
 
     // MARK: - SponsorBlock toast
 
-    private func sponsorToast(for segment: SponsorSegment) -> some View {
+    private func sponsorToast(for segment: SponsorSegment, vm: TOSPlayerViewModel) -> some View {
         VStack {
             Spacer()
             HStack {
