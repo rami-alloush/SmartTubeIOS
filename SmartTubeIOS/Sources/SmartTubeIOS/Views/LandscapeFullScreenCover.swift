@@ -204,6 +204,9 @@ private struct LandscapePresenter<Item: Identifiable & Hashable>: UIViewControll
 
                     let hc = LandscapeAwareHostingController(rootView: contentBuilder(currentItem))
                     hc.modalPresentationStyle = .fullScreen
+                    // Avoid a white flash during the presentation animation, before
+                    // the hosted SwiftUI content's own black background renders.
+                    hc.view.backgroundColor = .black
                     hc.onDismiss = { [weak self] in
                         landscapeLog.notice("[LandscapePresenter] onDismiss — clearing binding and hosted VC")
                         // Suppress new presentations for 0.5 s while the SwiftUI binding

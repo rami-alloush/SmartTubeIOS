@@ -244,11 +244,12 @@ final class TOSPlayerViewModel: NSObject {
         // NSView-level KVC — not available on iOS UIView.
         self.webView.setValue(false, forKey: "drawsBackground")
         #else
-        // UIView equivalent: make the WKWebView transparent so the app's black
-        // background shows through before the embed loads.
-        self.webView.isOpaque = false
-        self.webView.backgroundColor = .clear
-        self.webView.scrollView.backgroundColor = .clear
+        // Opaque black background (matching the AVPlayer pipeline's container) so
+        // WKWebView's default white rendering doesn't flash through before the
+        // YouTube embed's content paints during the fullscreen transition.
+        self.webView.isOpaque = true
+        self.webView.backgroundColor = .black
+        self.webView.scrollView.backgroundColor = .black
         #endif
 
         super.init()
