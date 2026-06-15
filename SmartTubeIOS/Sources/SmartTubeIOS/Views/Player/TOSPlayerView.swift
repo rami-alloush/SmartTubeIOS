@@ -157,6 +157,18 @@ public struct TOSPlayerView: View {
                 #endif
 
                 #if os(iOS)
+                // MARK: Swipe-left/right navigation overlay (iOS only)
+                // Mirrors PlayerSwipeGestureOverlay's left/right behaviour for the
+                // AVPlayer pipeline. Restricted to the top portion of the screen so
+                // YouTube's own bottom scrubber/control-bar drags are unaffected.
+                TOSSwipeNavigationOverlay(
+                    onSwipeLeft: { vm.playNext() },
+                    onSwipeRight: { vm.playPrevious() },
+                    isEnabled: vm.hasNext || vm.hasPrevious
+                )
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
                 // MARK: Back button (iOS only)
                 // Safe here — full-screen modal has no OS chrome above it. Tapping
                 // minimizes to the mini-player so audio continues (unlike macOS where

@@ -107,6 +107,21 @@ final class TOSPlayerViewModel: NSObject {
 
     let comments: CommentsController
 
+    // MARK: - Navigation (swipe left/right)
+    //
+    // Backs TOSSwipeNavigationOverlay (swipe-left → next, swipe-right → previous).
+    // See TOSPlayerViewModel+Navigation.swift for fetchRelatedVideos()/playNext()/playPrevious().
+
+    /// Populated by `fetchRelatedVideos()` once the "ready" bridge message fires.
+    var relatedVideos: [Video] = []
+    /// Set by `TOSPlayerStateStore.play(video:api:)` via `setNavigationContext(hasPrevious:)`
+    /// based on whether a navigation history exists.
+    var hasPrevious: Bool = false
+    /// Wired by TOSPlayerView to `tosState.play(video:api:)` for the next related video.
+    var onPlayNext: ((Video) -> Void)?
+    /// Wired by TOSPlayerView to pop `TOSPlayerStateStore.history` and re-play it.
+    var onPlayPrevious: (() -> Void)?
+
     // MARK: - Dependencies
 
     private(set) var settings: AppSettings = AppSettings()

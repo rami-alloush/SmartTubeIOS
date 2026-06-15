@@ -56,6 +56,13 @@ public final class TOSPlayerStateStore {
     // all consumers (TOSPlayerView, TOSMiniPlayerView) are in the same module.
     private(set) var vm: TOSPlayerViewModel?
 
+    // MARK: - Navigation history (swipe-right / "previous")
+    //
+    // Pushed in play(video:api:) whenever a *different* video is opened while one
+    // is already loaded. popHistory() is used by TOSPlayerView's onPlayPrevious
+    // wiring to re-play the prior video on swipe-right.
+    private(set) var history: [Video] = []
+
     // MARK: - Imperative dismiss hook
 
     /// Set by LandscapePresenter's coordinator when the TOS full-screen player is
@@ -89,16 +96,43 @@ public final class TOSPlayerStateStore {
             existingVM.saveProgress()
         }
 
+        // Push the outgoing video onto the navigation history so swipe-right
+        // (playPrevious) can return to it.
+        if let current = currentVideo, current.id != video.id {
+            history.append(current)
+        }
+
         // Clear fallback guard when opening a new video.
         if fallbackVideoId != video.id {
             fallbackVideoId = nil
         }
 
         let newVM = TOSPlayerViewModel(videoId: video.id, channelId: video.channelId, startTime: 0, api: api)
+        newVM.setNavigationContext(hasPrevious: !history.isEmpty)
+        // Wire swipe-navigation callbacks here (not in TOSPlayerView.onAppear) so
+        // every vm created by a swipe-driven play() — not just the first — gets
+        // working onPlayNext/onPlayPrevious. SwiftUI's .onAppear fires once per
+        // view identity and does not re-run when tosState.vm is swapped out from
+        // under an already-presented TOSPlayerView, so re-wiring only on initial
+        // appearance would leave the second-and-later vm's callbacks nil.
+        // [weak self] avoids a retain cycle: self -> vm -> closure -> self.
+        newVM.onPlayNext = { [weak self] next in
+            self?.play(video: next, api: api)
+        }
+        newVM.onPlayPrevious = { [weak self] in
+            guard let prev = self?.popHistory() else { return }
+            self?.play(video: prev, api: api)
+        }
         self.vm = newVM
         self.currentVideo = video
         self.presentation = .fullScreen
         tosStoreLog.notice("[TOSPlayerStateStore] play — presentation set to .fullScreen, vm created for \(video.id)")
+    }
+
+    /// Pops and returns the most recent video from the swipe-navigation history,
+    /// or `nil` if there is none. Used by TOSPlayerView's onPlayPrevious wiring.
+    func popHistory() -> Video? {
+        history.isEmpty ? nil : history.removeLast()
     }
 
     /// Collapse the full-screen player to the mini-player bar.
