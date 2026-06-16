@@ -1,7 +1,10 @@
 import SwiftUI
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
+
+private let swipeLog = Logger(subsystem: "com.void.smarttube.app", category: "TOSSwipe")
 
 // MARK: - TOSSwipeNavigationOverlay
 //
@@ -60,15 +63,28 @@ struct TOSSwipeNavigationOverlay: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            guard let window = gestureRecognizer.view?.window else { return true }
+            // The recognizer is re-homed onto the UIWindow via PassthroughGestureView.
+            // gestureRecognizer.view IS the window, so .window returns nil — use the
+            // view directly instead.
+            let window = (gestureRecognizer.view as? UIWindow) ?? gestureRecognizer.view?.window
+            guard let window else { return true }
             let y = touch.location(in: window).y
-            return y <= window.bounds.height * parent.verticalActivationFraction
+            let fraction = parent.verticalActivationFraction
+            let accept = y <= window.bounds.height * fraction
+            swipeLog.debug("[shouldReceive] y=\(Int(y)) height=\(Int(window.bounds.height)) fraction=\(fraction, format: .fixed(precision: 2)) → \(accept ? "accept" : "reject")")
+            return accept
         }
 
         @MainActor @objc func handlePan(_ gr: UIPanGestureRecognizer) {
-            guard gr.state == .ended else { return }
             let t = gr.translation(in: gr.view)
-            guard abs(t.x) > minDistance, abs(t.x) > abs(t.y) else { return }
+            swipeLog.notice("[handlePan] state=\(gr.state.rawValue) tx=\(Int(t.x)) ty=\(Int(t.y))")
+            guard gr.state == .ended else { return }
+            guard abs(t.x) > minDistance, abs(t.x) > abs(t.y) else {
+                swipeLog.notice("[handlePan] ended — ignored (tx=\(Int(t.x)) ty=\(Int(t.y)) minDist=\(Int(self.minDistance)))")
+                return
+            }
+            let dir = t.x < 0 ? "LEFT" : "RIGHT"
+            swipeLog.notice("[handlePan] swipe \(dir) confirmed (tx=\(Int(t.x)))")
             if t.x < 0 {
                 parent.onSwipeLeft()
             } else {

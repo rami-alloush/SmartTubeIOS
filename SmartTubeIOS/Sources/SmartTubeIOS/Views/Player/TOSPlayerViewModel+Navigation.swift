@@ -23,6 +23,7 @@ extension TOSPlayerViewModel {
 
     /// Swipe-left handler — plays the first related video, if any.
     func playNext() {
+        tosLog.notice("[navigation] playNext called — relatedVideos=\(self.relatedVideos.count) hasNext=\(self.hasNext)")
         guard let next = relatedVideos.first else { return }
         tosLog.notice("[navigation] playNext — \(next.id, privacy: .public)")
         onPlayNext?(next)
@@ -30,8 +31,9 @@ extension TOSPlayerViewModel {
 
     /// Swipe-right handler — re-plays the previous video from history, if any.
     func playPrevious() {
+        tosLog.notice("[navigation] playPrevious called — hasPrevious=\(self.hasPrevious)")
         guard hasPrevious else { return }
-        tosLog.notice("[navigation] playPrevious")
+        tosLog.notice("[navigation] playPrevious — navigating back")
         onPlayPrevious?()
     }
 
