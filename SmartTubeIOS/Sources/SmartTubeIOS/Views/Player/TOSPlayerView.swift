@@ -234,6 +234,7 @@ public struct TOSPlayerView: View {
                 tosViewLog.notice("[TOSPlayerView] onDisappear — minimizing to mini-player, audio continues (videoId=\(self.video.id, privacy: .public))")
                 return
             }
+            vm.cancel()
             tosViewLog.notice("[TOSPlayerView] onDisappear — fully stopped (videoId=\(self.video.id, privacy: .public)) — stop() already paused & checkpointed")
             #else
             tosViewLog.notice("[TOSPlayerView] onDisappear — videoId=\(self.video.id, privacy: .public) playerState=\(String(describing: vm.playerState), privacy: .public) currentTime=\(vm.currentTime, format: .fixed(precision: 1))s — pausing & checkpointing")

@@ -67,8 +67,8 @@ extension TOSPlayerViewModel {
             // The JS pollVideo() already called video.play() at that point (see
             // stateDetectionJS), so calling it again from Swift would be a no-op or
             // could interrupt the stream seek in progress.
-            Task { await self.fetchSponsorSegments() }
-            Task { await self.fetchRelatedVideos() }
+            sponsorTask = Task { await self.fetchSponsorSegments() }
+            navigationTask = Task { await self.fetchRelatedVideos() }
             beginWatchtimeTracking()
             // Apply the user's saved playback-speed preference — parity with
             // PlaybackViewModel+Loading's `player.rate = Float(settings.playbackSpeed)`

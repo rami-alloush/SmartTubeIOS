@@ -172,6 +172,12 @@ final class TOSPlayerViewModel: NSObject {
     var hasReceivedFirstTick = false
     /// Prevents loadEmbed from firing in instances SwiftUI creates-then-discards during init.
     private var hasStartedLoading = false
+    /// Stored handle for the in-flight fetchSponsorSegments Task. Cancelled on full dismiss
+    /// to prevent a late @Observable mutation after TOSPlayerView teardown.
+    var sponsorTask: Task<Void, Never>?
+    /// Stored handle for the in-flight fetchRelatedVideos Task. Cancelled on full dismiss
+    /// to prevent a late @Observable mutation after TOSPlayerView teardown.
+    var navigationTask: Task<Void, Never>?
 
     /// `WKFrameInfo` of the cross-origin YouTube embed `<iframe>` — the ONLY frame
     /// whose document contains the `<video>` element. Captured from the first "ready"
@@ -301,6 +307,17 @@ final class TOSPlayerViewModel: NSObject {
     /// Called from `TOSPlayerView.onAppear`. Mirrors `PlaybackViewModel.updateSettings(_:)`.
     func updateSettings(_ newSettings: AppSettings) {
         settings = newSettings
+    }
+
+    // MARK: - Lifecycle
+
+    /// Cancels the in-flight sponsor-segments and related-videos fetch Tasks.
+    /// Called from `TOSPlayerView.onDisappear` on full dismiss (not mini-player minimize)
+    /// to prevent late `@Observable` property mutations after the view's environment chain
+    /// is torn down — which would trigger a SwiftUI body re-evaluation crash (a013be1c).
+    func cancel() {
+        sponsorTask?.cancel()
+        navigationTask?.cancel()
     }
 
     // MARK: - JS Commands (operating on YouTube embed page's <video> element)
