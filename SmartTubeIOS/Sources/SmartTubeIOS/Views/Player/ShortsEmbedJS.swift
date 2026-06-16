@@ -34,31 +34,51 @@ enum ShortsEmbedJS {
     })();
     """
 
-    /// Injected at `.atDocumentStart` into every frame. Adds a `<style>` tag that
-    /// hides all YouTube player chrome elements that remain visible even with
-    /// `controls=0`: top/bottom bars, gradients, watermark, pause overlay,
-    /// bezel animation, end-screen cards. Running at document-start means the CSS
-    /// is in place before YouTube's JS renders any of these elements.
+    /// Injected at `.atDocumentStart` into every frame. Hides all YouTube player
+    /// chrome — both static (`ytp-*` class names) and dynamically injected Shorts
+    /// UI (channel header, Shorts logo, pause bezel). Two-pronged approach:
+    ///
+    /// 1. CSS rule `#movie_player > *:not(.html5-video-container)` structurally
+    ///    hides every direct child of the player div that is not the actual video
+    ///    container — works regardless of class-name changes on YouTube's side.
+    ///
+    /// 2. MutationObserver that scans for elements with "shorts" in their class or
+    ///    id and hides them inline — catches Shorts-specific nodes (channel card,
+    ///    Shorts logo, share button) that YouTube's JS injects after page load.
     static let playerControlsHiderJS: String = """
     (function() {
         try {
-            var css = [
-                '.ytp-chrome-top',
-                '.ytp-chrome-bottom',
-                '.ytp-gradient-top',
-                '.ytp-gradient-bottom',
-                '.ytp-watermark',
-                '.ytp-pause-overlay',
-                '.ytp-cued-thumbnail-overlay',
-                '.ytp-bezel-container',
-                '.ytp-endscreen-content',
-                '.ytp-ce-element',
-                '.ytp-cards-button',
-                '.ytp-cards-teaser'
-            ].join(',') + '{display:none!important}';
+            var css =
+                // Named ytp-* chrome (fast path, covers static elements)
+                '.ytp-chrome-top,.ytp-chrome-bottom,' +
+                '.ytp-gradient-top,.ytp-gradient-bottom,' +
+                '.ytp-watermark,.ytp-pause-overlay,.ytp-cued-thumbnail-overlay,' +
+                '.ytp-bezel-container,.ytp-bezel,.ytp-player-content,' +
+                '.ytp-endscreen-content,.ytp-ce-element,' +
+                '.ytp-cards-button,.ytp-cards-teaser,' +
+                // Structural: every direct child of #movie_player except the video layer
+                '#movie_player > *:not(.html5-video-container)' +
+                '{display:none!important}';
             var s = document.createElement('style');
+            s.id = '__st_hider';
             s.textContent = css;
             (document.head || document.documentElement).appendChild(s);
+
+            // MutationObserver: hide Shorts-specific nodes injected after load
+            // (channel header, Shorts logo, share button — not in ytp-* namespace).
+            function scan() {
+                try {
+                    var els = document.querySelectorAll('[class*="shorts"],[id*="shorts"]');
+                    for (var i = 0; i < els.length; i++) {
+                        var el = els[i];
+                        if (el.tagName !== 'VIDEO' && el.id !== 'movie_player') {
+                            el.style.setProperty('display', 'none', 'important');
+                        }
+                    }
+                } catch(e) {}
+            }
+            var obs = new MutationObserver(scan);
+            obs.observe(document.documentElement, {childList: true, subtree: true});
         } catch(e) {}
     })();
     """
