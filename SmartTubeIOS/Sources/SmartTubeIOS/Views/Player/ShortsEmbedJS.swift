@@ -34,67 +34,49 @@ enum ShortsEmbedJS {
     })();
     """
 
-    /// Injected at `.atDocumentStart` into every frame. Three-layer defence against
-    /// YouTube's Shorts chrome (channel header, Shorts logo, share button, pause
-    /// bezel) — runs only in the cross-origin YouTube embed iframe, never in the
-    /// wrapper page (`window === window.top` guard prevents blacking out the entire
-    /// WKWebView).
+    /// Injected at `.atDocumentStart` into every frame. Hides all YouTube Shorts
+    /// chrome without depending on class names or z-index tricks.
     ///
-    /// Layer 1 — CSS class names (`ytp-*`): fast path for static player elements.
-    /// Layer 2 — Full-viewport black overlay div: class-name-independent cover for
-    ///            any Shorts-specific chrome that CSS selectors miss.
-    /// Layer 3 — Video elevation: video element is pulled to z-index MAX so it
-    ///            renders above the overlay, making only the raw video visible.
+    /// Key insight: `visibility:hidden` on an ancestor can be overridden by
+    /// `visibility:visible !important` on a descendant (unlike `display:none`,
+    /// which cannot). So blanket-hiding `body *` and re-showing only `video`
+    /// works regardless of how YouTube nests its stacking contexts or what
+    /// class names it uses — channel header, Shorts logo, share button, and
+    /// pause bezel all disappear; the raw video element stays visible.
     ///
-    /// Both a MutationObserver and a 500 ms setInterval reapply layer 3 so
-    /// YouTube's JS can't reset the video's position/z-index after we set it.
+    /// `window === window.top` guard: bails immediately in the wrapper page so
+    /// we do not accidentally hide the `<iframe>` itself in the outer document.
+    ///
+    /// MutationObserver re-adds the `<style>` tag if YouTube's JS removes it.
     static let playerControlsHiderJS: String = """
     (function() {
-        // Do nothing in the wrapper page — only run inside the YouTube embed iframe.
+        // Only run inside the YouTube embed iframe, not the wrapper page.
         if (window === window.top) return;
 
         function apply() {
             try {
-                // Layer 1: CSS for named player chrome elements
                 if (!document.getElementById('__st_css')) {
                     var s = document.createElement('style');
                     s.id = '__st_css';
+                    // Blanket-hide every body descendant, then re-show only the
+                    // <video>. visibility:hidden (unlike display:none) is
+                    // overridable by a child's visibility:visible !important, so
+                    // the video stays rendered even while all its ancestors are
+                    // invisible — no z-index or class-name dependency needed.
                     s.textContent =
-                        '.ytp-chrome-top,.ytp-chrome-bottom,' +
-                        '.ytp-gradient-top,.ytp-gradient-bottom,' +
-                        '.ytp-watermark,.ytp-pause-overlay,.ytp-cued-thumbnail-overlay,' +
-                        '.ytp-bezel-container,.ytp-bezel,.ytp-player-content,' +
-                        '.ytp-endscreen-content,.ytp-ce-element,' +
-                        '.ytp-cards-button,.ytp-cards-teaser,' +
-                        '#movie_player > *:not(.html5-video-container)' +
-                        '{display:none!important}';
+                        'html,body{background:#000!important;' +
+                            'margin:0!important;padding:0!important}' +
+                        'body *{visibility:hidden!important}' +
+                        'video{visibility:visible!important;' +
+                            'width:100%!important;height:100%!important;' +
+                            'object-fit:cover!important;background:#000!important}';
                     (document.head || document.documentElement).appendChild(s);
-                }
-                // Layer 2: Black overlay that covers any chrome not caught above
-                if (!document.getElementById('__st_ov')) {
-                    var ov = document.createElement('div');
-                    ov.id = '__st_ov';
-                    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:2147483646;pointer-events:none;';
-                    document.documentElement.appendChild(ov);
-                }
-                // Layer 3: Elevate <video> above the overlay
-                var v = document.querySelector('video');
-                if (v) {
-                    v.style.setProperty('position', 'fixed', 'important');
-                    v.style.setProperty('top', '0', 'important');
-                    v.style.setProperty('left', '0', 'important');
-                    v.style.setProperty('width', '100%', 'important');
-                    v.style.setProperty('height', '100%', 'important');
-                    v.style.setProperty('z-index', '2147483647', 'important');
-                    v.style.setProperty('object-fit', 'cover', 'important');
-                    v.style.setProperty('background', '#000', 'important');
                 }
             } catch(e) {}
         }
 
         apply();
         new MutationObserver(apply).observe(document.documentElement, {childList: true, subtree: true});
-        setInterval(apply, 500);
     })();
     """
 
