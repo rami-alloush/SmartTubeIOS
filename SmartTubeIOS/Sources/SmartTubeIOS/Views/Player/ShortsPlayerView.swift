@@ -110,7 +110,7 @@ public struct ShortsPlayerView: View {
                         loadMoreAtStart()
                     }
                 },
-                onTap: { vm.showControls() },
+                onTap: { },
                 onTwoFingerTap: {},
                 onPanChanged: { dy in
                     guard !isTransitioning else { return }
@@ -157,13 +157,13 @@ public struct ShortsPlayerView: View {
             }
             #endif
         }
-        // SwiftUI tap gesture — fires when the player area is tapped.
-        // This complements the UIKit UITapGestureRecognizer in SwipeGestureOverlay,
-        // which can be unreliable in the XCTest simulator environment.
-        // Both paths call vm.showControls(), which is idempotent (second call
-        // simply resets the auto-hide timer).
+        // Single-tap always toggles play/pause. The UIKit recognizer in
+        // SwipeGestureOverlay is a no-op tap so this SwiftUI gesture is the sole
+        // toggle path — avoids double-firing togglePlayPause() on the same touch.
+        // togglePlayPause() calls showControls() internally, so the back button
+        // appears for 3 s after every tap.
         .contentShape(Rectangle())
-        .onTapGesture { vm.showControls() }
+        .onTapGesture { vm.togglePlayPause() }
         .offset(y: slideOffset)
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)

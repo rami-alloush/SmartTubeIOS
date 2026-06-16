@@ -23,26 +23,28 @@ extension ShortsPlayerView {
 
     // MARK: - Pause indicator
     //
-    // Shown whenever the video is paused and not ended — gives visible feedback
-    // that the video is paused (and a tap target) since controls=0 removes
-    // YouTube's native centre-pause button from the embed chrome.
-    // Independent of controlsVisible so it appears even when the controls
-    // overlay is hidden. Tap calls togglePlayPause() to resume.
+    // Visual-only indicator shown while paused — confirms the paused state since
+    // controls=0 removes YouTube's native pause icon. No tap gesture: the ZStack's
+    // onTapGesture (ShortsPlayerView.swift) handles play/pause for the whole frame,
+    // so every tap toggles play/pause regardless of where the user taps.
+    // allowsHitTesting(false) ensures touches fall through to the ZStack.
 
     #if os(iOS)
     var pauseIndicator: some View {
         Group {
             if !vm.isPlaying && !vm.videoEnded {
                 Image(systemName: "play.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 38, weight: .medium))
                     .foregroundStyle(.white)
-                    .padding(24)
-                    .background(.black.opacity(0.5))
+                    .frame(width: 68, height: 68)
+                    .background(.ultraThinMaterial)
                     .clipShape(Circle())
-                    .onTapGesture { vm.togglePlayPause() }
-                    .accessibilityIdentifier("shorts.pauseIndicator")
+                    .accessibilityHidden(true)
+                    .transition(.opacity.combined(with: .scale(scale: 0.88)))
             }
         }
+        .animation(.easeOut(duration: 0.15), value: vm.isPlaying || vm.videoEnded)
+        .allowsHitTesting(false)
     }
     #endif
 
