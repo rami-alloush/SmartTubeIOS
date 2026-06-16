@@ -68,9 +68,10 @@ public struct TOSPlayerView: View {
     @State private var showCommentsSheet = false
 
     #if os(iOS)
-    /// Controls (back button, speed, more) are visible initially and auto-hide
-    /// after `controlsHideDelay` seconds. A tap anywhere on the player toggles them.
-    @State private var controlsVisible = true
+    /// Controls (back button, speed, more) are hidden on initial load and auto-hide
+    /// after `controlsHideDelay` seconds when shown. A tap anywhere on the player
+    /// reveals them; they auto-hide again after the delay.
+    @State private var controlsVisible = false
     @State private var controlsHideTask: Task<Void, Never>? = nil
     private let controlsHideDelay: Double = 4
 
@@ -229,9 +230,6 @@ public struct TOSPlayerView: View {
         .onAppear {
             vm.updateSettings(store.settings)
             vm.startIfNeeded()
-            #if os(iOS)
-            showControls()
-            #endif
         }
         // Pause the embedded <video> element when this view leaves the hierarchy.
         //
