@@ -34,52 +34,67 @@ enum ShortsEmbedJS {
     })();
     """
 
-    /// Injected at `.atDocumentStart` into every frame. Hides all YouTube player
-    /// chrome — both static (`ytp-*` class names) and dynamically injected Shorts
-    /// UI (channel header, Shorts logo, pause bezel). Two-pronged approach:
+    /// Injected at `.atDocumentStart` into every frame. Three-layer defence against
+    /// YouTube's Shorts chrome (channel header, Shorts logo, share button, pause
+    /// bezel) — runs only in the cross-origin YouTube embed iframe, never in the
+    /// wrapper page (`window === window.top` guard prevents blacking out the entire
+    /// WKWebView).
     ///
-    /// 1. CSS rule `#movie_player > *:not(.html5-video-container)` structurally
-    ///    hides every direct child of the player div that is not the actual video
-    ///    container — works regardless of class-name changes on YouTube's side.
+    /// Layer 1 — CSS class names (`ytp-*`): fast path for static player elements.
+    /// Layer 2 — Full-viewport black overlay div: class-name-independent cover for
+    ///            any Shorts-specific chrome that CSS selectors miss.
+    /// Layer 3 — Video elevation: video element is pulled to z-index MAX so it
+    ///            renders above the overlay, making only the raw video visible.
     ///
-    /// 2. MutationObserver that scans for elements with "shorts" in their class or
-    ///    id and hides them inline — catches Shorts-specific nodes (channel card,
-    ///    Shorts logo, share button) that YouTube's JS injects after page load.
+    /// Both a MutationObserver and a 500 ms setInterval reapply layer 3 so
+    /// YouTube's JS can't reset the video's position/z-index after we set it.
     static let playerControlsHiderJS: String = """
     (function() {
-        try {
-            var css =
-                // Named ytp-* chrome (fast path, covers static elements)
-                '.ytp-chrome-top,.ytp-chrome-bottom,' +
-                '.ytp-gradient-top,.ytp-gradient-bottom,' +
-                '.ytp-watermark,.ytp-pause-overlay,.ytp-cued-thumbnail-overlay,' +
-                '.ytp-bezel-container,.ytp-bezel,.ytp-player-content,' +
-                '.ytp-endscreen-content,.ytp-ce-element,' +
-                '.ytp-cards-button,.ytp-cards-teaser,' +
-                // Structural: every direct child of #movie_player except the video layer
-                '#movie_player > *:not(.html5-video-container)' +
-                '{display:none!important}';
-            var s = document.createElement('style');
-            s.id = '__st_hider';
-            s.textContent = css;
-            (document.head || document.documentElement).appendChild(s);
+        // Do nothing in the wrapper page — only run inside the YouTube embed iframe.
+        if (window === window.top) return;
 
-            // MutationObserver: hide Shorts-specific nodes injected after load
-            // (channel header, Shorts logo, share button — not in ytp-* namespace).
-            function scan() {
-                try {
-                    var els = document.querySelectorAll('[class*="shorts"],[id*="shorts"]');
-                    for (var i = 0; i < els.length; i++) {
-                        var el = els[i];
-                        if (el.tagName !== 'VIDEO' && el.id !== 'movie_player') {
-                            el.style.setProperty('display', 'none', 'important');
-                        }
-                    }
-                } catch(e) {}
-            }
-            var obs = new MutationObserver(scan);
-            obs.observe(document.documentElement, {childList: true, subtree: true});
-        } catch(e) {}
+        function apply() {
+            try {
+                // Layer 1: CSS for named player chrome elements
+                if (!document.getElementById('__st_css')) {
+                    var s = document.createElement('style');
+                    s.id = '__st_css';
+                    s.textContent =
+                        '.ytp-chrome-top,.ytp-chrome-bottom,' +
+                        '.ytp-gradient-top,.ytp-gradient-bottom,' +
+                        '.ytp-watermark,.ytp-pause-overlay,.ytp-cued-thumbnail-overlay,' +
+                        '.ytp-bezel-container,.ytp-bezel,.ytp-player-content,' +
+                        '.ytp-endscreen-content,.ytp-ce-element,' +
+                        '.ytp-cards-button,.ytp-cards-teaser,' +
+                        '#movie_player > *:not(.html5-video-container)' +
+                        '{display:none!important}';
+                    (document.head || document.documentElement).appendChild(s);
+                }
+                // Layer 2: Black overlay that covers any chrome not caught above
+                if (!document.getElementById('__st_ov')) {
+                    var ov = document.createElement('div');
+                    ov.id = '__st_ov';
+                    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:2147483646;pointer-events:none;';
+                    document.documentElement.appendChild(ov);
+                }
+                // Layer 3: Elevate <video> above the overlay
+                var v = document.querySelector('video');
+                if (v) {
+                    v.style.setProperty('position', 'fixed', 'important');
+                    v.style.setProperty('top', '0', 'important');
+                    v.style.setProperty('left', '0', 'important');
+                    v.style.setProperty('width', '100%', 'important');
+                    v.style.setProperty('height', '100%', 'important');
+                    v.style.setProperty('z-index', '2147483647', 'important');
+                    v.style.setProperty('object-fit', 'cover', 'important');
+                    v.style.setProperty('background', '#000', 'important');
+                }
+            } catch(e) {}
+        }
+
+        apply();
+        new MutationObserver(apply).observe(document.documentElement, {childList: true, subtree: true});
+        setInterval(apply, 500);
     })();
     """
 
