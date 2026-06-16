@@ -147,6 +147,13 @@ final class TOSPlayerViewModel: NSObject {
     /// channel-exclusion check in `PlaybackViewModel+Loading`'s SponsorBlock phase.
     /// Read by `fetchSponsorSegments()` in TOSPlayerViewModel+SponsorBlock.swift.
     let channelId: String?
+    /// Playlist context passed from `Video.playlistId`/`playlistIndex`. Non-nil
+    /// when the video was opened from the CurrentQueue or a YouTube playlist.
+    let playlistId: String?
+    let playlistIndex: Int?
+    /// Video IDs already played in this session — filtered from suggestions so
+    /// the same videos don't cycle back on repeated swipes.
+    var seenVideoIds: Set<String> = []
     private let startTime: Double
     /// Guards against re-triggering a skip within the same segment.
     /// Mutated by `checkSponsorSkip(at:)` in TOSPlayerViewModel+SponsorBlock.swift.
@@ -207,10 +214,12 @@ final class TOSPlayerViewModel: NSObject {
 
     // MARK: - Init
 
-    init(videoId: String, title: String = "", channelId: String? = nil, startTime: Double = 0, api: InnerTubeAPI) {
+    init(videoId: String, title: String = "", channelId: String? = nil, playlistId: String? = nil, playlistIndex: Int? = nil, startTime: Double = 0, api: InnerTubeAPI) {
         self.videoId = videoId
         self.videoTitle = title
         self.channelId = channelId
+        self.playlistId = playlistId
+        self.playlistIndex = playlistIndex
         self.startTime = startTime
         self.api = api
         self.tracker = WatchtimeTracker(api: api)

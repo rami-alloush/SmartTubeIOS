@@ -63,6 +63,13 @@ public final class TOSPlayerStateStore {
     // wiring to re-play the prior video on swipe-right.
     private(set) var history: [Video] = []
 
+    // MARK: - Seen video IDs (loop prevention)
+    //
+    // Accumulates the ID of every video played in this session. Passed to each
+    // new TOSPlayerViewModel so its fetchRelatedVideos() can filter them out —
+    // prevents the same video from cycling back on repeated swipes.
+    private var seenVideoIds: Set<String> = []
+
     // MARK: - Imperative dismiss hook
 
     /// Set by LandscapePresenter's coordinator when the TOS full-screen player is
@@ -107,7 +114,9 @@ public final class TOSPlayerStateStore {
             fallbackVideoId = nil
         }
 
-        let newVM = TOSPlayerViewModel(videoId: video.id, title: video.title, channelId: video.channelId, startTime: 0, api: api)
+        seenVideoIds.insert(video.id)
+        let newVM = TOSPlayerViewModel(videoId: video.id, title: video.title, channelId: video.channelId, playlistId: video.playlistId, playlistIndex: video.playlistIndex, startTime: 0, api: api)
+        newVM.seenVideoIds = seenVideoIds
         newVM.setNavigationContext(hasPrevious: !history.isEmpty)
         // Wire swipe-navigation callbacks here (not in TOSPlayerView.onAppear) so
         // every vm created by a swipe-driven play() — not just the first — gets
@@ -188,6 +197,7 @@ public final class TOSPlayerStateStore {
         vm = nil
         currentVideo = nil
         presentation = .hidden
+        seenVideoIds = []
         let action = dismissPlayerAction
         dismissPlayerAction = nil
         tosStoreLog.notice("[TOSPlayerStateStore] stop — presentation set to .hidden, vm released, dismissPlayerAction=\(action != nil)")
