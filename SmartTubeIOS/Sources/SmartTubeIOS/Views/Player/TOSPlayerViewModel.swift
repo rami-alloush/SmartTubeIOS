@@ -142,6 +142,7 @@ final class TOSPlayerViewModel: NSObject {
     /// Used by `fetchSponsorSegments()`/`beginWatchtimeTracking()`/`saveProgress()`/
     /// `like()`/`dislike()` — all in extension files, hence `internal` not `private`.
     let videoId: String
+    let videoTitle: String
     /// Used to respect `settings.sponsorBlockExcludedChannels` — mirrors the
     /// channel-exclusion check in `PlaybackViewModel+Loading`'s SponsorBlock phase.
     /// Read by `fetchSponsorSegments()` in TOSPlayerViewModel+SponsorBlock.swift.
@@ -206,8 +207,9 @@ final class TOSPlayerViewModel: NSObject {
 
     // MARK: - Init
 
-    init(videoId: String, channelId: String? = nil, startTime: Double = 0, api: InnerTubeAPI) {
+    init(videoId: String, title: String = "", channelId: String? = nil, startTime: Double = 0, api: InnerTubeAPI) {
         self.videoId = videoId
+        self.videoTitle = title
         self.channelId = channelId
         self.startTime = startTime
         self.api = api

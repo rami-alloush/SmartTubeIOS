@@ -107,7 +107,7 @@ public final class TOSPlayerStateStore {
             fallbackVideoId = nil
         }
 
-        let newVM = TOSPlayerViewModel(videoId: video.id, channelId: video.channelId, startTime: 0, api: api)
+        let newVM = TOSPlayerViewModel(videoId: video.id, title: video.title, channelId: video.channelId, startTime: 0, api: api)
         newVM.setNavigationContext(hasPrevious: !history.isEmpty)
         // Wire swipe-navigation callbacks here (not in TOSPlayerView.onAppear) so
         // every vm created by a swipe-driven play() — not just the first — gets
@@ -127,6 +127,12 @@ public final class TOSPlayerStateStore {
         self.currentVideo = video
         self.presentation = .fullScreen
         tosStoreLog.notice("[TOSPlayerStateStore] play — presentation set to .fullScreen, vm created for \(video.id)")
+        // When swipe navigation creates a new vm while the fullscreen player is
+        // already on screen, TOSPlayerView's .onAppear does NOT re-fire (it fires
+        // only once per view lifetime). Call startIfNeeded() here so the new
+        // vm's embed loads immediately. The .onAppear guard (hasStartedLoading)
+        // makes this idempotent for the first-open case.
+        newVM.startIfNeeded()
     }
 
     /// Pops and returns the most recent video from the swipe-navigation history,
