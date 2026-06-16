@@ -150,6 +150,16 @@ struct ShortsEmbedPlayerViewModelTests {
         #expect(vm.controlsVisible == true)
     }
 
+    @Test("resume does not show controls — controls stay hidden on initial load")
+    func resumeDoesNotShowControls() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        vm.wasPlayingBeforeSuspend = true
+        #expect(vm.controlsVisible == false)
+        vm.resume()
+        #expect(vm.controlsVisible == false)
+        #expect(vm.wasPlayingBeforeSuspend == false)
+    }
+
     @Test("handleBackground pauses and sets wasPlayingBeforeSuspend; handleForeground resumes")
     func handleBackgroundAndForeground() {
         let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())

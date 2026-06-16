@@ -89,7 +89,6 @@ extension ShortsEmbedPlayerViewModel {
     func resume() {
         wasPlayingBeforeSuspend = false
         play()
-        showControls()
     }
 
     func stop() {
