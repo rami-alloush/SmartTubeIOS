@@ -221,9 +221,12 @@ extension InnerTubeAPI {
     /// Related videos appear as `compactVideoRenderer` in `secondaryResults`.
     private func parseRelatedVideos(from json: [String: Any]) -> [Video] {
         var videos: [Video] = []
+        var rendererKeysFound: Set<String> = []
         func walk(_ obj: Any, depth: Int = 0) {
             guard depth < 50 else { return }
             if let dict = obj as? [String: Any] {
+                // Collect any *Renderer keys for diagnostics
+                for k in dict.keys where k.hasSuffix("Renderer") { rendererKeysFound.insert(k) }
                 if let r = dict["compactVideoRenderer"] as? [String: Any],
                    let v = parseVideoRenderer(r) {
                     videos.append(v)
@@ -235,6 +238,7 @@ extension InnerTubeAPI {
             }
         }
         walk(json)
+        tubeLog.notice("[parseRelatedVideos] found=\(videos.count, privacy: .public) rendererKeys=\(rendererKeysFound.sorted().joined(separator: ","), privacy: .public)")
         return Array(videos.prefix(25))
     }
 
