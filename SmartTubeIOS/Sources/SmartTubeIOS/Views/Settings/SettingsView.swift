@@ -203,6 +203,8 @@ public struct SettingsView: View {
             .accessibilityIdentifier("settings.themeRow")
             Toggle("Hide Shorts", isOn: $store.settings.hideShorts)
                 .accessibilityIdentifier("settings.hideShortsToggle")
+            Toggle("Hide Live Shorts", isOn: $store.settings.hideLiveShorts)
+                .accessibilityIdentifier("settings.hideLiveShortsToggle")
             Toggle("Per-Device Recommendations", isOn: $store.settings.perDeviceRecommendationsEnabled)
                 .accessibilityIdentifier("settings.perDeviceRecommendationsToggle")
             Toggle("Compact Thumbnails", isOn: $store.settings.compactThumbnails)

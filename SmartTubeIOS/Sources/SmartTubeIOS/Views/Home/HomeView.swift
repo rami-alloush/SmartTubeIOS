@@ -345,6 +345,7 @@ public struct HomeView: View {
 
     private var feedContent: some View {
         let hideShorts = store.settings.hideShorts
+        let hideLiveShorts = store.settings.hideLiveShorts
         let isShorts = selectedSection.type == .shorts
         let applyHideShorts = hideShorts && selectedSection.type != .history
 
@@ -357,15 +358,17 @@ public struct HomeView: View {
         if isShorts || applyHideShorts {
             pinnedShorts = []
         } else if selectedSection.type == .recommended {
-            pinnedShorts = sectionVM.recommendedShortsVideos
+            pinnedShorts = sectionVM.recommendedShortsVideos.filter { !hideLiveShorts || !($0.isLive && $0.isShort) }
         } else {
-            pinnedShorts = sectionVM.videoGroups.flatMap(\.videos).filter(\.isShort)
+            pinnedShorts = sectionVM.videoGroups.flatMap(\.videos).filter(\.isShort).filter { !hideLiveShorts || !($0.isLive && $0.isShort) }
         }
 
         let rowGroups: [VideoGroup] = sectionVM.videoGroups.filter { $0.layout == .row }.map { g in
-            guard applyHideShorts else { return g }
             var copy = g
-            copy.videos = g.videos.filter { !$0.isShort }
+            var videos = g.videos
+            if applyHideShorts { videos = videos.filter { !$0.isShort } }
+            if hideLiveShorts { videos = videos.filter { !($0.isLive && $0.isShort) } }
+            copy.videos = videos
             return copy
         }
         // For non-Shorts chips, exclude shorts from the grid — they appear in the
@@ -377,6 +380,7 @@ public struct HomeView: View {
         let gridVideos = sectionVM.videoGroups.filter { $0.layout != .row }
             .flatMap(\.videos)
             .filter { !applyHideShorts || !$0.isShort }
+            .filter { !hideLiveShorts || !($0.isLive && $0.isShort) }
             .filter { isShorts || !$0.isShort }
 
         // The raw last video of the last group is the canonical pagination trigger for

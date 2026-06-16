@@ -154,9 +154,11 @@ public struct SearchView: View {
     // MARK: - Results
 
     private var resultsView: some View {
-        let displayResults = store.settings.hideShorts
-            ? vm.results.filter { !$0.isShort }
-            : vm.results
+        let hideShorts = store.settings.hideShorts
+        let hideLiveShorts = store.settings.hideLiveShorts
+        let displayResults = vm.results
+            .filter { !hideShorts || !$0.isShort }
+            .filter { !hideLiveShorts || !($0.isLive && $0.isShort) }
         return ScrollView {
             if vm.isLoading && vm.results.isEmpty {
                 ProgressView().frame(maxWidth: .infinity).padding()
