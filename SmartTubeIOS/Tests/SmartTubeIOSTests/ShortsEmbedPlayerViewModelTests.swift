@@ -199,5 +199,73 @@ struct ShortsEmbedPlayerViewModelTests {
         vm.togglePlayPause()
         #expect(vm.videoEnded == false)
     }
+
+    // MARK: - TOSPlayerError.isFatal (regression guard for Firebase issue 8c362d98 / task #270)
+    //
+    // ShortsPlayerView.onChange(of: vm.playerError) calls advanceAfterError() only when
+    // error.isFatal is true. These tests lock in which error codes auto-advance Shorts.
+
+    @Test("iframeError(153) is fatal — triggers Shorts auto-advance (non-embeddable video)")
+    func iframeError153IsFatal() {
+        #expect(TOSPlayerError.iframeError(153).isFatal == true)
+    }
+
+    @Test("webViewLoadFailed is fatal — ready-timeout path also auto-advances")
+    func webViewLoadFailedIsFatal() {
+        #expect(TOSPlayerError.webViewLoadFailed.isFatal == true)
+    }
+
+    @Test("embeddingDisabled is fatal")
+    func embeddingDisabledIsFatal() {
+        #expect(TOSPlayerError.embeddingDisabled.isFatal == true)
+    }
+
+    @Test("notFound is fatal")
+    func notFoundIsFatal() {
+        #expect(TOSPlayerError.notFound.isFatal == true)
+    }
+
+    @Test("iframeError with non-fatal codes does not auto-advance")
+    func iframeErrorNonFatalCodesAreNotFatal() {
+        #expect(TOSPlayerError.iframeError(2).isFatal == false)
+        #expect(TOSPlayerError.iframeError(5).isFatal == false)
+        #expect(TOSPlayerError.iframeError(999).isFatal == false)
+    }
+
+    // MARK: - Standby pre-warm (#271)
+
+    @Test("isStandby is false on fresh VM")
+    func standbyFalseOnInit() {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.isStandby == false)
+    }
+
+    @Test("loadShortAsStandby sets isStandby = true before awaiting isReady")
+    func standbyFlagSetByLoadShortAsStandby() async {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        #expect(vm.isStandby == false)
+        let video = Video(id: "dQw4w9WgXcQ", title: "Test", channelTitle: "Channel")
+        // loadShortAsStandby sets isStandby = true synchronously, then awaits isReady.
+        // Cancel the task quickly — we only need to verify the flag is set.
+        let task = Task { await vm.loadShortAsStandby(video: video) }
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+        await task.value
+        #expect(vm.isStandby == true)
+    }
+
+    @Test("activate clears isStandby and does not crash on fresh VM")
+    func activateClearsStandbyFlag() async {
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        let video = Video(id: "dQw4w9WgXcQ", title: "Test", channelTitle: "Channel")
+        // Put the VM into standby state by starting (then cancelling) loadShortAsStandby.
+        let task = Task { await vm.loadShortAsStandby(video: video) }
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+        await task.value
+        #expect(vm.isStandby == true)
+        vm.activate()
+        #expect(vm.isStandby == false)
+    }
 }
 #endif

@@ -21,6 +21,10 @@ public struct ShortsPlayerView: View {
     @State var videos: [Video]
     #if os(iOS)
     @State var vm: ShortsEmbedPlayerViewModel
+    /// Pre-warmed VM for Short N+1. Loaded in the background while Short N plays
+    /// so swipe-to-next has no black-screen delay. Swapped into `vm` by `goTo(_:)`
+    /// when the user swipes up and the standby is ready.
+    @State var standbyVM: ShortsEmbedPlayerViewModel? = nil
     #else
     @State var vm: PlaybackViewModel
     #endif

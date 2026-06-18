@@ -60,7 +60,18 @@ extension ShortsEmbedPlayerViewModel {
             }
             isReady = true
             duration = (json["duration"] as? Double) ?? 0
-            shortsLog.notice("[ytCallback] ready — duration=\(self.duration, format: .fixed(precision: 1))s")
+            shortsLog.notice("[ytCallback] ready — duration=\(self.duration, format: .fixed(precision: 1))s isStandby=\(self.isStandby, privacy: .public)")
+            if isStandby {
+                // Pause immediately so the background WKWebView produces no audio.
+                // The embed URL loads with mute=1, but calling pause() here prevents
+                // the JS auto-unmute (which fires at t > 0.1) from racing with Swift.
+                // Since ready fires after t > 0, the JS retry loop (t === 0 guard)
+                // won't restart playback after this pause.
+                pause()
+                // Skip Darwin notification — standby events must not trigger active-VM
+                // UI observers (ShortsPlayerView.onChange(of: vm.playerError) etc.).
+                break
+            }
             CFNotificationCenterPostNotification(
                 CFNotificationCenterGetDarwinNotifyCenter(),
                 CFNotificationName("com.void.smarttube.shortsplayer.ready" as CFString),
@@ -80,6 +91,12 @@ extension ShortsEmbedPlayerViewModel {
         case "stateChange":
             let raw = (json["state"] as? Int) ?? 999
             playerState = YTPlayerState(raw: raw)
+            // Standby VMs suppress notifications and controls manipulation — the
+            // active VM's observers must not fire for background WKWebView events.
+            if isStandby {
+                shortsLog.debug("[ytCallback] stateChange (standby) → \(raw)")
+                break
+            }
             if playerState == .paused {
                 showEmbedControls()
                 showControls()
@@ -114,6 +131,9 @@ extension ShortsEmbedPlayerViewModel {
             let t = (json["t"] as? Double) ?? 0
             let s = (json["state"] as? Int) ?? 999
             currentTime = t
+            // Standby VMs suppress tick processing — skip notifications and
+            // SponsorBlock checks for the background WKWebView.
+            if isStandby { break }
             let newState = YTPlayerState(raw: s)
             if !hasReceivedFirstTick {
                 hasReceivedFirstTick = true

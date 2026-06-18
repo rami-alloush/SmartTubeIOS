@@ -35,6 +35,11 @@ final class ShortsEmbedPlayerViewModel: NSObject {
     /// Non-nil when the player encounters an error that requires falling back
     /// (e.g. auto-advancing to the next Short — see Task 9).
     var playerError: TOSPlayerError? = nil
+    /// True while this VM is loading a Short in the background for pre-warming.
+    /// Suppresses Darwin notifications and auto-unmute so the standby WKWebView
+    /// doesn't produce audible output or confuse active-VM observers.
+    /// Cleared by `activate()` when the standby is promoted to the active slot.
+    private(set) var isStandby: Bool = false
 
     // MARK: - View State
     //
@@ -242,6 +247,27 @@ final class ShortsEmbedPlayerViewModel: NSObject {
         }
 
         startReadyTimeout(for: video.id)
+    }
+
+    /// Loads `video` into this VM's WKWebView in standby (pre-warm) mode.
+    /// The video initialises and reaches the "ready" state, but is immediately
+    /// paused and never unmuted — no audible output occurs.
+    /// Awaits `isReady` or a terminal `playerError` before returning, so the
+    /// caller can check `isReady` synchronously after the call.
+    func loadShortAsStandby(video: Video) async {
+        isStandby = true
+        loadShort(video: video)
+        while !isReady && playerError == nil {
+            if Task.isCancelled { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// Promotes this VM from standby to active: clears the standby flag and
+    /// begins playback. Call after swapping this VM into the active `vm` slot.
+    func activate() {
+        isStandby = false
+        play()
     }
 
     /// First-ever load for this session — loads the HTML wrapper page via

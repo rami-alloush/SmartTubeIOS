@@ -43,20 +43,51 @@ extension ShortsPlayerView {
         }
         // Pre-fetch the next 2 shorts so swiping is instant.
         let lookahead = videos[(index + 1)..<min(index + 3, videos.count)].map(\.id)
-        guard !lookahead.isEmpty else { return }
-        let token = authService.accessToken
-        let cats = store.settings.activeSponsorCategories
-        Task(priority: .background) {
-            for videoId in lookahead {
-                await VideoPreloadCache.shared.prefetch(
-                    videoId: videoId,
-                    sponsorCategories: cats,
-                    authToken: token,
-                    priority: .speculative
-                )
+        if !lookahead.isEmpty {
+            let token = authService.accessToken
+            let cats = store.settings.activeSponsorCategories
+            Task(priority: .background) {
+                for videoId in lookahead {
+                    await VideoPreloadCache.shared.prefetch(
+                        videoId: videoId,
+                        sponsorCategories: cats,
+                        authToken: token,
+                        priority: .speculative
+                    )
+                }
+            }
+        }
+        #if os(iOS)
+        // Pre-warm next Short's WKWebView so swipe-to-next has no black-screen delay.
+        prewarmStandby(for: index)
+        #endif
+    }
+
+    #if os(iOS)
+    /// Loads Short at `currentIndex + 1` into a background `ShortsEmbedPlayerViewModel`
+    /// so it reaches `isReady == true` before the user swipes. `goTo(_:)` checks the
+    /// standby and swaps it in immediately if ready — see Task #272.
+    private func prewarmStandby(for index: Int) {
+        let nextIndex = index + 1
+        guard nextIndex < videos.count else {
+            standbyVM = nil   // end of feed — no next Short to pre-warm
+            return
+        }
+        let nextVideo = videos[nextIndex]
+        let standby = ShortsEmbedPlayerViewModel(api: api)
+        standby.updateSettings(store.settings)
+        Task(priority: .userInitiated) {
+            await standby.loadShortAsStandby(video: nextVideo)
+            // Only keep standby if the user hasn't already moved past this video.
+            if currentIndex == index {
+                standbyVM = standby
+                shortsLog.notice("[prewarm] standby ready — nextVideo=\(nextVideo.id, privacy: .public) isReady=\(standby.isReady, privacy: .public)")
+            } else {
+                shortsLog.notice("[prewarm] standby discarded — user swiped before pre-warm finished")
             }
         }
     }
+    #endif
 
     /// Fetches an additional batch of Shorts and appends them, deduplicating by id.
     func loadMoreIfNeeded() {
