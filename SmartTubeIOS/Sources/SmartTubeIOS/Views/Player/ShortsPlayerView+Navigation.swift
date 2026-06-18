@@ -1,8 +1,11 @@
 import SwiftUI
 import SmartTubeIOSCore
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
+
+private let shortsLog = Logger(subsystem: "com.void.smarttube.app", category: "ShortsPlayer")
 
 extension ShortsPlayerView {
 
