@@ -402,6 +402,14 @@ final class TOSPlayerViewModel: NSObject {
         eval("setPlaybackRate(\(rate))", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.playbackRate=\(rate);}return {found: !!v, iframes: ifr, playbackRate: v ? v.playbackRate : null};})();")
     }
 
+    func showEmbedControls() {
+        eval("embedControls(on)", "(function(){var v=document.querySelector('video');if(v)v.controls=true;})();")
+    }
+
+    func hideEmbedControls() {
+        eval("embedControls(off)", "(function(){var v=document.querySelector('video');if(v)v.controls=false;})();")
+    }
+
     // MARK: - Private helpers
 
     // FRAME-TARGETED EVAL (the fix for the cross-origin-iframe defect described on
@@ -420,7 +428,7 @@ final class TOSPlayerViewModel: NSObject {
     // see the device-log comparison in the "before"/"after" sections of this
     // session's investigation. Logged at .notice (not .debug) so it survives
     // xcresulttool diagnostic export.
-    private func eval(_ label: String, _ js: String) {
+    func eval(_ label: String, _ js: String) {
         webView.evaluateJavaScript(js, in: embedFrameInfo, in: .page) { result in
             switch result {
             case .success(let value):
@@ -450,7 +458,7 @@ final class TOSPlayerViewModel: NSObject {
         comps.queryItems = [
             URLQueryItem(name: "autoplay",       value: "1"),
             URLQueryItem(name: "mute",           value: "1"),
-            URLQueryItem(name: "controls",       value: "1"),
+            URLQueryItem(name: "controls",       value: settings.tosPlayerControlsMode == .minimal ? "0" : "1"),
             URLQueryItem(name: "playsinline",    value: "1"),
             URLQueryItem(name: "rel",            value: "0"),
             URLQueryItem(name: "iv_load_policy", value: "3"),

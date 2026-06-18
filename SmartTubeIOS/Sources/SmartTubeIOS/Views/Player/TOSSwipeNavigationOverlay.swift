@@ -23,8 +23,9 @@ private let swipeLog = Logger(subsystem: "com.void.smarttube.app", category: "TO
 struct TOSSwipeNavigationOverlay: UIViewRepresentable {
     var onSwipeLeft: () -> Void
     var onSwipeRight: () -> Void
-    /// Called on any tap anywhere on the player — used to toggle the controls overlay.
-    var onTap: (() -> Void)? = nil
+    /// Called on any tap anywhere on the player. Receives window coordinates so
+    /// the caller can distinguish tap zones (e.g. native controls area at bottom).
+    var onTap: ((CGPoint) -> Void)? = nil
     var isEnabled: Bool = true
     /// Touches below this fraction of the screen height are ignored, leaving
     /// YouTube's bottom scrubber/control-bar free to handle horizontal drags.
@@ -85,7 +86,7 @@ struct TOSSwipeNavigationOverlay: UIViewRepresentable {
         }
 
         @MainActor @objc func handleTap(_ gr: UITapGestureRecognizer) {
-            parent.onTap?()
+            parent.onTap?(gr.location(in: nil))
         }
 
         @MainActor @objc func handlePan(_ gr: UIPanGestureRecognizer) {
