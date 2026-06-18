@@ -98,17 +98,15 @@ extension ShortsEmbedPlayerViewModel {
                 break
             }
             if playerState == .paused {
-                showEmbedControls()
                 showControls()
                 cancelControlsHide()
-                shortsLog.notice("[ytCallback] stateChange → paused — showEmbedControls + showControls called")
+                shortsLog.notice("[ytCallback] stateChange → paused")
                 CFNotificationCenterPostNotification(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     CFNotificationName("com.void.smarttube.shortsplayer.paused" as CFString),
                     nil, nil, true
                 )
             } else {
-                hideEmbedControls()
                 shortsLog.notice("[ytCallback] stateChange → \(raw)")
             }
             if playerState == .playing {
