@@ -102,16 +102,26 @@ extension ShortsPlayerView {
             return
         }
         let nextVideo = videos[nextIndex]
-        let standby = ShortsEmbedPlayerViewModel(api: api)
-        standby.updateSettings(store.settings)
-        // Attach to the view hierarchy immediately (ShortsPlayerView hosts standbyVM
-        // in a hidden ShortsTOSWebView) — an unattached WKWebView never progresses
-        // past readyState 0 (WebKit throttles media loading the same way it does for
-        // a backgrounded tab), so the embed must be mounted BEFORE
-        // loadShortAsStandby starts polling for isReady, not after. See #274.
-        standbyVM = standby
-        shortsLog.notice("[prewarm] starting — \(standby.logTag, privacy: .public) nextVideo=\(nextVideo.id, privacy: .public) forIndex=\(index, privacy: .public)")
-        Task(priority: .userInitiated) {
+        // Defer construction to the next run loop turn. `ShortsEmbedPlayerViewModel
+        // .init()` synchronously builds a full WKWebView (config, content
+        // controller, 3 injected user scripts) — expensive enough on a physical
+        // device to measurably delay the JUST-promoted video's own resume (its
+        // webview reparenting + restarted JS poll loop), since `prewarmStandby`
+        // used to run inline in the same `goTo()` call stack as `vm.activate()`.
+        // Device-log confirmed: ~1.46s between "[goTo] standby swap" and the
+        // promoted video's first post-promotion tick — far more than the JS poll
+        // loop's 250ms interval alone would explain. See #276.
+        Task { @MainActor in
+            let standby = ShortsEmbedPlayerViewModel(api: api)
+            standby.updateSettings(store.settings)
+            // Attach to the view hierarchy immediately (ShortsPlayerView hosts
+            // standbyVM in a hidden ShortsTOSWebView) — an unattached WKWebView
+            // never progresses past readyState 0 (WebKit throttles media loading
+            // the same way it does for a backgrounded tab), so the embed must be
+            // mounted BEFORE loadShortAsStandby starts polling for isReady, not
+            // after. See #274.
+            standbyVM = standby
+            shortsLog.notice("[prewarm] starting — \(standby.logTag, privacy: .public) nextVideo=\(nextVideo.id, privacy: .public) forIndex=\(index, privacy: .public)")
             await standby.loadShortAsStandby(video: nextVideo)
             if currentIndex == index {
                 shortsLog.notice("[prewarm] standby ready — \(standby.logTag, privacy: .public) nextVideo=\(nextVideo.id, privacy: .public) isReady=\(standby.isReady, privacy: .public)")
