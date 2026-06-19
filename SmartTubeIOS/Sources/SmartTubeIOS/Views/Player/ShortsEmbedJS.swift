@@ -158,9 +158,36 @@ enum ShortsEmbedJS {
         });
         _observer.observe(document.documentElement, {childList: true, subtree: true});
 
+        var _pollCount = 0;
         function pollVideo() {
             var video = document.querySelector('video');
             if (!video) return;
+            _pollCount++;
+
+            // DIAG: every 2s, report the raw <video> element state the browser
+            // itself exposes — networkState/error/buffered ranges — the only way
+            // to see WHY playback never starts beyond our own state classification.
+            // Added while chasing #275 (currentTime stuck at 0 with no Swift-side
+            // explanation; this asks the browser directly).
+            if (_pollCount % 8 === 0) {
+                try {
+                    var ranges = [];
+                    for (var i = 0; i < video.buffered.length; i++) {
+                        ranges.push([video.buffered.start(i), video.buffered.end(i)]);
+                    }
+                    postMsg({
+                        type: 'diag',
+                        networkState: video.networkState,
+                        readyState: video.readyState,
+                        errorCode: video.error ? video.error.code : -1,
+                        errorMsg: video.error ? (video.error.message || '') : '',
+                        buffered: ranges,
+                        paused: video.paused,
+                        muted: video.muted,
+                        src: video.currentSrc || ''
+                    });
+                } catch (e) {}
+            }
 
             var s;
             if (video.ended) {

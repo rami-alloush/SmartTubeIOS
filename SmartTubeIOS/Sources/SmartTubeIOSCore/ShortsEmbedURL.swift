@@ -29,6 +29,19 @@ public enum ShortsEmbedURL {
         return comps.url!
     }
 
+    /// Extracts the `videoId` back out of `embedURL(videoId:)`'s output, e.g.
+    /// `https://www.youtube.com/embed/abc123?autoplay=1...` → `"abc123"`. Used to
+    /// detect stale "ready" messages from an abandoned `loadShort(video:)` call
+    /// (see `ShortsEmbedPlayerViewModel+WebBridge.swift`'s "ready" case, #275) —
+    /// the embed URL is the only signal available that ties a JS bridge message
+    /// back to the specific video it was loading.
+    public static func videoId(fromEmbedURL url: URL) -> String? {
+        let path = url.path
+        guard let range = path.range(of: "/embed/") else { return nil }
+        let id = path[range.upperBound...]
+        return id.isEmpty ? nil : String(id)
+    }
+
     /// Wraps an embed URL in the `<iframe id="yt">` HTML page used by
     /// `ShortsEmbedPlayerViewModel.start()`/`loadShort(video:)`.
     public static func htmlWrapper(embedURL: URL) -> String {

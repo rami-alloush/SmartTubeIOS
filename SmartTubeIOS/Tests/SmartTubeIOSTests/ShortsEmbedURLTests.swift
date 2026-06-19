@@ -48,4 +48,16 @@ struct ShortsEmbedURLTests {
         #expect(html.contains("id=\"yt\""))
         #expect(html.contains(url.absoluteString))
     }
+
+    @Test("videoId(fromEmbedURL:) round-trips embedURL's videoId")
+    func videoIdRoundTripsEmbedURL() {
+        let url = ShortsEmbedURL.embedURL(videoId: "abc123XYZ_-")
+        #expect(ShortsEmbedURL.videoId(fromEmbedURL: url) == "abc123XYZ_-")
+    }
+
+    @Test("videoId(fromEmbedURL:) returns nil for a non-embed URL")
+    func videoIdReturnsNilForUnrelatedURL() {
+        let url = URL(string: "https://www.youtube.com/watch?v=abc123")!
+        #expect(ShortsEmbedURL.videoId(fromEmbedURL: url) == nil)
+    }
 }

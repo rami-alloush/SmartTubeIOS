@@ -44,6 +44,24 @@ extension ShortsEmbedPlayerViewModel {
             )
 
         case "ready":
+            // STALE-LOAD GUARD: if loadShort(video:) was called again before this
+            // frame's "ready" arrived (e.g. two swipes/auto-advances within the
+            // same ~100-200ms JS round-trip window — confirmed happening via the
+            // per-VM/videoId log tags added in #275), this message belongs to an
+            // ABANDONED load, not the currently-intended video. Accepting it would
+            // poison `embedFrameInfo` with a detached frame — every later eval()
+            // (play/pause/setPlaybackRate) would then silently target dead content,
+            // which is exactly the "JS bridge says ready but nothing ever plays"
+            // symptom #275 was chasing. Detect by comparing the frame's own embed
+            // URL (which encodes its videoId) against `self.videoId` (the video
+            // loadShort(_:) most recently set) — they only match for the load this
+            // VM is actually waiting on.
+            let frameVideoId = frameInfo.request.url.flatMap(ShortsEmbedURL.videoId(fromEmbedURL:))
+            if let frameVideoId, frameVideoId != videoId {
+                shortsLog.notice("[\(self.logTag, privacy: .public)] [ytCallback] ready DISCARDED — stale load for videoId=\(frameVideoId, privacy: .public), current videoId=\(self.videoId, privacy: .public)")
+                break
+            }
+
             // Cancel the "ready" timeout started by loadShort() — see
             // startReadyTimeout(for:) (ShortsEmbedPlayerViewModel.swift).
             readyTimeoutTask?.cancel()
@@ -116,6 +134,22 @@ extension ShortsEmbedPlayerViewModel {
                     nil, nil, true
                 )
             }
+
+        case "diag":
+            // Raw <video> element diagnostics straight from the browser, fired
+            // every ~2s by stateDetectionJS's pollVideo — see #275. networkState:
+            // 0=EMPTY 1=IDLE 2=LOADING 3=NO_SOURCE. readyState: 0=NOTHING
+            // 1=METADATA 2=CURRENT_DATA 3=FUTURE_DATA 4=ENOUGH_DATA.
+            let networkState = (json["networkState"] as? Int) ?? -1
+            let readyState = (json["readyState"] as? Int) ?? -1
+            let errorCode = (json["errorCode"] as? Int) ?? -1
+            let errorMsg = (json["errorMsg"] as? String) ?? ""
+            let paused = (json["paused"] as? Bool) ?? false
+            let muted = (json["muted"] as? Bool) ?? false
+            let src = (json["src"] as? String) ?? ""
+            let ranges = (json["buffered"] as? [[Double]]) ?? []
+            let rangesDesc = ranges.map { "\($0.first ?? 0)-\($0.last ?? 0)" }.joined(separator: ",")
+            shortsLog.notice("[\(self.logTag, privacy: .public)] [diag] videoId=\(self.videoId, privacy: .public) networkState=\(networkState, privacy: .public) readyState=\(readyState, privacy: .public) paused=\(paused, privacy: .public) muted=\(muted, privacy: .public) buffered=[\(rangesDesc, privacy: .public)] errorCode=\(errorCode, privacy: .public) errorMsg='\(errorMsg, privacy: .public)' src=\(src, privacy: .public)")
 
         case "autoUnmuted":
             // One-shot trace from stateDetectionJS's pollVideo: confirms the
