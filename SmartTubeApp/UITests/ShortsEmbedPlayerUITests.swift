@@ -88,7 +88,15 @@ final class ShortsEmbedPlayerUITests: XCTestCase {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
         let end   = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
         start.press(forDuration: 0.05, thenDragTo: end)
-        Thread.sleep(forTimeInterval: 0.6)
+        Thread.sleep(forTimeInterval: 1.2)
+    }
+
+    /// Swipes down in the Shorts player to go back to the previous Short.
+    private func swipePlayerDown() {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let end   = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        Thread.sleep(forTimeInterval: 1.2)
     }
 
     /// Parses the current index from a label like "3 / 12", returning 3.
@@ -188,6 +196,102 @@ final class ShortsEmbedPlayerUITests: XCTestCase {
 
             lastLabel = indexLabel.label
         }
+    }
+
+    /// Waits up to `waitSec` for the index label to drop below `before` (the
+    /// backward counterpart of `waitForIndexAdvance`).
+    private func waitForIndexRetreat(below before: Int, waitSec: TimeInterval = 5) -> Int {
+        let deadline = Date(timeIntervalSinceNow: waitSec)
+        while Date() < deadline {
+            if let cur = currentIndex(from: indexLabel.label), cur < before { return cur }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        return currentIndex(from: indexLabel.label) ?? before
+    }
+
+    /// Swipes forward twice then back once, verifying the backward swap also
+    /// produces a fresh "ready"/"tick"/"playing" cycle. #277 found that swiping
+    /// down (backward) always cold-reloaded — no pre-warm cache existed for it —
+    /// so swiping back faster than a reload could finish produced a run of black
+    /// screens on a physical device. `previousVM` now caches the just-retired
+    /// Short so backward swipes can also be instant; this test exercises that
+    /// path specifically.
+    ///
+    /// Two forward swipes, not one: `onAppear` loads the very first Short via
+    /// `loadVideo(at:)` directly, not `goTo(_:)`, so `prewarmStandby` never runs
+    /// for it — the first swipe always cold-reloads and therefore never
+    /// populates `previousVM` (only the hot-path branch does). The SECOND
+    /// forward swipe is the one whose retirement gets cached, so the backward
+    /// swipe needs to target the short after that one to actually exercise
+    /// `previousVM`.
+    ///
+    /// Retries each swipe once if the index doesn't move as expected — synthetic
+    /// drag gestures fired back-to-back are occasionally flaky about which
+    /// direction registers; a retry filters that noise without masking a real
+    /// regression (which would fail on the retry too).
+    func testSwipingBackwardAlsoRefiresJSBridge() throws {
+        let ready0 = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.shortsplayer.ready")
+        let tick0  = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.shortsplayer.tickstarted")
+
+        let opening = try openFirstShort()
+        print("[shorts-embed-back] opened player at '\(opening)'")
+
+        let total = totalCount(from: opening)
+        guard let total, total >= 3 else {
+            throw XCTSkip("only \(total.map(String.init) ?? "?") Shorts available — need at least 3")
+        }
+        guard XCTWaiter().wait(for: [ready0], timeout: 30) == .completed else {
+            throw XCTSkip("ready notification never fired for short 0 — embed failed to load (network/YouTube availability)")
+        }
+        XCTAssertEqual(XCTWaiter().wait(for: [tick0], timeout: 10), .completed, "tick notification never fired for short 0")
+
+        // First forward swipe: always a cold reload (see doc comment above).
+        var before = currentIndex(from: opening) ?? 0
+        swipePlayerUp()
+        var after = waitForIndexAdvance(past: before)
+        if after <= before {
+            swipePlayerUp()
+            after = waitForIndexAdvance(past: before)
+        }
+        XCTAssertGreaterThan(after, before, "first forward swipe should advance the index")
+
+        // Give prewarmStandby(for: after) a real chance to finish before the second
+        // swipe, so THIS one actually uses the hot path and populates previousVM.
+        Thread.sleep(forTimeInterval: 2.0)
+
+        before = after
+        swipePlayerUp()
+        after = waitForIndexAdvance(past: before)
+        if after <= before {
+            swipePlayerUp()
+            after = waitForIndexAdvance(past: before)
+        }
+        XCTAssertGreaterThan(after, before, "second forward swipe should advance the index")
+        print("[shorts-embed-back] forward swipes landed at index \(after)")
+
+        Thread.sleep(forTimeInterval: 1.0)
+
+        // Now swipe back — should re-fire ready/tick/playing for the cached previous Short.
+        let readyBack   = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.shortsplayer.ready")
+        let tickBack    = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.shortsplayer.tickstarted")
+        let playingBack = XCTDarwinNotificationExpectation(notificationName: "com.void.smarttube.shortsplayer.playing")
+
+        swipePlayerDown()
+        var afterBack = waitForIndexRetreat(below: after)
+        if afterBack >= after {
+            swipePlayerDown()
+            afterBack = waitForIndexRetreat(below: after)
+        }
+        XCTAssertLessThan(afterBack, after, "backward swipe should decrease the index")
+
+        XCTAssertEqual(XCTWaiter().wait(for: [readyBack], timeout: 15), .completed, "ready notification never fired after backward swipe")
+        XCTAssertEqual(XCTWaiter().wait(for: [tickBack], timeout: 10), .completed, "tick notification never fired after backward swipe")
+        XCTAssertEqual(XCTWaiter().wait(for: [playingBack], timeout: 10), .completed, "playing notification never fired after backward swipe")
+        // No assertNoShortsErrorBanner here deliberately: ready/tick/playing firing
+        // already confirms the backward swap itself worked. A later, unrelated
+        // playback error on live YouTube content (same risk the other test in this
+        // file documents as LEGITIMATE) shouldn't fail a test about navigation.
+        print("[shorts-embed-back] ✓ backward swipe to index \(afterBack) — ready/tick/playing all fired")
     }
 }
 #endif // os(iOS)

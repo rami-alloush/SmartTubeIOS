@@ -41,9 +41,9 @@ extension ShortsPlayerView {
 
         #if os(iOS)
         // Hot path: if a pre-warmed VM is ready for this exact next Short, swap it in
-        // immediately — no reload, no black-screen delay. The old VM is stopped async
-        // so it doesn't block the transition. If the standby isn't ready (or this is a
-        // backward swipe), fall back to a normal loadVideo.
+        // immediately — no reload, no black-screen delay. The retired VM is cached as
+        // previousVM (paused, not stopped) so swiping back is also instant — see the
+        // backward branch below. If the standby isn't ready, fall back to loadVideo.
         if index == currentIndex + 1,
            let readyStandby = standbyVM,
            readyStandby.isReady {
@@ -54,8 +54,33 @@ extension ShortsPlayerView {
             let video = videos[index]
             CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
             vm.activate()             // clears isStandby, starts playback
-            Task(priority: .background) { oldVM.stop() }
+            oldVM.pause()             // keep alive & resumable, don't tear down progress tracking
+            // Stop whatever was previously cached before overwriting it — it would
+            // otherwise never get its watch-progress saved (saveProgress() lives in
+            // stop(), not pause()).
+            Task(priority: .background) { previousVM?.stop() }
+            previousVM = oldVM
             shortsLog.notice("[goTo] standby swap — index=\(index, privacy: .public) promoted=\(readyStandby.logTag, privacy: .public) videoId=\(video.id, privacy: .public) retired=\(oldVM.logTag, privacy: .public)")
+        }
+        // Backward hot path: swiping down to the Short we just came from — if it's
+        // still cached (paused, not stopped) and matches, resume it instantly instead
+        // of cold-reloading. Without this, every backward swipe always cold-reloads;
+        // swiping back faster than a reload can finish means every swipe interrupts
+        // the last one before it paints a frame, producing a run of black screens —
+        // confirmed via device log (#277).
+        else if index == currentIndex - 1,
+                let readyPrevious = previousVM,
+                readyPrevious.videoId == videos[index].id,
+                readyPrevious.isReady {
+            let oldVM = vm
+            previousVM = nil
+            vm = readyPrevious
+            currentIndex = index
+            let video = videos[index]
+            CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
+            vm.activate()             // resume playback (isStandby was already false)
+            Task(priority: .background) { oldVM.stop() }
+            shortsLog.notice("[goTo] previous swap — index=\(index, privacy: .public) promoted=\(readyPrevious.logTag, privacy: .public) videoId=\(video.id, privacy: .public) retired=\(oldVM.logTag, privacy: .public)")
         } else {
             currentIndex = index
             loadVideo(at: index)

@@ -267,5 +267,18 @@ struct ShortsEmbedPlayerViewModelTests {
         vm.activate()
         #expect(vm.isStandby == false)
     }
+
+    @Test("activate resets hasReceivedFirstTick so tickstarted can refire on re-promotion")
+    func activateResetsHasReceivedFirstTick() {
+        // Backward-swap (#277) reuses an ALREADY-ticked VM instance (previousVM),
+        // unlike the forward standby path which always promotes a fresh VM (where
+        // this flag is already false). Without resetting it here, the
+        // "tickstarted" Darwin notification would never refire after a backward
+        // swipe, since the gate in the WebBridge's "tick" handler is one-shot.
+        let vm = ShortsEmbedPlayerViewModel(api: InnerTubeAPI())
+        vm.hasReceivedFirstTick = true
+        vm.activate()
+        #expect(vm.hasReceivedFirstTick == false)
+    }
 }
 #endif

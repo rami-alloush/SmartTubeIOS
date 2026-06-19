@@ -25,6 +25,13 @@ public struct ShortsPlayerView: View {
     /// so swipe-to-next has no black-screen delay. Swapped into `vm` by `goTo(_:)`
     /// when the user swipes up and the standby is ready.
     @State var standbyVM: ShortsEmbedPlayerViewModel? = nil
+    /// The just-retired Short N-1, kept alive (paused, not stopped) instead of
+    /// torn down on every forward swipe — so swipe-DOWN (backward) is also
+    /// instant, mirroring `standbyVM`'s forward case. Without this, backward
+    /// navigation always cold-reloads; if the user swipes back faster than a
+    /// cold reload can finish, every swipe interrupts the last one before it
+    /// ever paints a frame, producing a run of black screens. See #277.
+    @State var previousVM: ShortsEmbedPlayerViewModel? = nil
     #else
     @State var vm: PlaybackViewModel
     #endif
@@ -78,6 +85,16 @@ public struct ShortsPlayerView: View {
                     // would hang forever waiting for "ready" without this. See #274.
                     if let standby = standbyVM {
                         ShortsTOSWebView(vm: standby)
+                            .frame(width: geo.size.width, height: videoH)
+                            .opacity(0.001)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                    // Host the retired-but-cached Short N-1's WKWebView the same
+                    // way — same "must be in the real hierarchy to stay alive"
+                    // constraint as standbyVM. See #277.
+                    if let previous = previousVM {
+                        ShortsTOSWebView(vm: previous)
                             .frame(width: geo.size.width, height: videoH)
                             .opacity(0.001)
                             .allowsHitTesting(false)
@@ -285,6 +302,9 @@ public struct ShortsPlayerView: View {
         .onDisappear {
             guard !isInBackground else { return }
             vm.stop()
+            #if os(iOS)
+            previousVM?.stop()
+            #endif
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

@@ -278,17 +278,28 @@ final class ShortsEmbedPlayerViewModel: NSObject {
         }
     }
 
-    /// Promotes this VM from standby to active: clears the standby flag and
-    /// begins playback. Call after swapping this VM into the active `vm` slot.
+    /// Promotes this VM to active: clears the standby flag and begins playback.
+    /// Call after swapping this VM into the active `vm` slot — either a fresh
+    /// forward standby (#272) or a cached `previousVM` being resumed after a
+    /// backward swipe (#277).
     ///
     /// The "ready" Darwin notification is posted here rather than relying on a
-    /// fresh JS message — "ready" only fires once per page load, and it already
-    /// fired (suppressed) back when this VM was still in standby mode, so no
-    /// second one is coming. "tickstarted"/"playing" aren't re-posted here: the
-    /// next 250ms poll naturally re-fires them once `isStandby` is false, since
-    /// `hasReceivedFirstTick` was never set and `playerState` is still `.paused`.
+    /// fresh JS message — "ready" only fires once per page load, and for a
+    /// forward standby it already fired (suppressed) while in standby mode, so
+    /// no second one is coming.
+    ///
+    /// `hasReceivedFirstTick` is reset here unconditionally. It's a one-shot
+    /// gate ("has this VM ever ticked") that a fresh forward standby naturally
+    /// starts at `false` — but `previousVM` is the SAME instance that was
+    /// already active before being retired, so its first tick already fired
+    /// and the flag is permanently `true` without this reset. Left unreset, the
+    /// "tickstarted" Darwin notification (and downstream UI relying on it)
+    /// would never refire on a backward swipe — confirmed via
+    /// `ShortsEmbedPlayerUITests.testSwipingBackwardAlsoRefiresJSBridge`. The
+    /// reset is a harmless no-op for the forward case, where it's already false.
     func activate() {
         isStandby = false
+        hasReceivedFirstTick = false
         play()
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
