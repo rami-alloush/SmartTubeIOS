@@ -222,5 +222,39 @@ final class ShortsVisualPlaybackUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 1.0)
         }
     }
+
+    /// Taps the first Shorts card from Home, verifies it actually renders visible
+    /// content (not just "ready"/"tick" notifications — see #275's lesson), then
+    /// swipes to the next Short and re-verifies, 3 times. Each swipe + check is its
+    /// own independent measurement — failures are reported per-swipe so a single
+    /// black short doesn't get masked by the others succeeding.
+    func testHomeFirstShortPlaysAcrossThreeSwipes() throws {
+        let opening = try openFirstShort()
+        print("[shorts-home-swipe] opened player at '\(opening)'")
+
+        var results: [(swipe: Int, brightness: CGFloat)] = []
+
+        XCTAssertTrue(waitForLoadingCoverToClear(), "shorts.loadingCover never cleared for short 0 — vm.isReady stuck false")
+        Thread.sleep(forTimeInterval: 1.0)
+        let b0 = captureAndMeasureBrightness(name: "home-short-0")
+        results.append((0, b0))
+        print("[shorts-home-swipe] short 0 — center brightness=\(b0)")
+
+        for swipeNum in 1...3 {
+            swipePlayerUp()
+            let coverCleared = waitForLoadingCoverToClear()
+            Thread.sleep(forTimeInterval: 1.0)
+            let b = captureAndMeasureBrightness(name: "home-short-\(swipeNum)")
+            results.append((swipeNum, b))
+            print("[shorts-home-swipe] swipe \(swipeNum) — loadingCoverCleared=\(coverCleared) center brightness=\(b)")
+        }
+
+        for (swipeNum, brightness) in results {
+            XCTAssertGreaterThan(
+                brightness, 8,
+                "after swipe \(swipeNum) — center of screen is solid black (brightness=\(brightness)); Short is not rendering visible content"
+            )
+        }
+    }
 }
 #endif // os(iOS)
