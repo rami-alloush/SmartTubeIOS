@@ -40,51 +40,27 @@ extension ShortsPlayerView {
         guard index >= 0, index < videos.count else { return }
 
         #if os(iOS)
-        // Hot path: if a pre-warmed VM is ready for this exact next Short, swap it in
-        // immediately — no reload, no black-screen delay. The retired VM is cached as
-        // previousVM (paused, not stopped) so swiping back is also instant — see the
-        // backward branch below. If the standby isn't ready, fall back to loadVideo.
-        if index == currentIndex + 1,
-           let readyStandby = standbyVM,
-           readyStandby.isReady {
-            let oldVM = vm
-            standbyVM = nil
-            vm = readyStandby         // triggers ShortsTOSWebView to attach the new WKWebView
-            currentIndex = index
-            let video = videos[index]
-            CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
-            vm.activate()             // clears isStandby, starts playback
-            oldVM.pause()             // keep alive & resumable, don't tear down progress tracking
-            // Stop whatever was previously cached before overwriting it — it would
-            // otherwise never get its watch-progress saved (saveProgress() lives in
-            // stop(), not pause()).
-            Task(priority: .background) { previousVM?.stop() }
-            previousVM = oldVM
-            shortsLog.notice("[goTo] standby swap — index=\(index, privacy: .public) promoted=\(readyStandby.logTag, privacy: .public) videoId=\(video.id, privacy: .public) retired=\(oldVM.logTag, privacy: .public)")
-        }
-        // Backward hot path: swiping down to the Short we just came from — if it's
-        // still cached (paused, not stopped) and matches, resume it instantly instead
-        // of cold-reloading. Without this, every backward swipe always cold-reloads;
-        // swiping back faster than a reload can finish means every swipe interrupts
-        // the last one before it paints a frame, producing a run of black screens —
-        // confirmed via device log (#277).
-        else if index == currentIndex - 1,
-                let readyPrevious = previousVM,
-                readyPrevious.videoId == videos[index].id,
-                readyPrevious.isReady {
-            let oldVM = vm
-            previousVM = nil
-            vm = readyPrevious
-            currentIndex = index
-            let video = videos[index]
-            CrashlyticsLogger.setIntendedVideo(id: video.id, title: video.title)
-            vm.activate()             // resume playback (isStandby was already false)
-            Task(priority: .background) { oldVM.stop() }
-            shortsLog.notice("[goTo] previous swap — index=\(index, privacy: .public) promoted=\(readyPrevious.logTag, privacy: .public) videoId=\(video.id, privacy: .public) retired=\(oldVM.logTag, privacy: .public)")
-        } else {
-            currentIndex = index
-            loadVideo(at: index)
-        }
+        // The standby-swap/previous-swap "hot paths" (#271/#272/#274/#277) promoted a
+        // pre-warmed VM by moving its WKWebView from a hidden/off-screen container
+        // into the visible one (`vm = readyStandby` / `vm = readyPrevious`, which
+        // retargets ShortsTOSWebView and triggers a UIKit reparent). Confirmed on a
+        // physical device (#279): that reparent reliably leaves the screen solid
+        // black afterward — brightness=0 — even though decode is completely correct
+        // underneath (readyState=4, zero errors in the [diag] log) the whole time.
+        // Three independent fixes were tried (forcing a fresh layout + isHidden
+        // toggle nudge, positioning the hidden hosts off-screen at full opacity
+        // instead of near-zero opacity, explicitly deactivating stale Auto Layout
+        // constraints from the old superview before reparenting) — none changed the
+        // outcome. Isolated by temporarily disabling just this hot path: with every
+        // swipe forced through the plain loadVideo(at:) fallback below (same
+        // WKWebView, never reparented — just an iframe-src swap), all 4 checks in
+        // ShortsVisualPlaybackUITests.testHomeFirstShortPlaysAcrossThreeSwipes
+        // rendered correctly (real brightness, no black frames) with no measurable
+        // slowdown. Reparenting a WKWebView between view-hierarchy positions is not
+        // reliable here — disabled permanently rather than continuing to chase a
+        // UIKit/WebKit-level fix for a problem the simpler fallback path doesn't have.
+        currentIndex = index
+        loadVideo(at: index)
         #else
         currentIndex = index
         loadVideo(at: index)
@@ -110,10 +86,13 @@ extension ShortsPlayerView {
                 }
             }
         }
-        #if os(iOS)
-        // Pre-warm next Short's WKWebView so swipe-to-next has no black-screen delay.
-        prewarmStandby(for: index)
-        #endif
+        // prewarmStandby(for:) is no longer called — see the long comment above in
+        // the #if os(iOS) block of this function. Pre-warming a standby WKWebView
+        // that's never actually promoted (the promotion path is disabled) would
+        // just burn CPU/battery/memory decoding video nobody sees. The function and
+        // its supporting VM infrastructure (isStandby/activate/loadShortAsStandby)
+        // are left in place, unused, in case the underlying WKWebView-reparenting
+        // bug is ever fixed and this is revisited. See #279.
     }
 
     #if os(iOS)

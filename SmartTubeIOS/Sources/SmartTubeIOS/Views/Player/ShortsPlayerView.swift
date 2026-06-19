@@ -78,25 +78,26 @@ public struct ShortsPlayerView: View {
                     ShortsTOSWebView(vm: vm)
                         .frame(width: geo.size.width, height: videoH)
                         .accessibilityHidden(true)
-                    // Host the standby's WKWebView in the real view hierarchy, just
-                    // invisible (opacity, not removed) — an unattached WKWebView never
-                    // progresses past readyState 0 (WebKit treats it like a backgrounded
-                    // tab and throttles media loading), so prewarmStandby's loadShortAsStandby
-                    // would hang forever waiting for "ready" without this. See #274.
+                    // Currently unreachable: goTo(_:) no longer ever promotes standbyVM
+                    // (the WKWebView-reparenting bug in #279 made that path unfixable
+                    // here), so prewarmStandby is never called and this never becomes
+                    // non-nil. Left in place, off-screen rather than near-zero-opacity
+                    // (an earlier attempt — opacity made WebKit deprioritize the video
+                    // compositor and never properly reinstate it after a reparent), in
+                    // case the underlying bug is fixed and this is revisited. See #279.
                     if let standby = standbyVM {
                         ShortsTOSWebView(vm: standby)
                             .frame(width: geo.size.width, height: videoH)
-                            .opacity(0.001)
+                            .offset(y: geo.size.height * 3)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
-                    // Host the retired-but-cached Short N-1's WKWebView the same
-                    // way — same "must be in the real hierarchy to stay alive"
-                    // constraint as standbyVM. See #277.
+                    // Host the retired-but-cached Short N-1's WKWebView the same way —
+                    // same constraints as standbyVM. See #277/#279.
                     if let previous = previousVM {
                         ShortsTOSWebView(vm: previous)
                             .frame(width: geo.size.width, height: videoH)
-                            .opacity(0.001)
+                            .offset(y: geo.size.height * 3)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
