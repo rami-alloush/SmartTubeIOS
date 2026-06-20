@@ -84,7 +84,7 @@ extension TOSPlayerViewModel {
     }
 
     func updateNowPlayingInfo() {
-        tosNowPlayingLog.notice("[NowPlaying] updateNowPlayingInfo — title='\(videoTitle)' channel='\(channelTitle)' duration=\(duration, format: .fixed(precision: 1))s")
+        tosNowPlayingLog.notice("[NowPlaying] updateNowPlayingInfo — title='\(videoTitle)' channel='\(channelTitle)' duration=\(String(format: "%.1f", duration))s")
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: videoTitle,
             MPMediaItemPropertyArtist: channelTitle,
