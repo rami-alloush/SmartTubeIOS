@@ -95,7 +95,7 @@ public struct TOSPlayerView: View {
         // `api` is threaded through so TOSPlayerViewModel can drive a WatchtimeTracker
         // (history/position-checkpoint parity with the standard PlayerView — see
         // TOSPlayerViewModel.saveProgress()).
-        _vm = State(initialValue: TOSPlayerViewModel(videoId: video.id, channelId: video.channelId, startTime: 0, api: api))
+        _vm = State(initialValue: TOSPlayerViewModel(videoId: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailURL: video.thumbnailURL, startTime: 0, api: api))
         #endif
         // On iOS, TOSPlayerStateStore.play(video:api:) already created the vm
         // before presenting this view. Nothing to do here.

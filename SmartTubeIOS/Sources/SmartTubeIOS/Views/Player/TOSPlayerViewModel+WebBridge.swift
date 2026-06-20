@@ -104,11 +104,20 @@ extension TOSPlayerViewModel {
                 setPlaybackRate(settings.playbackSpeed)
                 tosLog.notice("[ytCallback] applied saved playback speed \(self.settings.playbackSpeed, format: .fixed(precision: 2))×")
             }
+            #if os(iOS)
+            // #283: duration is known now — Now Playing info (lock screen, Control
+            // Center, headphone buttons) can be populated correctly for the first time.
+            setupRemoteCommandCenter()
+            updateNowPlayingInfo()
+            #endif
 
         case "stateChange":
             let raw = (json["state"] as? Int) ?? 999
             playerState = YTPlayerState(raw: raw)
             tosLog.debug("[ytCallback] stateChange → \(raw)")
+            #if os(iOS)
+            updateNowPlayingPlayback()
+            #endif
             if playerState == .playing {
                 if settings.tosPlayerControlsMode == .minimal { hideEmbedControls() }
                 CFNotificationCenterPostNotification(

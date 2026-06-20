@@ -147,6 +147,10 @@ final class TOSPlayerViewModel: NSObject {
     /// channel-exclusion check in `PlaybackViewModel+Loading`'s SponsorBlock phase.
     /// Read by `fetchSponsorSegments()` in TOSPlayerViewModel+SponsorBlock.swift.
     let channelId: String?
+    /// Used for Now Playing info (lock screen / Control Center) — see
+    /// TOSPlayerViewModel+NowPlaying.swift.
+    let channelTitle: String
+    let thumbnailURL: URL?
     /// Playlist context passed from `Video.playlistId`/`playlistIndex`. Non-nil
     /// when the video was opened from the CurrentQueue or a YouTube playlist.
     let playlistId: String?
@@ -187,6 +191,17 @@ final class TOSPlayerViewModel: NSObject {
     /// to prevent a late @Observable mutation after TOSPlayerView teardown.
     var navigationTask: Task<Void, Never>?
 
+    // MARK: - Now Playing (see TOSPlayerViewModel+NowPlaying.swift)
+
+    #if os(iOS)
+    @ObservationIgnored var nowPlayingInfoCache: [String: Any] = [:]
+    /// `nonisolated(unsafe)` so MPMediaItemArtwork's requestHandler closure (invoked
+    /// on MediaPlayer's private serial queue) can read it without a Swift 6
+    /// actor-isolation assertion — mirrors PlaybackViewModel.cachedArtwork exactly.
+    nonisolated(unsafe) var cachedArtwork: UIImage? = nil
+    @ObservationIgnored var cachedArtworkVideoID: String? = nil
+    #endif
+
     /// `WKFrameInfo` of the cross-origin YouTube embed `<iframe>` — the ONLY frame
     /// whose document contains the `<video>` element. Captured from the first "ready"
     /// message (see `handleScriptMessage`'s "ready" case in +WebBridge.swift).
@@ -214,10 +229,12 @@ final class TOSPlayerViewModel: NSObject {
 
     // MARK: - Init
 
-    init(videoId: String, title: String = "", channelId: String? = nil, playlistId: String? = nil, playlistIndex: Int? = nil, startTime: Double = 0, api: InnerTubeAPI) {
+    init(videoId: String, title: String = "", channelId: String? = nil, channelTitle: String = "", thumbnailURL: URL? = nil, playlistId: String? = nil, playlistIndex: Int? = nil, startTime: Double = 0, api: InnerTubeAPI) {
         self.videoId = videoId
         self.videoTitle = title
         self.channelId = channelId
+        self.channelTitle = channelTitle
+        self.thumbnailURL = thumbnailURL
         self.playlistId = playlistId
         self.playlistIndex = playlistIndex
         self.startTime = startTime
