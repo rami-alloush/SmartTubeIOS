@@ -1,6 +1,9 @@
 #if !os(tvOS)
 import Foundation
+import os
 import SmartTubeIOSCore
+
+private let shortsLog = Logger(subsystem: "com.void.smarttube.app", category: "ShortsPlayer")
 
 // MARK: - View State
 //
@@ -61,6 +64,7 @@ extension ShortsEmbedPlayerViewModel {
     }
 
     func togglePlayPause() {
+        shortsLog.notice("[togglePlayPause] called — videoEnded=\(self.videoEnded, privacy: .public) playerState=\(self.playerState.rawValue, privacy: .public) isPlaying=\(self.isPlaying, privacy: .public) t=\(Date().timeIntervalSinceReferenceDate, format: .fixed(precision: 3), privacy: .public)")
         if videoEnded {
             videoEnded = false
             seekTo(0)

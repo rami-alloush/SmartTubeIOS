@@ -189,5 +189,78 @@ final class ShortsEmbedPauseControlsUITests: XCTestCase {
         }
         // If we reach here the native play button received the touch → pass.
     }
+
+    // Regression test for "unpause tap doesn't stick — re-pauses after ~0.5s" (fixed
+    // via a JS poll debounce in ShortsEmbedJS.swift + sequencing pauseAllMediaPlayback()
+    // against play() in ShortsEmbedPlayerViewModel.swift — see those files for the root
+    // cause). Center-taps to pause, then center-taps again to resume (the
+    // togglePlayPause() path, not the native play button), then watches closely for
+    // a SECOND, unintended "paused" notification within 1.5s of the resume tap.
+    func testCenterTapResumeDoesNotSelfPauseDiagnostic() throws {
+        let playing1 = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.playing")
+        try openFirstShort()
+        guard XCTWaiter().wait(for: [playing1], timeout: 30) == .completed else {
+            throw XCTSkip("playing notification never fired — embed failed to load")
+        }
+        XCTAssertTrue(backButton.waitForExistence(timeout: 4))
+
+        let paused = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.paused")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        guard XCTWaiter().wait(for: [paused], timeout: 8) == .completed else {
+            throw XCTSkip("paused notification never fired")
+        }
+        Thread.sleep(forTimeInterval: 1.0)
+
+        // Resume via center tap (togglePlayPause() path).
+        let resumed = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.playing")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter().wait(for: [resumed], timeout: 5), .completed,
+            "playing notification never fired after center-tap resume")
+
+        // Now watch closely: does a spurious "paused" notification fire within 1.5s?
+        let spuriousPause = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.paused")
+        let result = XCTWaiter().wait(for: [spuriousPause], timeout: 1.5)
+        XCTAssertNotEqual(result, .completed,
+            "REPRO: spurious 'paused' notification fired within 1.5s of the resume tap — unpause did not persist")
+    }
+
+    // Regression test variant of the above that pauses IMMEDIATELY after the Short
+    // starts (t≈0) — same root cause and fix, just exercised at a different point in
+    // playback to ensure the debounce/sequencing fix holds near video start too.
+    func testCenterTapResumeAtVideoStartDoesNotSelfPauseDiagnostic() throws {
+        let playing1 = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.playing")
+        try openFirstShort()
+        guard XCTWaiter().wait(for: [playing1], timeout: 30) == .completed else {
+            throw XCTSkip("playing notification never fired — embed failed to load")
+        }
+        XCTAssertTrue(backButton.waitForExistence(timeout: 4))
+
+        // Pause as fast as possible after playing starts — minimal sleep so t stays
+        // near 0 when the pause lands.
+        let paused = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.paused")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        guard XCTWaiter().wait(for: [paused], timeout: 8) == .completed else {
+            throw XCTSkip("paused notification never fired")
+        }
+
+        // Resume immediately (no extra sleep) so t is still ~0 on the resume tap.
+        let resumed = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.playing")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter().wait(for: [resumed], timeout: 5), .completed,
+            "playing notification never fired after near-t0 center-tap resume")
+
+        let spuriousPause = XCTDarwinNotificationExpectation(
+            notificationName: "com.void.smarttube.shortsplayer.paused")
+        let result = XCTWaiter().wait(for: [spuriousPause], timeout: 1.5)
+        XCTAssertNotEqual(result, .completed,
+            "REPRO: spurious 'paused' notification fired within 1.5s of a near-t0 resume tap")
+    }
 }
 #endif // os(iOS)

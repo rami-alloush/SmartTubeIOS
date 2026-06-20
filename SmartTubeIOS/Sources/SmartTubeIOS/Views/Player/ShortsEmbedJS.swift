@@ -110,6 +110,7 @@ enum ShortsEmbedJS {
         var _prevState = -2;
         var _playAttempts = 0;
         var _autoUnmuted = false;
+        var _pausedCandidate = false;
 
         function postMsg(obj) {
             try {
@@ -170,15 +171,32 @@ enum ShortsEmbedJS {
                 } catch (e) {}
             }
 
+            // video.paused can flicker true→false within a single poll interval right
+            // after a resume (confirmed via live device log — a "paused" state was
+            // reported, then a check 22ms later already found paused=false again,
+            // with no further action from us). Reporting this transient blip as a
+            // real pause made the controls overlay pop up and stay open, which the
+            // user perceived as "unpause doesn't stick." Debounce: only commit to the
+            // paused state on the 2nd consecutive poll observing it after a playing
+            // state — a genuine pause is held by definition, so this costs at most
+            // one extra ~250ms poll cycle of latency and only on the playing→paused
+            // edge. Already-paused readings (and ended) report immediately.
+            var rawPaused = video.paused;
             var s;
             if (video.ended) {
                 s = 0;
-            } else if (video.paused) {
-                s = 2;
-            } else if (video.readyState >= 3) {
-                s = 1;
+                _pausedCandidate = false;
+            } else if (rawPaused) {
+                var wasActivelyPlaying = (_prevState === 1 || _prevState === 3);
+                if (wasActivelyPlaying && !_pausedCandidate) {
+                    _pausedCandidate = true;
+                    s = _prevState;
+                } else {
+                    s = 2;
+                }
             } else {
-                s = 3;
+                _pausedCandidate = false;
+                s = (video.readyState >= 3) ? 1 : 3;
             }
 
             var t = video.currentTime || 0;

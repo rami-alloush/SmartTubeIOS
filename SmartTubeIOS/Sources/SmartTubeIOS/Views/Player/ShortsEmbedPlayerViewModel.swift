@@ -52,6 +52,19 @@ final class ShortsEmbedPlayerViewModel: NSObject {
     var videoEnded: Bool = false
     var wasPlayingBeforeSuspend: Bool = false
     var controlsTimer: Task<Void, Never>?
+    /// Tracks `pause()`'s in-flight `webView.pauseAllMediaPlayback()` call, which can
+    /// take a noticeable amount of time to actually execute inside WebKit's WebContent
+    /// process. Without tracking it, a `play()` issued shortly after a `pause()` races
+    /// against this delayed call — the video visibly resumes, then the stale
+    /// `pauseAllMediaPlayback()` finally lands and pauses it again ~0.2-0.3s later,
+    /// with no corresponding `togglePlayPause()` call (confirmed via live device log).
+    /// `play()` awaits this before issuing its own play command so the two can never
+    /// race out of order.
+    private var pauseAllMediaTask: Task<Void, Never>?
+    /// Incremented on every `play()`/`pause()` call. `play()`'s post-resume
+    /// verification (see below) checks this hasn't changed before re-asserting
+    /// playback, so it never overrides a more recent, deliberate pause.
+    private var playPauseEpoch: Int = 0
     /// Cancelled once "ready" arrives for the in-flight `loadShort` (see
     /// ShortsEmbedPlayerViewModel+WebBridge.swift's "ready" case); if it fires
     /// first, `playerError` is set to `.webViewLoadFailed` so the new `advanceAfterError()`
@@ -358,7 +371,26 @@ final class ShortsEmbedPlayerViewModel: NSObject {
     // `embedFrameInfo`'s doc comment for why frame-targeting is required.
 
     func play() {
-        eval("play", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.play();}return {found: !!v, iframes: ifr, paused: v ? v.paused : null};})();")
+        playPauseEpoch &+= 1
+        let myEpoch = playPauseEpoch
+        // Wait for any in-flight pauseAllMediaPlayback() (from a just-prior pause())
+        // to actually land first — otherwise it can resolve after this play() and
+        // re-pause the video out from under it. See pauseAllMediaTask's doc comment.
+        let priorPause = pauseAllMediaTask
+        Task { [weak self] in
+            await priorPause?.value
+            guard let self, self.playPauseEpoch == myEpoch else { return }
+            self.eval("play", "(function(){var v=document.querySelector('video');var ifr=document.querySelectorAll('iframe').length;if(v){v.play();}return {found: !!v, iframes: ifr, paused: v ? v.paused : null};})();")
+            // Defense-in-depth: even after awaiting the prior pause, a late-landing
+            // pause from some other source (e.g. WebKit's own stall handling) can
+            // still clobber this resume a few hundred ms later — exactly the "plays
+            // then re-pauses" symptom confirmed via live device log. Verify shortly
+            // after that playback actually stuck, and re-assert if not — but only if
+            // nothing more recent (a deliberate pause or another play) has happened.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, self.playPauseEpoch == myEpoch else { return }
+            self.eval("verifyPlay", "(function(){var v=document.querySelector('video');if(v&&v.paused){v.play();}return {paused: v?v.paused:null};})();")
+        }
     }
 
     /// Stops playback — including audio — regardless of which frame the `<video>`
@@ -366,7 +398,9 @@ final class ShortsEmbedPlayerViewModel: NSObject {
     /// (TOSPlayerViewModel.swift:296-324) for the cross-origin-iframe root cause this
     /// works around.
     func pause() {
-        Task {
+        playPauseEpoch &+= 1
+        pauseAllMediaTask = Task { [weak self] in
+            guard let self else { return }
             await self.webView.pauseAllMediaPlayback()
             CFNotificationCenterPostNotification(
                 CFNotificationCenterGetDarwinNotifyCenter(),

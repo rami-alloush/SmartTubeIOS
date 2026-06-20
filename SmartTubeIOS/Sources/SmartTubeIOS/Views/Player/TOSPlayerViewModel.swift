@@ -539,6 +539,7 @@ final class TOSPlayerViewModel: NSObject {
         var _prevState = -2;
         var _playAttempts = 0;
         var _autoUnmuted = false;
+        var _pausedCandidate = false;
 
         function postMsg(obj) {
             try {
@@ -576,15 +577,29 @@ final class TOSPlayerViewModel: NSObject {
             var video = document.querySelector('video');
             if (!video) return;
 
+            // video.paused can flicker true→false within a single poll interval right
+            // after a resume (confirmed via live device log on the Shorts copy of this
+            // poll — see ShortsEmbedJS.swift's stateDetectionJS for the full story).
+            // Debounce: only commit to the paused state on the 2nd consecutive poll
+            // observing it after a playing state, so a transient blip doesn't get
+            // broadcast as a real pause. Already-paused readings (and ended) report
+            // immediately.
+            var rawPaused = video.paused;
             var s;
             if (video.ended) {
                 s = 0;
-            } else if (video.paused) {
-                s = 2;
-            } else if (video.readyState >= 3) {
-                s = 1;
+                _pausedCandidate = false;
+            } else if (rawPaused) {
+                var wasActivelyPlaying = (_prevState === 1 || _prevState === 3);
+                if (wasActivelyPlaying && !_pausedCandidate) {
+                    _pausedCandidate = true;
+                    s = _prevState;
+                } else {
+                    s = 2;
+                }
             } else {
-                s = 3;
+                _pausedCandidate = false;
+                s = (video.readyState >= 3) ? 1 : 3;
             }
 
             var t = video.currentTime || 0;
